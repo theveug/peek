@@ -1,0 +1,29 @@
+{
+  "name": "peek",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm:serve\" \"npm:tailwind\"",
+    "serve": "nodemon server.js",
+    "tailwind": "tailwindcss -i ./public/assets/tailwind.css -o ./public/assets/style.css --watch"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@tailwindcss/cli": "^4.1.4",
+    "@tailwindcss/postcss": "^4.1.4",
+    "express": "^5.1.0",
+    "http": "^0.0.1-security",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.1"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^9.1.2",
+    "nodemon": "^3.1.9",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.4"
+  }
+}
