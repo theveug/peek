@@ -41,6 +41,14 @@ socket.onmessage = (event) => {
 const input = document.getElementById('message');
 const sendBtn = document.getElementById('send');
 
+// Handle enter + shift logic
+input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault(); // prevent newline
+        sendMessage();
+    }
+});
+
 const nicknameInput = document.getElementById('nickname');
 const savedNick = localStorage.getItem('nickname');
 
@@ -53,16 +61,18 @@ nicknameInput.addEventListener('input', () => {
 });
 
 
-sendBtn.onclick = () => {
+sendBtn.onclick = sendMessage;
+
+function sendMessage() {
     const text = input.value.trim();
     const nickname = nicknameInput.value.trim() || 'Anonymous';
 
     if (text) {
-        socket.send(JSON.stringify({ type: 'chat', text, nickname  }));
+        socket.send(JSON.stringify({ type: 'chat', text, nickname }));
         ui.addChatMessage('Me', text);
         input.value = '';
     }
-};
+}
 
 document.getElementById('start-share').onclick = () => {
     peerManager.startSharing();

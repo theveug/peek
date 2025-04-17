@@ -3,7 +3,7 @@
 html,
 body {
     height: 100%;
-    overflow: hidden;
+    max-height: 100%;
 }
 body:hover #controls {
     display: flex;
@@ -11,4 +11,22 @@ body:hover #controls {
 
 #controls {
     display: none;
+}
+
+.chat-markdown pre {
+    background-color: #1e1e1e;
+    padding: 0.5em;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin-top: 0.25em;
+    font-size: 0.9em;
+}
+
+.chat-markdown code {
+    color: #eee;
+    font-family: Menlo, Monaco, Consolas, monospace;
+}
+
+.copy-btn {
+    @apply absolute top-1 right-2 bg-gray-700 text-white px-2 py-1 rounded text-xs opacity-75 hover:opacity-100 transition;
 }

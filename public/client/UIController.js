@@ -47,12 +47,45 @@ export class UIController {
     }
 
 
-    addChatMessage(from, text) {
-        const message = document.createElement('div');
-        message.textContent = `${from}: ${text}`;
-        this.chatLog.appendChild(message);
-        this.chatLog.scrollTop = this.chatLog.scrollHeight;
+    addChatMessage(sender, text) {
+        const chatLog = document.getElementById('chat-log');
+        const msgContainer = document.createElement('div');
+
+        // Sanitize + parse markdown
+        const raw = marked.parse(text);
+        const timestanmp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        msgContainer.innerHTML = `<div class="p-2 hover:bg-neutral-950 text-sm"><div class="flex justify-between"><span class="text-blue-600">${sender}:</span><span class="text-neutral-700 text-xs">${timestanmp}</span></div><div class="chat-markdown">${raw}</div></div>`;
+        chatLog.appendChild(msgContainer);
+
+        msgContainer.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+
+            // Add copy button
+            const pre = block.parentElement;
+            pre.style.position = 'relative';
+
+            const copyBtn = document.createElement('button');
+            copyBtn.textContent = '📋';
+            copyBtn.title = 'Copy code';
+            copyBtn.className = 'copy-btn';
+
+            copyBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText(block.textContent).then(() => {
+                    copyBtn.textContent = '✅';
+                    setTimeout(() => (copyBtn.textContent = '📋'), 1500);
+                });
+            });
+
+            pre.appendChild(copyBtn);
+        });
+
+        const isAtBottom = chatLog.scrollTop + chatLog.clientHeight >= chatLog.scrollHeight - 50;
+
+        if (isAtBottom) {
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
     }
+
 
     handleVisibilityChange(blurred) {
         const myVideo = document.querySelector('[data-peer-id="me"]');
