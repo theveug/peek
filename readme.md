@@ -53,10 +53,11 @@ It will redirect to a unique session like `/session/4d8e1fae-...`
 
 ## ⚙️ Scripts
 
-Command | Description
-npm run dev | Start server + Tailwind watch
-npm run serve | Just run the Node server
-npm run tailwind | Watch and compile Tailwind CSS
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start server + Tailwind watch |
+| `npm run serve` | Just run the Node server |
+| `npm run tailwind` | Watch and compile Tailwind CSS |
 
 ## 🛡️ Security & Privacy
 
