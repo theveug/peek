@@ -27,7 +27,10 @@ socket.onopen = () => {
 socket.onmessage = (event) => {
     const msg = JSON.parse(event.data);
     if (msg.type === 'chat') {
-        ui.addChatMessage(msg.from, msg.text);
+        // Only show if it's NOT from me
+        if (msg.from !== peerManager.peerId) {
+            ui.addChatMessage(msg.from, msg.text);
+        }
     } else {
         peerManager.handleSignal(msg);
     }
