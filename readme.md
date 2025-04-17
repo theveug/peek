@@ -1,86 +1,69 @@
-# Peek - WebSocket Screensharing App
+# Peek
 
-## 💡 Project Overview
+**Peek** is a lightweight WebRTC-based screen sharing app built with vanilla JS, Node.js, and Tailwind CSS. It lets users share their screen in real-time over a unique session link, with optional stream quality controls.
 
-Peek is a lightweight, real-time screensharing app built with WebRTC and WebSockets. It enables secure, multi-user screen sharing with a gallery-style layout. Each session is ephemeral and accessed via UUID-based URLs.
+## 🚀 Features
 
-### Core Features
+- 🔗 One-click session creation (`/session/:uuid`)
+- 📺 Peer-to-peer screen sharing via WebRTC
+- 🎛️ Adjustable stream quality (FPS + resolution)
+- 📦 No database — fully in-memory sessions
+- 📡 WebSocket-based signaling
+- 🧪 "Still streaming..." mode when tab is unfocused
+- 💬 In-session ephemeral chat (no storage)
 
-- Encrypted peer-to-peer screen sharing using WebRTC.
-- WebSocket signaling server for managing sessions and connections.
-- Auto-generated session URLs (`/` redirects to `/session/:uuid`).
-- All users in a session can share screens simultaneously.
-- Gallery view for all shared streams.
-- Click on any stream to view fullscreen.
-- Automatic stream cleanup when a user stops sharing.
-- Written in an object-oriented, modular fashion for easy expansion.
+## 📦 Tech Stack
 
----
+- **Frontend:** Vanilla JS + Tailwind CSS
+- **Backend:** Node.js (Express + WS)
+- **Streaming:** WebRTC (mesh topology)
+- **CSS Processing:** Tailwind CLI
 
-## 💪 Tech Stack
+## 🛠️ Getting Started
 
-- Node.js + Express (server)
-- WebSocket (`ws`)
-- WebRTC (peer-to-peer screen sharing)
-- Vanilla JS modules (client-side)
-- UUID (for session routing)
-- HTML/CSS frontend (basic styling)
-- Herd server for local developnment (peek.test)
+### Prerequisites
 
----
+- Node.js (v18+ recommended)
+- A modern browser (Chrome, Brave, Firefox)
 
-## 📁 Project Structure
-
-peek/
- ├── server.js
- ├── package.json
- ├── public/
- │ ├── assets/
- │ │ ├── style.css
- │ ├── client/
- │ │ ├── App.js
- │ │ ├── ScreenManager.js
- │ │ └── UIController.js
- │ └── index.html
- ├── src/
- │ └── server/
- │ ├── SessionManager.js
- │ └── SignalingHandler.js
-
----
-
-## 🚀 Getting Started
-
-### 1. Install Dependencies
+### Install dependencies
 
 ```bash
 npm install
+```
+
+### Start the app
+
+```bash
 npm run dev
 ```
 
-Then open <http://localhost:3000> in your browser. It’ll redirect you to a session.
+This runs:
 
----
+- nodemon server.js (backend)
+- tailwindcss in watch mode (frontend CSS)
 
-## 🔍 Known Issues / To-Do
+### Visit the app
 
-- [ ] Automatically show new streams without needing refresh.
-- [ ] Stream cleanup doesn't distinguish sender identity correctly.
-- [ ] UI polish (stream labels, better fullscreen toggle).
-- [ ] User presence indicator.
-- [ ] Permissions / host control (optional).
-- [ ] Stream quality selection. (FPS, Resolution (maybe?))
-- [ ] Error handling for permission denial or dropped connections.
+```bash
+http://localhost:3000
+```
 
----
+It will redirect to a unique session like `/session/4d8e1fae-...`
 
-## 🧠 Contribution Notes (for ChatGPT)
+## ⚙️ Scripts
 
-This project is being iteratively developed with the help of ChatGPT. OOP structure, modular architecture, and clean expansion paths are a priority.
+Command | Description
+npm run dev | Start server + Tailwind watch
+npm run serve | Just run the Node server
+npm run tailwind | Watch and compile Tailwind CSS
 
-Focus areas for improvement:
+## 🛡️ Security & Privacy
 
-- Signaling scalability.
-- Connection reliability (especially on late joins).
-- Clean stream/peer lifecycle management.
-- UX niceties (mute indicators, stream owner tags).
+Peek does not store or log any data — all sessions are ephemeral and exist only in memory. Screen shares are peer-to-peer via WebRTC.
+
+> Note: There is no authentication or access control. Anyone with a session URL can join. Intended for small teams or internal use.
+
+## 📘 License
+
+MIT
