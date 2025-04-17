@@ -50,10 +50,12 @@ export function setupWebSocket(wss) {
                 case 'chat': {
                     const sessionId = manager.getSessionId(peerId);
                     const peers = manager.getPeersInSession(sessionId);
+                    const nickname = msg.nickname.replace(/[^a-zA-Z0-9-_]/g,'') || 'Anonymous';
+
                     peers.forEach(pid => {
                         const socket = manager.getPeerSocket(pid);
                         if (socket) {
-                            socket.send(JSON.stringify({ type: 'chat', from: peerId, text }));
+                            socket.send(JSON.stringify({ type: 'chat', from: peerId, text, nickname }));
                         }
                     });
                     break;

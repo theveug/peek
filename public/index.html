@@ -9,10 +9,18 @@
     <body class="bg-black h-vh relative">
         <div class="flex flex-col h-screen">
             <div class="flex-grow flex">
-                <div
-                    class="w-1/4 bg-neutral-900 flex-col justify-between hidden"
-                    id="chat">
-                    <div class="" id="chat-log"></div>
+                <div class="w-1/4 bg-neutral-900 flex-col hidden" id="chat">
+                    <div class="flex-1" id="chat-log"></div>
+                    <!-- TODO move nickname into settings modal -->
+                    <div class="flex items-center gap-2" id="nickname-row">
+                        <input
+                            id="nickname"
+                            type="text"
+                            placeholder="Your name"
+                            class="text-black px-2 py-1 rounded" />
+                    </div>
+                    <!-- TODO add press enter to send message -->
+                    <!-- TODO add markdown capabilities -->
                     <div class="" id="chat-input">
                         <input
                             id="message"

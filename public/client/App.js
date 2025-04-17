@@ -29,7 +29,8 @@ socket.onmessage = (event) => {
     if (msg.type === 'chat') {
         // Only show if it's NOT from me
         if (msg.from !== peerManager.peerId) {
-            ui.addChatMessage(msg.from, msg.text);
+            const displayName = msg.nickname || msg.from;
+            ui.addChatMessage(displayName, msg.text);
         }
     } else {
         peerManager.handleSignal(msg);
@@ -39,10 +40,25 @@ socket.onmessage = (event) => {
 // Chat UI interactions
 const input = document.getElementById('message');
 const sendBtn = document.getElementById('send');
+
+const nicknameInput = document.getElementById('nickname');
+const savedNick = localStorage.getItem('nickname');
+
+if (savedNick) {
+    nicknameInput.value = savedNick;
+}
+
+nicknameInput.addEventListener('input', () => {
+    localStorage.setItem('nickname', nicknameInput.value.trim());
+});
+
+
 sendBtn.onclick = () => {
     const text = input.value.trim();
+    const nickname = nicknameInput.value.trim() || 'Anonymous';
+
     if (text) {
-        socket.send(JSON.stringify({ type: 'chat', text }));
+        socket.send(JSON.stringify({ type: 'chat', text, nickname  }));
         ui.addChatMessage('Me', text);
         input.value = '';
     }
