@@ -110,6 +110,23 @@ fpsSelect.addEventListener('change', () => {
 });
 
 
+const chatButton = document.getElementById('togglechat');
+chatButton.addEventListener('click', () => {
+    const chatBox = document.getElementById('chat');
+    if (chatBox) {
+        const isHidden = chatBox.classList.toggle('hidden');
+        localStorage.setItem('chatHidden', isHidden ? '1' : '0');
+    }
+});
+
+const chatBox = document.getElementById('chat');
+if (localStorage.getItem('chatHidden') === '1') {
+    chatBox.classList.add('hidden');
+} else {
+    chatBox.classList.remove('hidden');
+}
+
+
 document.addEventListener('DOMContentLoaded', () => {
     updateWarning(false);
 }); 
