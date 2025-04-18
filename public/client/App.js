@@ -48,13 +48,13 @@ socket.onmessage = (event) => {
 const input = document.getElementById('message');
 
 function generateFunnyNickname() {
-    const adjectives = ['Funky', 'Silly', 'Grumpy', 'Sneaky', 'Zesty', 'Wiggly', 'Cheesy', 'Moody'];
-    const animals = ['Penguin', 'Llama', 'Nugget', 'Pineapple', 'Walrus', 'Donkey', 'Taco', 'Otter'];
+    const adjectives = ['Funky', 'Silly', 'Smart', 'Sneaky', 'Zesty', 'Wiggly', 'Cheesy', 'Invincible', 'Fluffy', 'Sassy', 'Bouncy', 'Wacky', 'Jumpy', 'Quirky', 'Spicy', 'Nerdy', 'Chill', 'Epic', 'Crazy', 'Dizzy'];
+    const animals = ['Penguin', 'Llama', 'Nugget', 'Pineapple', 'Walrus', 'Donkey', 'Taco', 'Otter', 'Sloth', 'Panda', 'Koala', 'Narwhal', 'Turtle', 'Dolphin', 'Giraffe', 'Platypus', 'Octopus', 'Raccoon', 'Kangaroo', 'Cactus', 'Dragon'];
 
     const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
     const animal = animals[Math.floor(Math.random() * animals.length)];
 
-    return `${adj}${animal}`;
+    return `${adj}${animal}${Math.floor(Math.random() * 1000)}`;
 }
 // Handle enter + shift logic
 input.addEventListener('keydown', (e) => {
