@@ -1,4 +1,6 @@
+@config "../../tailwind.config.js";
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 html,
 body {
@@ -29,4 +31,9 @@ body:hover #controls {
 
 .copy-btn {
     @apply absolute top-1 right-2 bg-gray-700 text-white px-2 py-1 rounded text-xs opacity-75 hover:opacity-100 transition;
+}
+
+.hljs {
+    background: transparent;
+    color: inherit;
 }

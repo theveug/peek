@@ -20,6 +20,7 @@
     "ws": "^8.18.1"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.16",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.1.2",
     "nodemon": "^3.1.9",

@@ -54,7 +54,7 @@ export class UIController {
         // Sanitize + parse markdown
         const raw = marked.parse(text);
         const timestanmp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        msgContainer.innerHTML = `<div class="p-2 hover:bg-neutral-950 text-sm"><div class="flex justify-between"><span class="text-blue-600">${sender}:</span><span class="text-neutral-700 text-xs">${timestanmp}</span></div><div class="chat-markdown">${raw}</div></div>`;
+        msgContainer.innerHTML = `<div class="p-2 hover:bg-neutral-950 text-sm"><div class="flex justify-between"><span class="text-blue-600">${sender}:</span><span class="text-neutral-700 text-xs">${timestanmp}</span></div><div class="chat-markdown prose prose-invert">${raw}</div></div>`;
         chatLog.appendChild(msgContainer);
 
         msgContainer.querySelectorAll('pre code').forEach((block) => {
@@ -78,11 +78,20 @@ export class UIController {
 
             pre.appendChild(copyBtn);
         });
-
-        const isAtBottom = chatLog.scrollTop + chatLog.clientHeight >= chatLog.scrollHeight - 50;
-
+        const newMessageIndicator = document.getElementById('new-message-indicator');
+        const chatInput = document.getElementById('chat-input');
+        const threshold = chatInput.scrollHeight + 50; // pixels from the bottom to trigger scroll
+        const isAtBottom = (chatLog.scrollTop + chatLog.clientHeight) >= (chatLog.scrollHeight - threshold);
         if (isAtBottom) {
-            chatLog.scrollTop = chatLog.scrollHeight;
+            newMessageIndicator.classList.add('hidden');
+            requestAnimationFrame(() => {
+                chatLog.scrollTo({
+                    top: chatLog.scrollHeight,
+                    behavior: 'smooth'
+                });
+            });
+        } else {
+            newMessageIndicator.classList.remove('hidden');
         }
     }
 

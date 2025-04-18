@@ -20,6 +20,20 @@ const savedFps = localStorage.getItem('screenShareFps');
 if (savedRes) resSelect.value = savedRes;
 if (savedFps) fpsSelect.value = savedFps;
 
+// Sounds
+let Sounds = { volume: 0.3 };
+Sounds.streamUp = new Audio('/assets/sfx/stream-up.mp3');
+Sounds.streamDown = new Audio('/assets/sfx/stream-down.mp3');
+Sounds.newMessage = new Audio('/assets/sfx/new-message.mp3');
+// const muteToggle = document.getElementById('mute-sounds');
+function playSound(sound) {
+    // if (!muteToggle.checked) {
+    Sounds[sound].currentTime = 0;
+    Sounds[sound].volume = Sounds.volume;
+    Sounds[sound].play().catch(() => { });
+    // }
+}
+
 socket.onopen = () => {
     socket.send(JSON.stringify({ type: 'join', sessionId }));
 };
@@ -94,7 +108,7 @@ function updateWarning(includeWarning = false) {
     const warningEl = document.getElementById('quality-warning');
 
     if (res === 'source') {
-        warningEl.textContent = '⚠️ Source (Native) resolution selected. May result in very high bandwidth or CPU usage.';
+        warningEl.textContent = '⚠️ Unpredictable load';
         return;
     }
 
@@ -102,11 +116,11 @@ function updateWarning(includeWarning = false) {
     const pixelsPerSecond = w * h * fps;
 
     if (pixelsPerSecond > 1920 * 1080 * 30) {
-        warningEl.textContent = '⚠️ High performance load (1080p+ @ 30fps+). May impact CPU or bandwidth.';
+        warningEl.textContent = '⚠️ High load';
     } else if (pixelsPerSecond > 1280 * 720 * 30) {
-        warningEl.textContent = '🟠 Moderate load. Best for strong connections and decent CPUs.';
+        warningEl.textContent = '🟠 Moderate load';
     } else {
-        warningEl.textContent = '🟢 Low load. Good for most systems.';
+        warningEl.textContent = '🟢 Low load';
     }
     if (includeWarning) {
         alert('Restart stream to apply changes.');
@@ -138,7 +152,6 @@ fpsSelect.addEventListener('change', () => {
     localStorage.setItem('screenShareFps', fpsSelect.value);
 });
 
-
 const chatButton = document.getElementById('togglechat');
 chatButton.addEventListener('click', () => {
     const chatBox = document.getElementById('chat');
@@ -154,7 +167,6 @@ if (localStorage.getItem('chatHidden') === '1') {
 } else {
     chatBox.classList.remove('hidden');
 }
-
 
 document.addEventListener('DOMContentLoaded', () => {
     updateWarning(false);
