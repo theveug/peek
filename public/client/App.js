@@ -10,15 +10,8 @@ const socket = new WebSocket(`ws://${location.host}/ws`);
 const ui = new UIController();
 const peerManager = new PeerManager(socket, ui);
 
-// Load previous choices if they exist
-const resSelect = document.getElementById('res');
-const fpsSelect = document.getElementById('fps');
-
 const savedRes = localStorage.getItem('screenShareRes');
 const savedFps = localStorage.getItem('screenShareFps');
-
-if (savedRes) resSelect.value = savedRes;
-if (savedFps) fpsSelect.value = savedFps;
 
 // Sounds
 let Sounds = { volume: 0.3 };
@@ -53,7 +46,6 @@ socket.onmessage = (event) => {
 
 // Chat UI interactions
 const input = document.getElementById('message');
-const sendBtn = document.getElementById('send');
 
 // Handle enter + shift logic
 input.addEventListener('keydown', (e) => {
@@ -63,23 +55,11 @@ input.addEventListener('keydown', (e) => {
     }
 });
 
-const nicknameInput = document.getElementById('nickname');
 const savedNick = localStorage.getItem('nickname');
-
-if (savedNick) {
-    nicknameInput.value = savedNick;
-}
-
-nicknameInput.addEventListener('input', () => {
-    localStorage.setItem('nickname', nicknameInput.value.trim());
-});
-
-
-sendBtn.onclick = sendMessage;
 
 function sendMessage() {
     const text = input.value.trim();
-    const nickname = nicknameInput.value.trim() || 'Anonymous';
+    const nickname = savedNick.trim() || 'Anonymous';
 
     if (text) {
         socket.send(JSON.stringify({ type: 'chat', text, nickname }));
@@ -127,30 +107,6 @@ function updateWarning(includeWarning = false) {
     }
 }
 
-function onSettingChange() {
-    localStorage.setItem('screenShareRes', resSelect.value);
-    localStorage.setItem('screenShareFps', fpsSelect.value);
-    updateWarning();
-
-    // If already sharing, confirm restart
-    if (peerManager.isSharing) {
-        const confirmRestart = confirm("Apply new quality settings? This will restart your screen share.");
-        if (confirmRestart) {
-            peerManager.startSharing();
-        }
-    }
-}
-
-
-// Save on change
-resSelect.addEventListener('change', () => {
-    onSettingChange();
-    localStorage.setItem('screenShareRes', resSelect.value);
-});
-fpsSelect.addEventListener('change', () => {
-    onSettingChange();
-    localStorage.setItem('screenShareFps', fpsSelect.value);
-});
 
 const chatButton = document.getElementById('togglechat');
 chatButton.addEventListener('click', () => {
@@ -168,6 +124,24 @@ if (localStorage.getItem('chatHidden') === '1') {
     chatBox.classList.remove('hidden');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    updateWarning(false);
-}); 
+const settingsButton = document.getElementById('settings-button');
+if (settingsButton) {
+    settingsButton.addEventListener('click', () => {
+        const sessionId = location.pathname.includes('/session/')
+            ? location.pathname.split('/').pop()
+            : null;
+
+        if (sessionId) {
+            localStorage.setItem('lastSessionId', sessionId);
+        }
+        window.location.href = '/settings';
+    });
+}
+
+const shareButton = document.getElementById('share-button');
+if (shareButton) {
+    shareButton.addEventListener('click', () => {
+        const url = window.location.href;
+        navigator.clipboard.writeText(url);
+    });
+}

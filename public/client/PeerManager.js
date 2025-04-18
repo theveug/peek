@@ -54,8 +54,8 @@ export class PeerManager {
 
     async startSharing() {
         try {
-            const resVal = document.getElementById('res').value;
-            const fpsVal = document.getElementById('fps').value;
+            const resVal = localStorage.getItem('screenShareRes');
+            const fpsVal = localStorage.getItem('screenShareFps');
 
             // Parse resolution
             let width, height;
