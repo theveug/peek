@@ -15,8 +15,6 @@ const server = createServer(app);
 const wss = new WebSocketServer({ server });
 setupWebSocket(wss);
 
-app.use(express.static(path.join(__dirname, 'public')));
-
 // Redirect root to new session
 app.get('/', (req, res) => {
     const newSessionId = uuidv4();
@@ -31,6 +29,8 @@ app.get('/session/:id', (req, res) => {
 app.get('/settings', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/settings.html'));
 });
+
+app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

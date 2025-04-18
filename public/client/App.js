@@ -47,6 +47,15 @@ socket.onmessage = (event) => {
 // Chat UI interactions
 const input = document.getElementById('message');
 
+function generateFunnyNickname() {
+    const adjectives = ['Funky', 'Silly', 'Grumpy', 'Sneaky', 'Zesty', 'Wiggly', 'Cheesy', 'Moody'];
+    const animals = ['Penguin', 'Llama', 'Nugget', 'Pineapple', 'Walrus', 'Donkey', 'Taco', 'Otter'];
+
+    const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const animal = animals[Math.floor(Math.random() * animals.length)];
+
+    return `${adj}${animal}`;
+}
 // Handle enter + shift logic
 input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -55,11 +64,15 @@ input.addEventListener('keydown', (e) => {
     }
 });
 
+if (!localStorage.getItem('nickname')) {
+    localStorage.setItem('nickname', generateFunnyNickname());
+}
+
 const savedNick = localStorage.getItem('nickname');
 
 function sendMessage() {
     const text = input.value.trim();
-    const nickname = savedNick.trim() || 'Anonymous';
+    const nickname = savedNick.trim();
 
     if (text) {
         socket.send(JSON.stringify({ type: 'chat', text, nickname }));

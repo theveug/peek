@@ -8,11 +8,13 @@ export class UIController {
     }
 
     addStream(peerId, stream) {
+        const spinner = document.getElementById(`spinner`);
         const existingVideo = document.querySelector(`[data-peer-id="${peerId}"]`);
         if (existingVideo) {
             // Fully remove existing video and cleanup before adding again
             existingVideo.srcObject.getTracks().forEach(track => track.stop());
             existingVideo.remove();
+            spinner.classList.remove('hidden');
         }
 
         const video = document.createElement('video');
@@ -29,24 +31,14 @@ export class UIController {
             video.style.width = '150px';
             video.style.border = '2px solid #ccc';
             video.style.zIndex = 1000;
+        } else {
+            spinner.classList.add('hidden');
         }
 
         this.container.appendChild(video);
+
+        this.handleSpinner();
     }
-
-
-    removeStream(peerId) {
-        const video = document.querySelector(`[data-peer-id="${peerId}"]`);
-        if (video && video.srcObject) {
-            video.srcObject.getTracks().forEach(track => track.stop());
-            video.srcObject = null;
-            video.remove();
-        }
-
-        const placeholder = document.getElementById('stream-placeholder');
-        if (placeholder && peerId === 'me') placeholder.remove();
-    }
-
 
     addChatMessage(sender, text) {
         const chatLog = document.getElementById('chat-log');
@@ -138,12 +130,25 @@ export class UIController {
         }
     }
 
+    handleSpinner() {
+        const spinner = document.getElementById(`spinner`);
+        const videos = Array.from(this.videoContainer.querySelectorAll('video')).filter((el) => el.dataset['peerId'] != 'me');
+        if (videos.length === 0) {
+            spinner.classList.remove('hidden');
+        } else {
+            spinner.classList.add('hidden');
+        }
+    }
+
     removeStream(peerId) {
+        console.log('(2) Removing stream for peerId:', peerId);
         const video = document.querySelector(`[data-peer-id="${peerId}"]`);
         if (video) video.remove();
 
         const placeholder = document.getElementById('stream-placeholder');
         if (placeholder) placeholder.remove();
+
+        this.handleSpinner();
     }
 
 
