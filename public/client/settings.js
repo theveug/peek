@@ -4,6 +4,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const resSelect = document.getElementById('res');
     const fpsSelect = document.getElementById('fps');
     const maxMessagesInput = document.getElementById('max-messages');
+    const volumeSlider = document.getElementById('volume');
+    const volumeLabel = document.getElementById('volume-value');
     const cancelButton = document.getElementById('cancel-settings');
 
     // Load saved settings
@@ -12,6 +14,13 @@ document.addEventListener('DOMContentLoaded', () => {
     resSelect.value = localStorage.getItem('screenShareRes') || '1280x720';
     fpsSelect.value = localStorage.getItem('screenShareFps') || '30';
     maxMessagesInput.value = localStorage.getItem('maxMessages') || '100';
+    volumeSlider.value = localStorage.getItem('soundVolume') || '0.3';
+    volumeLabel.textContent = `${Math.round(volumeSlider.value * 100)}%`;
+
+    // Update volume label as user slides
+    volumeSlider.addEventListener('input', () => {
+        volumeLabel.textContent = `${Math.round(volumeSlider.value * 100)}%`;
+    });
 
     // Save on submit
     document.getElementById('settings-form').addEventListener('submit', (e) => {
@@ -22,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('screenShareRes', resSelect.value);
         localStorage.setItem('screenShareFps', fpsSelect.value);
         localStorage.setItem('maxMessages', maxMessagesInput.value);
+        localStorage.setItem('soundVolume', volumeSlider.value);
 
         alert('Settings saved!');
 
