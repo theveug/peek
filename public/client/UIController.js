@@ -8,6 +8,15 @@ export class UIController {
         this.maxMessages = 100; // adjust as needed
     }
 
+    addPeer(peerId) {
+        const spinner = document.getElementById(`spinner`);
+        playSound('peerJoin');
+    }
+    removePeer(peerId) {
+        const spinner = document.getElementById(`spinner`);
+        playSound('peerLeft');
+    }
+
     addStream(peerId, stream) {
         const spinner = document.getElementById(`spinner`);
         const existingVideo = document.querySelector(`[data-peer-id="${peerId}"]`);
@@ -32,14 +41,11 @@ export class UIController {
             video.style.width = '150px';
             video.style.border = '2px solid #ccc';
             video.style.zIndex = 1000;
-        } else {
-            spinner.classList.add('hidden');
         }
-
-        this.container.appendChild(video);
-
-        this.handleSpinner();
+        
         playSound('streamUp');
+        this.container.appendChild(video);
+        this.handleSpinner();
     }
 
     addChatMessage(sender, text) {
@@ -148,13 +154,15 @@ export class UIController {
 
     removeStream(peerId) {
         const video = document.querySelector(`[data-peer-id="${peerId}"]`);
-        if (video) video.remove();
+        if (video) {
+            playSound('streamDown');
+            video.remove();
+        }
 
         const placeholder = document.getElementById('stream-placeholder');
         if (placeholder) placeholder.remove();
 
         this.handleSpinner();
-        playSound('streamDown');
     }
 
 

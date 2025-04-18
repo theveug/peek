@@ -26,6 +26,7 @@ export class PeerManager {
             case 'peer-joined':
                 if (this.peerId > peerId) {
                     this.initiateConnection(peerId);
+                    this.ui.addPeer(peerId);
                 }
                 break;
 
@@ -43,6 +44,7 @@ export class PeerManager {
 
             case 'peer-left':
                 this.removePeer(peerId);
+                this.ui.removePeer(peerId);
                 break;
 
             case 'stop-sharing':
