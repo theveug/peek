@@ -1,3 +1,4 @@
+import { playSound } from './SoundPlayer.js';
 // --- public/client/UIController.js ---
 export class UIController {
     constructor() {
@@ -38,6 +39,7 @@ export class UIController {
         this.container.appendChild(video);
 
         this.handleSpinner();
+        playSound('streamUp');
     }
 
     addChatMessage(sender, text) {
@@ -88,7 +90,11 @@ export class UIController {
                 });
             });
         } else {
-            newMessageIndicator.classList.remove('hidden');
+            console.log('not at bottom', sender, chatLog.scrollTop, chatLog.clientHeight, chatLog.scrollHeight);
+            if (sender != 'Me') {
+                newMessageIndicator.classList.remove('hidden');
+                playSound('newMessage');
+            }
         }
     }
 
@@ -141,7 +147,6 @@ export class UIController {
     }
 
     removeStream(peerId) {
-        console.log('(2) Removing stream for peerId:', peerId);
         const video = document.querySelector(`[data-peer-id="${peerId}"]`);
         if (video) video.remove();
 
@@ -149,6 +154,7 @@ export class UIController {
         if (placeholder) placeholder.remove();
 
         this.handleSpinner();
+        playSound('streamDown');
     }
 
 

@@ -13,20 +13,6 @@ const peerManager = new PeerManager(socket, ui);
 const savedRes = localStorage.getItem('screenShareRes');
 const savedFps = localStorage.getItem('screenShareFps');
 
-// Sounds
-let Sounds = { volume: 0.3 };
-Sounds.streamUp = new Audio('/assets/sfx/stream-up.mp3');
-Sounds.streamDown = new Audio('/assets/sfx/stream-down.mp3');
-Sounds.newMessage = new Audio('/assets/sfx/new-message.mp3');
-// const muteToggle = document.getElementById('mute-sounds');
-function playSound(sound) {
-    // if (!muteToggle.checked) {
-    Sounds[sound].currentTime = 0;
-    Sounds[sound].volume = Sounds.volume;
-    Sounds[sound].play().catch(() => { });
-    // }
-}
-
 socket.onopen = () => {
     socket.send(JSON.stringify({ type: 'join', sessionId }));
 };
