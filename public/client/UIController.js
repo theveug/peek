@@ -4,6 +4,7 @@ export class UIController {
         this.container = document.getElementById('videos');
         this.chatLog = document.getElementById('chat-log');
         this.videoContainer = document.getElementById('videos');
+        this.maxMessages = 100; // adjust as needed
     }
 
     addStream(peerId, stream) {
@@ -56,6 +57,10 @@ export class UIController {
         const timestanmp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         msgContainer.innerHTML = `<div class="p-2 hover:bg-neutral-950 text-sm"><div class="flex justify-between"><span class="text-blue-600">${sender}:</span><span class="text-neutral-700 text-xs">${timestanmp}</span></div><div class="chat-markdown prose prose-invert">${raw}</div></div>`;
         chatLog.appendChild(msgContainer);
+
+        while (chatLog.children.length > this.maxMessages) {
+            chatLog.removeChild(chatLog.firstChild);
+        }
 
         msgContainer.querySelectorAll('pre code').forEach((block) => {
             hljs.highlightElement(block);
