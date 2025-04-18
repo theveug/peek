@@ -10,8 +10,8 @@ export class PeerManager {
     }
 
     async handleSignal({ type, peerId, peers, from, payload }) {
-        console.groupCollapsed(`PeerManager.handleSignal(${type})`);
-        console.log('[SIGNAL]', type, { peerId, peers, from, payload });
+        // console.groupCollapsed(`PeerManager.handleSignal(${type})`);
+        // console.log('[SIGNAL]', type, { peerId, peers, from, payload });
 
         switch (type) {
             case 'init':
@@ -49,7 +49,7 @@ export class PeerManager {
                 this.removePeerStream(from);
                 break;
         }
-        console.groupEnd();
+        // console.groupEnd();
     }
 
     async startSharing() {
@@ -81,15 +81,15 @@ export class PeerManager {
             // Clean up previous stream if active
             if (this.stream) {
                 this.stream.getTracks().forEach(t => t.stop());
-        
+
                 Object.values(this.peers).forEach(pc => {
-                pc.getSenders().forEach(sender => {
-                    if (sender.track && sender.track.kind === 'video') {
-                    pc.removeTrack(sender);
-                    }
+                    pc.getSenders().forEach(sender => {
+                        if (sender.track && sender.track.kind === 'video') {
+                            pc.removeTrack(sender);
+                        }
+                    });
                 });
-                });
-        
+
                 this.ui.removeStream('me');
             }
 
