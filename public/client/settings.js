@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const sessionId = localStorage.getItem('lastSessionId');
         if (sessionId) {
-            window.location.href = `/session/${sessionId}`;
+            window.location.href = `/${sessionId}`;
         } else {
             window.location.href = '/';
         }
@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const sessionId = localStorage.getItem('lastSessionId');
         if (sessionId) {
-            window.location.href = `/session/${sessionId}`;
+            window.location.href = `/${sessionId}`;
         } else {
             window.location.href = '/';
         }

@@ -4,8 +4,7 @@ import { UIController } from './UIController.js';
 
 const sessionId = location.pathname.split('/').pop();
 const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-//const socket = new WebSocket(`${protocol}://${location.host}`);
-const socket = new WebSocket(`ws://${location.host}/ws`);
+const socket = new WebSocket(`${protocol}://${location.host}`);
 
 const ui = new UIController();
 const peerManager = new PeerManager(socket, ui);
@@ -126,9 +125,7 @@ if (localStorage.getItem('chatHidden') === '1') {
 const settingsButton = document.getElementById('settings-button');
 if (settingsButton) {
     settingsButton.addEventListener('click', () => {
-        const sessionId = location.pathname.includes('/session/')
-            ? location.pathname.split('/').pop()
-            : null;
+        const sessionId = location.pathname.split('/').pop();
 
         if (sessionId) {
             localStorage.setItem('lastSessionId', sessionId);
@@ -143,4 +140,22 @@ if (shareButton) {
         const url = window.location.href;
         navigator.clipboard.writeText(url);
     });
+}
+
+const requiredKeys = [
+    'nickname',
+    'screenShareRes',
+    'screenShareFps',
+    'muteSounds',
+    'soundVolume',
+    'maxMessages'
+];
+
+const firstVisit = requiredKeys.some(key => localStorage.getItem(key) === null);
+
+if (firstVisit) {
+    // Save session to return to after settings
+    const sessionId = location.pathname.split('/').pop();
+    localStorage.setItem('lastSessionId', sessionId);
+    window.location.href = '/settings';
 }
