@@ -15,6 +15,7 @@ yarn-error.log*
 
 # System
 .DS_Store
+chatgpt.md
 Thumbs.db
 
 # IDE/editor
