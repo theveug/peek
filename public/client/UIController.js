@@ -11,7 +11,7 @@ export class UIController {
         this.maxMessages = 100;
         this.streams = {};
         this.focusedPeerId = null;
-        this.viewMode = 'focus'; // 'focus' or 'grid'
+        this.viewMode = 'grid'; // 'focus' or 'grid'
         this.zoom = 1;
         this.panX = 0;
         this.panY = 0;
@@ -273,20 +273,18 @@ export class UIController {
         spinner.classList.add('hidden');
 
         if (gridBtn) {
-            gridBtn.style.display = remoteStreams.length > 1 ? 'flex' : 'none';
+            gridBtn.style.display = 'flex';
         }
 
-        if (remoteStreams.length === 1) {
-            this.viewMode = 'focus';
-            this.focusedPeerId = remoteStreams[0];
-            this.focusedVideo.srcObject = this.streams[remoteStreams[0]];
-        }
-
-        if (this.viewMode === 'grid' && remoteStreams.length > 1) {
+        if (this.viewMode === 'grid') {
             this.focusedView.style.display = 'none';
             this.gridView.style.display = 'grid';
             this.buildGrid();
         } else {
+            if (!this.focusedPeerId || !this.streams[this.focusedPeerId]) {
+                this.focusedPeerId = remoteStreams[0];
+                this.focusedVideo.srcObject = this.streams[remoteStreams[0]];
+            }
             this.focusedView.style.display = 'flex';
             this.gridView.style.display = 'none';
         }
