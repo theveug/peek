@@ -334,6 +334,10 @@ export class PeerManager {
         if (typeof data === 'string') {
             const msg = JSON.parse(data);
             if (msg.type === 'file-start') {
+                if (!this._isFileAllowed(msg.fileName)) {
+                    this.ui.showToast(`Blocked incoming file: ${msg.fileName}`, 'leave');
+                    return;
+                }
                 this.incomingTransfers[msg.fileId] = {
                     fileName: msg.fileName, fileSize: msg.fileSize, fileType: msg.fileType,
                     totalChunks: msg.totalChunks, chunks: [], received: 0, from: peerId,
@@ -361,7 +365,41 @@ export class PeerManager {
         }
     }
 
+    _allowedExtensions = new Set([
+        // Images
+        'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif',
+        // Documents
+        'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'rtf',
+        // Text & code
+        'txt', 'md', 'csv', 'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'log',
+        'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'less', 'py', 'rb', 'go', 'rs',
+        'java', 'kt', 'c', 'cpp', 'h', 'hpp', 'cs', 'php', 'swift', 'lua', 'sh', 'sql',
+        // Archives
+        'zip', 'tar', 'gz', 'bz2', '7z', 'rar',
+        // Audio & video
+        'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a',
+        'mp4', 'webm', 'mkv', 'avi', 'mov',
+        // Fonts
+        'woff', 'woff2', 'ttf', 'otf', 'eot',
+    ]);
+
+    _isFileAllowed(fileName) {
+        const ext = fileName.split('.').pop().toLowerCase();
+        return this._allowedExtensions.has(ext);
+    }
+
     async sendFileToAll(file) {
+        if (!this._isFileAllowed(file.name)) {
+            this.ui.showToast(`Blocked: .${file.name.split('.').pop()} files are not allowed`, 'leave');
+            return;
+        }
+
+        const MAX_SIZE = 500 * 1024 * 1024;
+        if (file.size > MAX_SIZE) {
+            this.ui.showToast(`File too large (max 500 MB)`, 'leave');
+            return;
+        }
+
         const fileId = 'file-' + Date.now() + '-' + Math.random().toString(36).substr(2, 8);
         const CHUNK_SIZE = 16384;
         const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
