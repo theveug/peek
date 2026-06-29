@@ -5,47 +5,134 @@ export class UIController {
         this.container = document.getElementById('videos');
         this.chatLog = document.getElementById('chat-log');
         this.videoContainer = document.getElementById('videos');
-        this.maxMessages = 100; // adjust as needed
+        this.thumbnails = document.getElementById('thumbnails');
+        this.focusedView = document.getElementById('focused-view');
+        this.focusedVideo = document.getElementById('focused-video');
+        this.maxMessages = 100;
+        this.streams = {};
+        this.focusedPeerId = null;
+        this.zoom = 1;
+        this.panX = 0;
+        this.panY = 0;
+        this.isPanning = false;
+        this.setupZoomAndPan();
+    }
+
+    setupZoomAndPan() {
+        this.focusedView.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -0.1 : 0.1;
+            this.zoom = Math.max(1, Math.min(10, this.zoom + delta));
+            if (this.zoom === 1) { this.panX = 0; this.panY = 0; }
+            this.applyTransform();
+        });
+
+        this.focusedView.addEventListener('mousedown', (e) => {
+            if (this.zoom <= 1) return;
+            this.isPanning = true;
+            this.panStartX = e.clientX - this.panX;
+            this.panStartY = e.clientY - this.panY;
+            this.focusedView.style.cursor = 'grabbing';
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!this.isPanning) return;
+            this.panX = e.clientX - this.panStartX;
+            this.panY = e.clientY - this.panStartY;
+            this.applyTransform();
+        });
+
+        window.addEventListener('mouseup', () => {
+            this.isPanning = false;
+            this.focusedView.style.cursor = 'grab';
+        });
+
+        this.focusedView.addEventListener('dblclick', () => {
+            this.zoom = 1;
+            this.panX = 0;
+            this.panY = 0;
+            this.applyTransform();
+        });
+    }
+
+    applyTransform() {
+        this.focusedVideo.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})`;
+    }
+
+    focusStream(peerId) {
+        const stream = this.streams[peerId];
+        if (!stream) return;
+
+        this.focusedPeerId = peerId;
+        this.focusedVideo.srcObject = stream;
+        this.focusedView.style.display = 'flex';
+        this.zoom = 1;
+        this.panX = 0;
+        this.panY = 0;
+        this.applyTransform();
+
+        this.thumbnails.querySelectorAll('.thumb').forEach(t => {
+            t.classList.toggle('ring-2', t.dataset.peerId === peerId);
+            t.classList.toggle('ring-blue-500', t.dataset.peerId === peerId);
+            t.classList.toggle('opacity-50', t.dataset.peerId !== peerId);
+        });
     }
 
     addPeer(peerId) {
-        const spinner = document.getElementById(`spinner`);
         playSound('peerJoin');
     }
+
     removePeer(peerId) {
-        const spinner = document.getElementById(`spinner`);
         playSound('peerLeft');
     }
 
     addStream(peerId, stream) {
-        const spinner = document.getElementById(`spinner`);
-        const existingVideo = document.querySelector(`[data-peer-id="${peerId}"]`);
-        if (existingVideo) {
-            // Fully remove existing video and cleanup before adding again
-            existingVideo.srcObject.getTracks().forEach(track => track.stop());
-            existingVideo.remove();
-            spinner.classList.remove('hidden');
-        }
-
-        const video = document.createElement('video');
-        video.muted = true;
-        video.autoplay = true;
-        video.playsInline = true;
-        video.srcObject = stream;
-        video.dataset.peerId = peerId;
+        this.streams[peerId] = stream;
 
         if (peerId === 'me') {
-            video.style.position = 'fixed';
-            video.style.bottom = '10px';
-            video.style.right = '10px';
-            video.style.width = '150px';
-            video.style.border = '2px solid #ccc';
-            video.style.zIndex = 1000;
+            let selfView = document.getElementById('self-view');
+            if (selfView) {
+                selfView.srcObject = stream;
+            } else {
+                selfView = document.createElement('video');
+                selfView.id = 'self-view';
+                selfView.muted = true;
+                selfView.autoplay = true;
+                selfView.playsInline = true;
+                selfView.srcObject = stream;
+                selfView.style.cssText = 'position:fixed; bottom:10px; right:10px; width:150px; border:2px solid #ccc; z-index:1000; border-radius:6px;';
+                this.container.appendChild(selfView);
+            }
+            playSound('streamUp');
+            this.updateLayout();
+            return;
         }
-        
+
+        const existing = this.thumbnails.querySelector(`[data-peer-id="${peerId}"]`);
+        if (existing) {
+            existing.querySelector('video').srcObject = stream;
+        } else {
+            const thumb = document.createElement('div');
+            thumb.className = 'thumb relative cursor-pointer rounded overflow-hidden flex-shrink-0';
+            thumb.dataset.peerId = peerId;
+            thumb.style.cssText = 'width:160px; height:90px;';
+            const video = document.createElement('video');
+            video.muted = true;
+            video.autoplay = true;
+            video.playsInline = true;
+            video.srcObject = stream;
+            video.className = 'w-full h-full object-cover';
+            thumb.appendChild(video);
+            thumb.addEventListener('click', () => this.focusStream(peerId));
+            this.thumbnails.appendChild(thumb);
+        }
+
         playSound('streamUp');
-        this.container.appendChild(video);
-        this.handleSpinner();
+        this.updateLayout();
+
+        if (!this.focusedPeerId || !this.streams[this.focusedPeerId]) {
+            this.focusStream(peerId);
+        }
     }
 
     addChatMessage(sender, text) {
@@ -106,10 +193,9 @@ export class UIController {
 
 
     handleVisibilityChange(blurred) {
-        const myVideo = document.querySelector('[data-peer-id="me"]');
+        const myVideo = document.getElementById('self-view');
         let placeholder = document.getElementById('stream-placeholder');
 
-        // Only do something if the user is actually streaming
         const isStreaming = !!myVideo && !!myVideo.srcObject;
 
         if (!isStreaming) {
@@ -142,27 +228,51 @@ export class UIController {
         }
     }
 
-    handleSpinner() {
-        const spinner = document.getElementById(`spinner`);
-        const videos = Array.from(this.videoContainer.querySelectorAll('video')).filter((el) => el.dataset['peerId'] != 'me');
-        if (videos.length === 0) {
+    updateLayout() {
+        const remoteStreams = Object.keys(this.streams).filter(id => id !== 'me');
+        const spinner = document.getElementById('spinner');
+
+        if (remoteStreams.length === 0) {
             spinner.classList.remove('hidden');
+            this.focusedView.style.display = 'none';
+            this.thumbnails.style.display = 'none';
         } else {
             spinner.classList.add('hidden');
+            this.focusedView.style.display = 'flex';
+            this.thumbnails.style.display = remoteStreams.length > 1 ? 'flex' : 'none';
         }
     }
 
     removeStream(peerId) {
-        const video = document.querySelector(`[data-peer-id="${peerId}"]`);
-        if (video) {
-            playSound('streamDown');
-            video.remove();
+        delete this.streams[peerId];
+
+        if (peerId === 'me') {
+            const selfView = document.getElementById('self-view');
+            if (selfView) {
+                playSound('streamDown');
+                selfView.remove();
+            }
+        } else {
+            const thumb = this.thumbnails.querySelector(`[data-peer-id="${peerId}"]`);
+            if (thumb) {
+                playSound('streamDown');
+                thumb.remove();
+            }
+
+            if (this.focusedPeerId === peerId) {
+                this.focusedPeerId = null;
+                this.focusedVideo.srcObject = null;
+                const remaining = Object.keys(this.streams).filter(id => id !== 'me');
+                if (remaining.length > 0) {
+                    this.focusStream(remaining[0]);
+                }
+            }
         }
 
         const placeholder = document.getElementById('stream-placeholder');
         if (placeholder) placeholder.remove();
 
-        this.handleSpinner();
+        this.updateLayout();
     }
 
 
