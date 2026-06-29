@@ -107,7 +107,7 @@ if (chatPanel && dropOverlay) {
     chatPanel.addEventListener('dragenter', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        dropOverlay.classList.remove('hidden');
+        dropOverlay.classList.add('active');
     });
 
     dropOverlay.addEventListener('dragover', (e) => {
@@ -120,14 +120,14 @@ if (chatPanel && dropOverlay) {
         e.stopPropagation();
         const rect = dropOverlay.getBoundingClientRect();
         if (e.clientX <= rect.left || e.clientX >= rect.right || e.clientY <= rect.top || e.clientY >= rect.bottom) {
-            dropOverlay.classList.add('hidden');
+            dropOverlay.classList.remove('active');
         }
     });
 
     dropOverlay.addEventListener('drop', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        dropOverlay.classList.add('hidden');
+        dropOverlay.classList.remove('active');
         if (e.dataTransfer.files.length) {
             [...e.dataTransfer.files].forEach(f => peerManager.sendFileToAll(f));
         }
