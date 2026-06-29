@@ -16,7 +16,51 @@ export class UIController {
         this.panX = 0;
         this.panY = 0;
         this.isPanning = false;
+        this._typingPeers = new Set();
+        this._reactions = new Map();
+        this._onReaction = null;
         this.setupZoom();
+        this._createToastContainer();
+    }
+
+    _createToastContainer() {
+        const c = document.createElement('div');
+        c.id = 'toast-container';
+        c.className = 'toast-container';
+        document.body.appendChild(c);
+    }
+
+    _peerNickname(peerId) {
+        const el = document.getElementById(`participant-${peerId}`);
+        if (!el) return peerId.substring(0, 8);
+        const name = el.querySelector('.participant-name');
+        return name ? name.textContent : peerId.substring(0, 8);
+    }
+
+    showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+
+        const icons = {
+            join: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M10 2a.75.75 0 0 1 .75.75v5.59l1.95-2.1a.75.75 0 1 1 1.1 1.02l-3.25 3.5a.75.75 0 0 1-1.1 0L6.2 7.26a.75.75 0 1 1 1.1-1.02l1.95 2.1V2.75A.75.75 0 0 1 10 2Z" /><path d="M5.273 4.5a1.25 1.25 0 0 0-1.205.918l-1.523 5.52c-.006.02-.01.041-.015.062H6a1 1 0 0 1 .894.553l.448.894a1 1 0 0 0 .894.553h3.438a1 1 0 0 0 .86-.49l.606-1.02A1 1 0 0 1 14 11h3.47a1.318 1.318 0 0 0-.015-.062l-1.523-5.52a1.25 1.25 0 0 0-1.205-.918h-9.454Z" /></svg>',
+            leave: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25Z" clip-rule="evenodd" /><path fill-rule="evenodd" d="M19 10a.75.75 0 0 0-.75-.75H8.704l1.048-.943a.75.75 0 1 0-1.004-1.114l-2.5 2.25a.75.75 0 0 0 0 1.114l2.5 2.25a.75.75 0 1 0 1.004-1.114l-1.048-.943h9.546A.75.75 0 0 0 19 10Z" clip-rule="evenodd" /></svg>',
+            stream: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M1 4.75C1 3.784 1.784 3 2.75 3h14.5c.966 0 1.75.784 1.75 1.75v10.515a1.75 1.75 0 0 1-1.75 1.75h-1.5v-1.5h1.5a.25.25 0 0 0 .25-.25V4.75a.25.25 0 0 0-.25-.25H2.75a.25.25 0 0 0-.25.25v10.515c0 .138.112.25.25.25h1.5v1.5h-1.5A1.75 1.75 0 0 1 1 15.265V4.75Z" /><path d="M10 7.292a.625.625 0 0 1 .625.625v1.958h1.958a.625.625 0 1 1 0 1.25h-1.958v1.958a.625.625 0 1 1-1.25 0v-1.958H7.417a.625.625 0 1 1 0-1.25h1.958V7.917A.625.625 0 0 1 10 7.292Z" /></svg>',
+            info: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clip-rule="evenodd" /></svg>',
+        };
+
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `<span class="toast-icon">${icons[type] || icons.info}</span><span class="toast-text">${message}</span>`;
+        container.appendChild(toast);
+
+        while (container.children.length > 5) {
+            container.removeChild(container.firstChild);
+        }
+
+        setTimeout(() => {
+            toast.classList.add('toast-out');
+            toast.addEventListener('animationend', () => toast.remove());
+        }, 4000);
     }
 
     setupZoom() {
@@ -143,12 +187,43 @@ export class UIController {
     addPeer(peerId) {
         playSound('peerJoin');
         this.addParticipant(peerId);
+        setTimeout(() => this.showToast(`${this._peerNickname(peerId)} joined`, 'join'), 100);
     }
 
     removePeer(peerId) {
+        const name = this._peerNickname(peerId);
         playSound('peerLeft');
         this.removeAudio(peerId);
         this.removeParticipant(peerId);
+        this._typingPeers.delete(peerId);
+        this._renderTypingIndicator();
+        this.showToast(`${name} left`, 'leave');
+    }
+
+    updateTypingIndicator(peerId, isTyping) {
+        if (isTyping) {
+            this._typingPeers.add(peerId);
+        } else {
+            this._typingPeers.delete(peerId);
+        }
+        this._renderTypingIndicator();
+    }
+
+    _renderTypingIndicator() {
+        const el = document.getElementById('typing-indicator');
+        if (!el) return;
+        const count = this._typingPeers.size;
+        if (count === 0) {
+            el.classList.add('hidden');
+            return;
+        }
+        const names = [...this._typingPeers].map(id => this._peerNickname(id));
+        let text;
+        if (count === 1) text = `${names[0]} is typing`;
+        else if (count === 2) text = `${names[0]} and ${names[1]} are typing`;
+        else text = 'Several people are typing';
+        el.innerHTML = `<span class="typing-dots"><span>.</span><span>.</span><span>.</span></span> ${text}`;
+        el.classList.remove('hidden');
     }
 
     addSelf(peerId) {
@@ -407,6 +482,7 @@ export class UIController {
         }
 
         playSound('streamUp');
+        this.showToast(`${this._peerNickname(peerId)} started sharing`, 'stream');
 
         if (!this.focusedPeerId || !this.streams[this.focusedPeerId]) {
             this.focusedPeerId = peerId;
@@ -414,6 +490,175 @@ export class UIController {
         }
 
         this.updateLayout();
+    }
+
+    _emojiSet = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+
+    _setupEmojiPicker(msgEl, messageId) {
+        const btn = document.createElement('button');
+        btn.className = 'emoji-trigger';
+        btn.textContent = '😀';
+        btn.title = 'React';
+        msgEl.appendChild(btn);
+
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.emoji-picker').forEach(p => p.remove());
+            const picker = document.createElement('div');
+            picker.className = 'emoji-picker';
+            this._emojiSet.forEach(emoji => {
+                const eb = document.createElement('button');
+                eb.textContent = emoji;
+                eb.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    picker.remove();
+                    if (this._onReaction) this._onReaction(messageId, emoji);
+                });
+                picker.appendChild(eb);
+            });
+            msgEl.appendChild(picker);
+            setTimeout(() => {
+                const close = () => { picker.remove(); document.removeEventListener('click', close); };
+                document.addEventListener('click', close);
+            }, 0);
+        });
+    }
+
+    addReaction(messageId, emoji, nickname, fromPeerId) {
+        const msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (!msgEl) return;
+        const bar = msgEl.querySelector('.reaction-bar');
+        if (!bar) return;
+
+        if (!this._reactions.has(messageId)) this._reactions.set(messageId, new Map());
+        const msgReactions = this._reactions.get(messageId);
+        if (!msgReactions.has(emoji)) msgReactions.set(emoji, new Set());
+        const reactors = msgReactions.get(emoji);
+
+        if (reactors.has(fromPeerId)) {
+            reactors.delete(fromPeerId);
+            if (reactors.size === 0) msgReactions.delete(emoji);
+        } else {
+            reactors.add(fromPeerId);
+        }
+
+        this._renderReactionBar(bar, messageId);
+    }
+
+    _renderReactionBar(bar, messageId) {
+        bar.innerHTML = '';
+        const msgReactions = this._reactions.get(messageId);
+        if (!msgReactions) return;
+        msgReactions.forEach((reactors, emoji) => {
+            if (reactors.size === 0) return;
+            const badge = document.createElement('button');
+            badge.className = 'reaction-badge';
+            badge.textContent = `${emoji} ${reactors.size}`;
+            badge.addEventListener('click', () => {
+                if (this._onReaction) this._onReaction(messageId, emoji);
+            });
+            bar.appendChild(badge);
+        });
+    }
+
+    _formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+    }
+
+    updateFileProgress(fileId, progress, direction, fileName) {
+        let el = document.getElementById(`file-progress-${fileId}`);
+        if (!el) {
+            el = document.createElement('div');
+            el.id = `file-progress-${fileId}`;
+            el.className = 'file-progress';
+            const label = direction === 'upload' ? 'Sending' : 'Receiving';
+            el.innerHTML = `<span class="file-progress-label">${label}: ${fileName}</span><div class="file-progress-track"><div class="file-progress-fill"></div></div>`;
+            const chatLog = document.getElementById('chat-log');
+            chatLog.appendChild(el);
+            requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight }));
+        }
+        const fill = el.querySelector('.file-progress-fill');
+        if (fill) fill.style.width = (progress * 100) + '%';
+    }
+
+    removeFileProgress(fileId) {
+        const el = document.getElementById(`file-progress-${fileId}`);
+        if (el) el.remove();
+    }
+
+    addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl) {
+        const chatLog = document.getElementById('chat-log');
+        const msgContainer = document.createElement('div');
+
+        const isSelf = sender === 'Me';
+        const initial = isSelf ? (localStorage.getItem('nickname') || 'Me').charAt(0).toUpperCase() : sender.charAt(0).toUpperCase();
+        const color = isSelf ? '#22c55e' : this._colorForName(sender);
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const sizeStr = this._formatFileSize(fileSize);
+        const isImage = /^image\//i.test(fileType);
+
+        let fileContent;
+        if (isImage) {
+            fileContent = `<div class="chat-image-preview"><img src="${blobUrl}" alt="${fileName}" /></div>`;
+        } else {
+            fileContent = `<div class="file-card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-muted"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" /></svg><div class="file-card-info"><span class="file-card-name">${fileName}</span><span class="file-card-size">${sizeStr}</span></div><a href="${blobUrl}" download="${fileName}" class="file-card-download" title="Download">&#x2B73;</a></div>`;
+        }
+
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${initial}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${sender}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="ml-7">${fileContent}</div></div>`;
+        chatLog.appendChild(msgContainer);
+
+        while (chatLog.children.length > this.maxMessages) {
+            chatLog.removeChild(chatLog.firstChild);
+        }
+
+        requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' }));
+
+        if (!document.hasFocus() && !isSelf) {
+            const indicator = document.getElementById('new-message-indicator');
+            if (indicator) indicator.classList.remove('hidden');
+            playSound('newMessage');
+        }
+    }
+
+    _imageUrlPattern = /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?.*)?$/i;
+
+    _processLinkPreviews(container) {
+        const links = container.querySelectorAll('.chat-markdown a[href]');
+        let imageCount = 0;
+        links.forEach(a => {
+            const href = a.getAttribute('href');
+            if (!href || href.startsWith('javascript:')) return;
+
+            a.setAttribute('target', '_blank');
+            a.setAttribute('rel', 'noopener noreferrer');
+
+            if (this._imageUrlPattern.test(href) && imageCount < 5) {
+                imageCount++;
+                const preview = document.createElement('div');
+                preview.className = 'chat-image-preview';
+                const img = document.createElement('img');
+                img.src = href;
+                img.loading = 'lazy';
+                img.alt = 'Image preview';
+                img.addEventListener('click', () => window.open(href, '_blank'));
+                img.addEventListener('error', () => preview.remove());
+                preview.appendChild(img);
+                const body = container.querySelector('.chat-markdown');
+                if (body) body.appendChild(preview);
+            } else if (!this._imageUrlPattern.test(href)) {
+                a.classList.add('link-preview');
+                try {
+                    const host = new URL(href).hostname;
+                    const hostLabel = document.createElement('span');
+                    hostLabel.className = 'link-host';
+                    hostLabel.textContent = host;
+                    a.appendChild(hostLabel);
+                } catch {}
+            }
+        });
     }
 
     _chatAvatarColors = [
@@ -430,16 +675,21 @@ export class UIController {
         return this._chatAvatarColors[Math.abs(hash) % this._chatAvatarColors.length];
     }
 
-    addChatMessage(sender, text) {
+    addChatMessage(sender, text, messageId) {
         const chatLog = document.getElementById('chat-log');
         const msgContainer = document.createElement('div');
+        if (!messageId) messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+        msgContainer.dataset.messageId = messageId;
 
         const raw = marked.parse(text);
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const isSelf = sender === 'Me';
         const initial = isSelf ? (localStorage.getItem('nickname') || 'Me').charAt(0).toUpperCase() : sender.charAt(0).toUpperCase();
         const color = isSelf ? '#22c55e' : this._colorForName(sender);
-        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${initial}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${sender}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="chat-markdown chat-body prose ml-7">${raw}</div></div>`;
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${initial}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${sender}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="chat-markdown chat-body prose ml-7">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
+
+        const msg = msgContainer.querySelector('.chat-message');
+        this._setupEmojiPicker(msg, messageId);
         chatLog.appendChild(msgContainer);
 
         while (chatLog.children.length > this.maxMessages) {
@@ -466,6 +716,9 @@ export class UIController {
 
             pre.appendChild(copyBtn);
         });
+
+        this._processLinkPreviews(msgContainer);
+
         const newMessageIndicator = document.getElementById('new-message-indicator');
         const tabFocused = document.hasFocus();
         const isFromOther = sender !== 'Me';

@@ -22,13 +22,21 @@
                         <span class="text-sm font-medium text-muted">Chat</span>
                     </div>
                     <div class="flex-1 overflow-auto" id="chat-log"></div>
+                    <div id="typing-indicator" class="typing-indicator hidden"></div>
+                    <div id="drop-zone-overlay" class="drop-zone-overlay hidden">Drop files here</div>
                     <div class="flex flex-col border-t border-separator">
-                        <div class="p-3" id="chat-input">
+                        <div class="p-3 flex gap-2 items-end" id="chat-input">
                             <textarea
                                 id="message"
                                 rows="2"
                                 placeholder="Type a message..."
-                                class="w-full p-3 resize-none surface-input rounded-lg text-sm placeholder-muted focus:outline-none focus:ring-1 focus:ring-indigo-500/50 transition-all"></textarea>
+                                class="flex-1 p-3 resize-none surface-input rounded-lg text-sm placeholder-muted focus:outline-none focus:ring-1 focus:ring-indigo-500/50 transition-all"></textarea>
+                            <button id="file-attach-btn" title="Share a file" class="p-2 rounded-lg text-muted hover:text-foreground transition-colors shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                                    <path fill-rule="evenodd" d="M15.621 4.379a3 3 0 0 0-4.242 0l-7 7a3 3 0 0 0 4.241 4.243h.001l.497-.5a.75.75 0 0 1 1.064 1.057l-.498.501-.002.002a4.5 4.5 0 0 1-6.364-6.364l7-7a4.5 4.5 0 0 1 6.368 6.36l-3.455 3.553A2.625 2.625 0 1 1 9.52 9.52l3.45-3.451a.75.75 0 1 1 1.061 1.06l-3.45 3.451a1.125 1.125 0 0 0 1.587 1.595l3.454-3.553a3 3 0 0 0 0-4.242Z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                            <input type="file" id="file-input" class="hidden" multiple />
                         </div>
                     </div>
                 </div>
@@ -216,6 +224,23 @@
                     </div>
                     <div class="flex-1 overflow-auto px-2 py-2" id="participants"></div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Room name header (shown when room has a name) -->
+        <div id="room-header" class="fixed top-3 left-1/2 -translate-x-1/2 z-50 surface-glass border border-separator rounded-full px-4 py-1.5 text-xs font-medium text-muted hidden"></div>
+
+        <!-- Password Modal (for direct links to password-protected rooms) -->
+        <div id="password-modal" class="fixed inset-0 z-100 hidden">
+            <div class="absolute inset-0 bg-black/70"></div>
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 surface-elevated text-foreground rounded-xl p-6 w-full max-w-sm shadow-2xl border border-separator">
+                <h2 class="text-lg font-bold mb-1">Room Password Required</h2>
+                <p id="password-room-name" class="text-sm text-muted mb-4"></p>
+                <form id="password-form">
+                    <input type="password" id="password-input" placeholder="Enter password" class="w-full p-2.5 surface-input rounded-lg text-sm placeholder-muted focus:outline-none focus:ring-1 focus:ring-indigo-500/50 mb-2" autofocus />
+                    <p id="password-error" class="text-xs text-red-400 hidden mb-2">Wrong password</p>
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-lg text-sm font-medium transition-colors">Join</button>
+                </form>
             </div>
         </div>
 

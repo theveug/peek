@@ -13,6 +13,8 @@ export class PeerManager {
         this.deafened = false;
         this.status = 'online';
         this._manualStatus = null;
+        this.dataChannels = {};
+        this.incomingTransfers = {};
     }
 
     async handleSignal({ type, peerId, peers, from, payload, iceServers }) {
@@ -87,6 +89,10 @@ export class PeerManager {
 
             case 'status-update':
                 this.ui.updateParticipantStatus(from, payload.status);
+                break;
+
+            case 'typing':
+                this.ui.updateTypingIndicator(from, payload.isTyping);
                 break;
         }
         // console.groupEnd();
@@ -305,8 +311,105 @@ export class PeerManager {
             }
         };
 
+        const dc = pc.createDataChannel('file-transfer', { ordered: true });
+        dc.binaryType = 'arraybuffer';
+        this._setupDataChannel(dc, remotePeerId);
+
+        pc.ondatachannel = (e) => {
+            e.channel.binaryType = 'arraybuffer';
+            this._setupDataChannel(e.channel, remotePeerId);
+        };
+
         this.peers[remotePeerId] = pc;
         return pc;
+    }
+
+    _setupDataChannel(dc, peerId) {
+        dc.onopen = () => { this.dataChannels[peerId] = dc; };
+        dc.onclose = () => { delete this.dataChannels[peerId]; };
+        dc.onmessage = (e) => this._handleDataChannelMessage(peerId, e.data);
+    }
+
+    _handleDataChannelMessage(peerId, data) {
+        if (typeof data === 'string') {
+            const msg = JSON.parse(data);
+            if (msg.type === 'file-start') {
+                this.incomingTransfers[msg.fileId] = {
+                    fileName: msg.fileName, fileSize: msg.fileSize, fileType: msg.fileType,
+                    totalChunks: msg.totalChunks, chunks: [], received: 0, from: peerId,
+                };
+                this.ui.updateFileProgress(msg.fileId, 0, 'download', msg.fileName);
+            } else if (msg.type === 'file-end') {
+                const t = this.incomingTransfers[msg.fileId];
+                if (!t) return;
+                const blob = new Blob(t.chunks, { type: t.fileType });
+                const url = URL.createObjectURL(blob);
+                const nickname = this.ui._peerNickname(peerId);
+                this.ui.removeFileProgress(msg.fileId);
+                this.ui.addFileMessage(nickname, msg.fileId, t.fileName, t.fileSize, t.fileType, url);
+                delete this.incomingTransfers[msg.fileId];
+            }
+        } else {
+            const keys = Object.keys(this.incomingTransfers);
+            const activeId = keys.find(id => this.incomingTransfers[id].from === peerId);
+            if (!activeId) return;
+            const t = this.incomingTransfers[activeId];
+            t.chunks.push(data);
+            t.received++;
+            const progress = t.totalChunks > 0 ? t.received / t.totalChunks : 0;
+            this.ui.updateFileProgress(activeId, progress, 'download', t.fileName);
+        }
+    }
+
+    async sendFileToAll(file) {
+        const fileId = 'file-' + Date.now() + '-' + Math.random().toString(36).substr(2, 8);
+        const CHUNK_SIZE = 16384;
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+        const meta = { type: 'file-start', fileId, fileName: file.name, fileSize: file.size, fileType: file.type, totalChunks };
+
+        const peerIds = Object.keys(this.dataChannels);
+        if (peerIds.length === 0) return;
+
+        this.ui.updateFileProgress(fileId, 0, 'upload', file.name);
+
+        for (const pid of peerIds) {
+            const dc = this.dataChannels[pid];
+            if (!dc || dc.readyState !== 'open') continue;
+            dc.send(JSON.stringify(meta));
+        }
+
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * CHUNK_SIZE;
+            const slice = file.slice(start, start + CHUNK_SIZE);
+            const buffer = await slice.arrayBuffer();
+
+            for (const pid of peerIds) {
+                const dc = this.dataChannels[pid];
+                if (!dc || dc.readyState !== 'open') continue;
+
+                while (dc.bufferedAmount > 1024 * 1024) {
+                    await new Promise(r => {
+                        dc.bufferedAmountLowThreshold = 256 * 1024;
+                        dc.onbufferedamountlow = () => { dc.onbufferedamountlow = null; r(); };
+                    });
+                }
+                dc.send(buffer);
+            }
+
+            this.ui.updateFileProgress(fileId, (i + 1) / totalChunks, 'upload', file.name);
+        }
+
+        for (const pid of peerIds) {
+            const dc = this.dataChannels[pid];
+            if (!dc || dc.readyState !== 'open') continue;
+            dc.send(JSON.stringify({ type: 'file-end', fileId }));
+        }
+
+        this.ui.removeFileProgress(fileId);
+        const blob = new Blob([file], { type: file.type });
+        const url = URL.createObjectURL(blob);
+        this.ui.addFileMessage('Me', fileId, file.name, file.size, file.type, url);
     }
 
     initiateConnection(peerId) {

@@ -1,15 +1,21 @@
 // --- src/server/SessionManager.js ---
 export class SessionManager {
     constructor() {
-        this.sessions = new Map(); // sessionId -> Set of peers
+        this.sessions = new Map(); // sessionId -> { peers: Set, name, password }
         this.peerMap = new Map();  // peerId -> { sessionId, socket }
+    }
+
+    createSession(sessionId, { name = null, password = null } = {}) {
+        if (!this.sessions.has(sessionId)) {
+            this.sessions.set(sessionId, { peers: new Set(), name, password });
+        }
     }
 
     addPeer(sessionId, peerId, socket) {
         if (!this.sessions.has(sessionId)) {
-            this.sessions.set(sessionId, new Set());
+            this.sessions.set(sessionId, { peers: new Set(), name: null, password: null });
         }
-        this.sessions.get(sessionId).add(peerId);
+        this.sessions.get(sessionId).peers.add(peerId);
         this.peerMap.set(peerId, { sessionId, socket });
     }
 
@@ -19,8 +25,8 @@ export class SessionManager {
             const { sessionId } = peerInfo;
             const session = this.sessions.get(sessionId);
             if (session) {
-                session.delete(peerId);
-                if (session.size === 0) {
+                session.peers.delete(peerId);
+                if (session.peers.size === 0) {
                     this.sessions.delete(sessionId);
                 }
             }
@@ -28,8 +34,26 @@ export class SessionManager {
         }
     }
 
+    hasSession(sessionId) {
+        return this.sessions.has(sessionId);
+    }
+
+    getSessionMeta(sessionId) {
+        const s = this.sessions.get(sessionId);
+        if (!s) return null;
+        return { name: s.name, hasPassword: !!s.password, peerCount: s.peers.size };
+    }
+
+    validatePassword(sessionId, password) {
+        const s = this.sessions.get(sessionId);
+        if (!s) return true;
+        if (!s.password) return true;
+        return s.password === password;
+    }
+
     getPeersInSession(sessionId) {
-        return this.sessions.has(sessionId) ? [...this.sessions.get(sessionId)] : [];
+        const s = this.sessions.get(sessionId);
+        return s ? [...s.peers] : [];
     }
 
     getPeerSocket(peerId) {

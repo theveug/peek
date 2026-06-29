@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Peek - Create or Join a Room</title>
+        <link rel="stylesheet" href="/assets/style.css" />
+    </head>
+    <body class="dark">
+        <canvas id="gradient-canvas"></canvas>
+
+        <div class="flex items-center justify-center h-screen relative z-10">
+            <div class="surface-glass border border-separator rounded-2xl p-8 w-full max-w-md shadow-2xl">
+                <div class="text-center mb-8">
+                    <h1 class="text-3xl font-bold text-foreground tracking-tight">Peek</h1>
+                    <p class="text-muted text-sm mt-1">Screen sharing & chat, peer-to-peer</p>
+                </div>
+
+                <!-- Create Room -->
+                <div class="mb-6">
+                    <h2 class="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Create a Room</h2>
+                    <form id="create-form" class="space-y-3">
+                        <input type="text" id="create-name" placeholder="Room name (optional)" class="w-full p-2.5 surface-input rounded-lg text-sm placeholder-muted focus:outline-none focus:ring-1 focus:ring-indigo-500/50" maxlength="50" />
+                        <input type="password" id="create-password" placeholder="Password (optional)" class="w-full p-2.5 surface-input rounded-lg text-sm placeholder-muted focus:outline-none focus:ring-1 focus:ring-indigo-500/50" />
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-lg text-sm font-medium transition-colors">Create Room</button>
+                    </form>
+                </div>
+
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="flex-1 h-px bg-separator"></div>
+                    <span class="text-xs text-muted">or</span>
+                    <div class="flex-1 h-px bg-separator"></div>
+                </div>
+
+                <!-- Join Room -->
+                <div>
+                    <h2 class="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Join a Room</h2>
+                    <form id="join-form" class="space-y-3">
+                        <input type="text" id="join-code" placeholder="Room code (5 characters)" class="w-full p-2.5 surface-input rounded-lg text-sm text-center tracking-widest font-mono placeholder-muted focus:outline-none focus:ring-1 focus:ring-indigo-500/50" maxlength="5" pattern="[A-Za-z0-9]{5}" required />
+                        <div id="join-password-row" class="hidden">
+                            <input type="password" id="join-password" placeholder="Enter room password" class="w-full p-2.5 surface-input rounded-lg text-sm placeholder-muted focus:outline-none focus:ring-1 focus:ring-indigo-500/50" />
+                        </div>
+                        <div id="join-error" class="text-xs text-red-400 hidden"></div>
+                        <div id="join-room-name" class="text-xs text-muted hidden"></div>
+                        <button type="submit" class="w-full surface-input hover:opacity-80 text-foreground py-2.5 rounded-lg text-sm font-medium transition-colors border border-separator">Join Room</button>
+                    </form>
+                </div>
+
+                <div class="mt-6 flex justify-center">
+                    <button id="theme-toggle" class="text-muted hover:text-foreground transition-colors p-2 rounded-lg" title="Toggle theme">
+                        <svg id="theme-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                            <path d="M12 2.25a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V3a.75.75 0 0 1 .75-.75ZM7.5 12a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM18.894 6.166a.75.75 0 0 0-1.06-1.06l-1.591 1.59a.75.75 0 1 0 1.06 1.061l1.591-1.59ZM21.75 12a.75.75 0 0 1-.75.75h-2.25a.75.75 0 0 1 0-1.5H21a.75.75 0 0 1 .75.75ZM17.834 18.894a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 1 0-1.061 1.06l1.59 1.591ZM12 18a.75.75 0 0 1 .75.75V21a.75.75 0 0 1-1.5 0v-2.25A.75.75 0 0 1 12 18ZM7.758 17.303a.75.75 0 0 0-1.061-1.06l-1.591 1.59a.75.75 0 0 0 1.06 1.061l1.591-1.59ZM6 12a.75.75 0 0 1-.75.75H3a.75.75 0 0 1 0-1.5h2.25A.75.75 0 0 1 6 12ZM6.697 7.757a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 0 0-1.061 1.06l1.59 1.591Z" />
+                        </svg>
+                        <svg id="theme-moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 hidden">
+                            <path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 0 1 .162.819A8.97 8.97 0 0 0 9 6a9 9 0 0 0 9 9 8.97 8.97 0 0 0 3.463-.69.75.75 0 0 1 .981.98 10.503 10.503 0 0 1-9.694 6.46c-5.799 0-10.5-4.7-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 0 1 .818.162Z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <script type="module">
+            import { initGradientBackground } from '/client/GradientBackground.js';
+            import { initTheme } from '/client/ThemeManager.js';
+
+            initTheme();
+            initGradientBackground();
+
+            // Create room
+            document.getElementById('create-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const name = document.getElementById('create-name').value.trim();
+                const password = document.getElementById('create-password').value;
+                const res = await fetch('/api/create-room', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name || null, password: password || null }),
+                });
+                const { code } = await res.json();
+                if (password) {
+                    sessionStorage.setItem('roomPassword', password);
+                }
+                window.location.href = '/' + code;
+            });
+
+            // Join room
+            const joinForm = document.getElementById('join-form');
+            const joinCode = document.getElementById('join-code');
+            const joinPasswordRow = document.getElementById('join-password-row');
+            const joinPassword = document.getElementById('join-password');
+            const joinError = document.getElementById('join-error');
+            const joinRoomName = document.getElementById('join-room-name');
+
+            joinForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const code = joinCode.value.trim();
+                if (code.length !== 5) return;
+
+                const password = joinPassword.value;
+                const res = await fetch('/api/validate-room', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code, password: password || null }),
+                });
+                const result = await res.json();
+
+                if (result.needsPassword) {
+                    joinPasswordRow.classList.remove('hidden');
+                    joinPassword.focus();
+                    if (result.name) {
+                        joinRoomName.textContent = `Room: ${result.name}`;
+                        joinRoomName.classList.remove('hidden');
+                    }
+                    if (result.wrongPassword) {
+                        joinError.textContent = 'Wrong password. Try again.';
+                        joinError.classList.remove('hidden');
+                    }
+                    return;
+                }
+
+                joinError.classList.add('hidden');
+                if (password) {
+                    sessionStorage.setItem('roomPassword', password);
+                }
+                window.location.href = '/' + code;
+            });
+
+            // Auto-uppercase room code
+            joinCode.addEventListener('input', () => {
+                joinCode.value = joinCode.value.replace(/[^A-Za-z0-9]/g, '');
+            });
+        </script>
+    </body>
+</html>

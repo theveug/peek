@@ -1,9 +1,6 @@
 // --- src/server/WebSocketServer.js ---
 import { v4 as uuidv4 } from 'uuid';
 import { createHmac } from 'crypto';
-import { SessionManager } from './SessionManager.js';
-
-const manager = new SessionManager();
 
 function generateIceServers(turnConfig) {
     const servers = [{ urls: 'stun:stun.l.google.com:19302' }];
@@ -26,7 +23,7 @@ function generateIceServers(turnConfig) {
     return servers;
 }
 
-export function setupWebSocket(wss, turnConfig) {
+export function setupWebSocket(wss, turnConfig, manager) {
     const PING_INTERVAL = 30_000;
 
     const pingTimer = setInterval(() => {
@@ -54,18 +51,22 @@ export function setupWebSocket(wss, turnConfig) {
                 return;
             }
 
-            const { type, sessionId, to, payload, text } = msg;
+            const { type, sessionId, to, payload, text, messageId } = msg;
 
             switch (type) {
                 case 'join': {
+                    if (!manager.validatePassword(sessionId, msg.password || null)) {
+                        ws.send(JSON.stringify({ type: 'join-error', reason: 'invalid-password' }));
+                        return;
+                    }
+
                     manager.addPeer(sessionId, peerId, ws);
                     const peers = manager.getPeersInSession(sessionId).filter(p => p !== peerId);
+                    const meta = manager.getSessionMeta(sessionId);
 
-                    // Notify new peer of their ID and existing peers
                     const iceServers = generateIceServers(turnConfig);
-                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers }));
+                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null }));
 
-                    // Notify others of new peer
                     peers.forEach(pid => {
                         const socket = manager.getPeerSocket(pid);
                         if (socket) {
@@ -93,7 +94,19 @@ export function setupWebSocket(wss, turnConfig) {
                     peers.forEach(pid => {
                         const socket = manager.getPeerSocket(pid);
                         if (socket) {
-                            socket.send(JSON.stringify({ type: 'chat', from: peerId, text, nickname }));
+                            socket.send(JSON.stringify({ type: 'chat', from: peerId, text, nickname, messageId }));
+                        }
+                    });
+                    break;
+                }
+
+                case 'reaction': {
+                    const sessionId = manager.getSessionId(peerId);
+                    const peers = manager.getPeersInSession(sessionId).filter(id => id !== peerId);
+                    peers.forEach(pid => {
+                        const socket = manager.getPeerSocket(pid);
+                        if (socket) {
+                            socket.send(JSON.stringify({ type: 'reaction', from: peerId, payload }));
                         }
                     });
                     break;
@@ -103,7 +116,8 @@ export function setupWebSocket(wss, turnConfig) {
                 case 'mic-status':
                 case 'deafen-status':
                 case 'nickname-update':
-                case 'status-update': {
+                case 'status-update':
+                case 'typing': {
                     const sessionId = manager.getSessionId(peerId);
                     const peers = manager.getPeersInSession(sessionId).filter(id => id !== peerId);
                     peers.forEach(pid => {

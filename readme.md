@@ -1,70 +1,132 @@
 # Peek
 
-**Peek** is a lightweight WebRTC-based screen sharing app built with vanilla JS, Node.js, and Tailwind CSS. It lets users share their screen in real-time over a unique session link, with optional stream quality controls.
+**Peek** is a peer-to-peer screen sharing and collaboration app built with vanilla JS, Node.js, and WebRTC. Create rooms, share screens, chat with markdown support, send files, and react to messages — all without a database.
 
-## 🚀 Features
+## Features
 
-- 🔗 One-click session creation (`/session/:uuid`)
-- 📺 Peer-to-peer screen sharing via WebRTC
-- 🎛️ Adjustable stream quality (FPS + resolution)
-- 📦 No database — fully in-memory sessions
-- 📡 WebSocket-based signaling
-- 🧪 "Still streaming..." mode when tab is unfocused
-- 💬 In-session ephemeral chat (no storage)
+### Core
+- Peer-to-peer screen sharing via WebRTC (mesh topology)
+- Real-time chat with markdown rendering and syntax highlighting
+- File sharing via RTCDataChannel (drag & drop, paste, or click to attach)
+- Adjustable stream quality (resolution + FPS)
+- Grid and focused view modes with zoom and pan
 
-## 📦 Tech Stack
+### Rooms
+- Lobby page for creating or joining rooms
+- Optional room names and passwords
+- 5-character room codes for easy sharing
+- Direct links still work — password prompt shown if needed
 
-- **Frontend:** Vanilla JS + Tailwind CSS
-- **Backend:** Node.js (Express + WS)
-- **Streaming:** WebRTC (mesh topology)
-- **CSS Processing:** Tailwind CLI
+### Chat
+- Typing indicators ("X is typing...")
+- Message reactions (6 preset emoji, toggle on/off)
+- Link previews with inline image rendering
+- Code blocks with syntax highlighting and copy button
+- Notification sounds for new messages when tab is unfocused
 
-## 🛠️ Getting Started
+### Voice
+- Microphone toggle with three modes: Toggle, Push-to-Talk, Push-to-Mute
+- Customizable keybinds for mic modes
+- Deafen toggle (mute all incoming audio)
+- Status broadcast to peers (mic, deafen state)
+
+### UI
+- Dark and light mode with system detection and manual toggle
+- Animated gradient background with frosted glass panels
+- Resizable chat panel and members sidebar (widths persist)
+- Collapsible sidebars with toggle buttons
+- Discord-style members list with avatars, status dots, and mic indicators
+- Status system: Online, Away, Do Not Disturb
+- Auto-away when tab is hidden (pauses incoming video to save bandwidth)
+- Notification toasts for join/leave/sharing events
+- Picture-in-picture self-view
+
+### Settings
+- Nickname (persistent, shown to peers)
+- Stream quality (720p/1080p/1440p/Source, 10-60 FPS)
+- Sound volume and mute toggle
+- Max chat messages
+- Status picker (Online/Away/DND)
+- Mic mode and keybind configuration
+
+## Tech Stack
+
+- **Frontend:** Vanilla JS, Tailwind CSS v4, marked.js, highlight.js
+- **Backend:** Node.js, Express 5, ws (WebSocket)
+- **Streaming:** WebRTC (video/audio tracks + data channels)
+- **CSS:** Tailwind CLI with custom properties theme system
+
+## Getting Started
 
 ### Prerequisites
 
-- Node.js (v18+ recommended)
-- A modern browser (Chrome, Brave, Firefox)
+- Node.js v18+
+- A modern browser (Chrome, Edge, Firefox, Brave)
 
-### Install dependencies
+### Install
 
 ```bash
 npm install
 ```
 
-### Start the app
+### Run (development)
 
 ```bash
 npm run dev
 ```
 
-This runs:
+Starts both the Node server (with nodemon) and Tailwind CSS in watch mode.
 
-- nodemon server.js (backend)
-- tailwindcss in watch mode (frontend CSS)
-
-### Visit the app
+### Run (production)
 
 ```bash
+npm run build:css
+npm start
+```
+
+### Visit
+
+```
 http://localhost:3000
 ```
 
-It will redirect to a unique session like `/session/4d8e1fae-...`
+Opens the lobby where you can create or join a room.
 
-## ⚙️ Scripts
+## Environment Variables
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `PORT` | No | Server port (default: 3000) |
+| `TURN_URL` | No | TURN server URL (e.g. `turn:turn.example.com:3478`) |
+| `TURN_SECRET` | No | TURN shared secret for HMAC credential generation |
+
+TURN is recommended for production to support peers behind symmetric NATs. Without it, only STUN is used (Google's public server).
+
+## Scripts
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Start server + Tailwind watch |
-| `npm run serve` | Just run the Node server |
-| `npm run tailwind` | Watch and compile Tailwind CSS |
+| `npm run dev` | Server + Tailwind watch (development) |
+| `npm run serve` | Node server only (with nodemon) |
+| `npm start` | Node server (production) |
+| `npm run build:css` | One-time Tailwind CSS build |
+| `npm run tailwind` | Tailwind CSS watch mode |
 
-## 🛡️ Security & Privacy
+## Keyboard Shortcuts
 
-Peek does not store or log any data — all sessions are ephemeral and exist only in memory. Screen shares are peer-to-peer via WebRTC.
+| Key | Action |
+| --- | --- |
+| `F2` | Toggle debug panel |
+| Custom keybind | Push-to-talk or push-to-mute (set in settings) |
 
-> Note: There is no authentication or access control. Anyone with a session URL can join. Intended for small teams or internal use.
+## Privacy & Security
 
-## 📘 License
+- No database — all sessions are ephemeral and in-memory
+- Screen shares and files transfer peer-to-peer via WebRTC
+- Chat messages are relayed through the server but never stored
+- Room passwords are held in memory only, cleared when the room empties
+- No analytics, no tracking, no third-party services (except STUN/TURN)
+
+## License
 
 MIT

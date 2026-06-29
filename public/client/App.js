@@ -17,6 +17,7 @@ const debug = new DebugPanel(peerManager);
 
 let socket;
 let reconnectTimer;
+let roomPassword = sessionStorage.getItem('roomPassword') || null;
 
 function connect() {
     socket = new WebSocket(`${protocol}://${location.host}`);
@@ -24,17 +25,35 @@ function connect() {
     debug.setSocket(socket);
 
     socket.onopen = () => {
-        socket.send(JSON.stringify({ type: 'join', sessionId }));
+        const joinMsg = { type: 'join', sessionId };
+        if (roomPassword) joinMsg.password = roomPassword;
+        socket.send(JSON.stringify(joinMsg));
     };
 
     socket.onmessage = (event) => {
         const msg = JSON.parse(event.data);
+        if (msg.type === 'join-error') {
+            clearTimeout(reconnectTimer);
+            socket.close();
+            showPasswordPrompt();
+            return;
+        }
         if (msg.type === 'chat') {
             if (msg.from !== peerManager.peerId) {
                 const displayName = msg.nickname || msg.from;
-                ui.addChatMessage(displayName, msg.text);
+                ui.addChatMessage(displayName, msg.text, msg.messageId);
+                ui.updateTypingIndicator(msg.from, false);
             }
+        } else if (msg.type === 'reaction') {
+            ui.addReaction(msg.payload.messageId, msg.payload.emoji, msg.payload.nickname, msg.from);
         } else {
+            if (msg.type === 'init' && msg.roomName) {
+                const header = document.getElementById('room-header');
+                if (header) {
+                    header.textContent = msg.roomName;
+                    header.classList.remove('hidden');
+                }
+            }
             peerManager.handleSignal(msg);
         }
     };
@@ -45,7 +64,81 @@ function connect() {
     };
 }
 
+function showPasswordPrompt() {
+    const modal = document.getElementById('password-modal');
+    const form = document.getElementById('password-form');
+    const input = document.getElementById('password-input');
+    const error = document.getElementById('password-error');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    input.focus();
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        const pw = input.value;
+        const res = await fetch('/api/validate-room', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: sessionId, password: pw }),
+        });
+        const result = await res.json();
+        if (result.valid) {
+            roomPassword = pw;
+            sessionStorage.setItem('roomPassword', pw);
+            modal.classList.add('hidden');
+            error.classList.add('hidden');
+            connect();
+        } else {
+            error.classList.remove('hidden');
+            input.value = '';
+            input.focus();
+        }
+    };
+}
+
 connect();
+
+// File sharing — drag & drop, paste, button
+const chatPanel = document.getElementById('chat');
+const dropOverlay = document.getElementById('drop-zone-overlay');
+const fileInput = document.getElementById('file-input');
+const fileAttachBtn = document.getElementById('file-attach-btn');
+let dragCounter = 0;
+
+if (chatPanel && dropOverlay) {
+    chatPanel.addEventListener('dragenter', (e) => { e.preventDefault(); dragCounter++; dropOverlay.classList.remove('hidden'); });
+    chatPanel.addEventListener('dragleave', (e) => { e.preventDefault(); dragCounter--; if (dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.add('hidden'); } });
+    chatPanel.addEventListener('dragover', (e) => e.preventDefault());
+    chatPanel.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        dropOverlay.classList.add('hidden');
+        if (e.dataTransfer.files.length) {
+            [...e.dataTransfer.files].forEach(f => peerManager.sendFileToAll(f));
+        }
+    });
+}
+
+if (fileAttachBtn && fileInput) {
+    fileAttachBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+        [...fileInput.files].forEach(f => peerManager.sendFileToAll(f));
+        fileInput.value = '';
+    });
+}
+
+document.addEventListener('paste', (e) => {
+    if (document.activeElement?.id === 'message' && e.clipboardData.files.length) {
+        e.preventDefault();
+        [...e.clipboardData.files].forEach(f => peerManager.sendFileToAll(f));
+    }
+});
+
+// Reaction callback
+ui._onReaction = (messageId, emoji) => {
+    const nickname = (localStorage.getItem('nickname') || 'Anonymous').trim();
+    socket.send(JSON.stringify({ type: 'reaction', payload: { messageId, emoji, nickname } }));
+    ui.addReaction(messageId, emoji, nickname, peerManager.peerId);
+};
 
 // Chat UI interactions
 const input = document.getElementById('message');
@@ -59,10 +152,26 @@ function generateFunnyNickname() {
 
     return `${adj}${animal}${Math.floor(Math.random() * 1000)}`;
 }
+// Typing indicator debounce
+let typingTimer = null;
+let isTyping = false;
+
+function sendTypingStatus(typing) {
+    if (typing === isTyping) return;
+    isTyping = typing;
+    peerManager.send('typing', null, { isTyping: typing });
+}
+
+input.addEventListener('input', () => {
+    sendTypingStatus(true);
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => sendTypingStatus(false), 2000);
+});
+
 // Handle enter + shift logic
 input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault(); // prevent newline
+        e.preventDefault();
         sendMessage();
     }
 });
@@ -72,10 +181,13 @@ function sendMessage() {
     const nickname = (localStorage.getItem('nickname') || 'Anonymous').trim();
 
     if (text) {
-        socket.send(JSON.stringify({ type: 'chat', text, nickname }));
-        ui.addChatMessage('Me', text);
+        const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+        socket.send(JSON.stringify({ type: 'chat', text, nickname, messageId }));
+        ui.addChatMessage('Me', text, messageId);
         input.value = '';
     }
+    clearTimeout(typingTimer);
+    sendTypingStatus(false);
 }
 
 function updateShareButton() {

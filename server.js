@@ -4,7 +4,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { setupWebSocket } from './src/server/WebSocketServer.js';
-import { v4 as uuidv4 } from 'uuid';
+import { SessionManager } from './src/server/SessionManager.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Debug } from './utils/Debug.js';
@@ -16,6 +16,8 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
+const manager = new SessionManager();
+
 const turnConfig = (process.env.TURN_URL && process.env.TURN_SECRET)
     ? { url: process.env.TURN_URL, secret: process.env.TURN_SECRET }
     : null;
@@ -26,9 +28,7 @@ if (turnConfig) {
     Debug.log('No TURN server configured — STUN only');
 }
 
-setupWebSocket(wss, turnConfig);
-
-const activeSessions = new Set();
+setupWebSocket(wss, turnConfig, manager);
 
 function generateUniqueShortCode(length = 5) {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -38,25 +38,54 @@ function generateUniqueShortCode(length = 5) {
         for (let i = 0; i < length; i++) {
             result += characters.charAt(Math.floor(Math.random() * characters.length));
         }
-    } while (activeSessions.has(result));
-    activeSessions.add(result);
+    } while (manager.hasSession(result));
     return result;
 }
 
+app.use(express.json());
 app.use('/assets', express.static(path.join(__dirname, 'public/assets')));
 app.use('/client', express.static(path.join(__dirname, 'public/client')));
 
-// Redirect root to new session
+// Lobby page
 app.get('/', (req, res) => {
-    const shortCode = generateUniqueShortCode();
-    Debug.log('Serving /');
-    res.redirect(`/${shortCode}`);
+    Debug.log('Serving lobby');
+    res.sendFile(path.join(__dirname, 'public/lobby.html'));
+});
+
+// API: Create room
+app.post('/api/create-room', (req, res) => {
+    const { name, password } = req.body || {};
+    const code = generateUniqueShortCode();
+    const cleanName = name ? name.replace(/[<>]/g, '').trim().substring(0, 50) : null;
+    manager.createSession(code, { name: cleanName || null, password: password || null });
+    Debug.log(`Room created: ${code}${cleanName ? ` (${cleanName})` : ''}${password ? ' [password]' : ''}`);
+    res.json({ code });
+});
+
+// API: Validate room (check if it exists / needs password)
+app.post('/api/validate-room', (req, res) => {
+    const { code, password } = req.body || {};
+    const meta = manager.getSessionMeta(code);
+    if (!meta) {
+        res.json({ valid: true, needsPassword: false, name: null });
+        return;
+    }
+    if (meta.hasPassword && !password) {
+        res.json({ valid: false, needsPassword: true, name: meta.name });
+        return;
+    }
+    if (meta.hasPassword && !manager.validatePassword(code, password)) {
+        res.json({ valid: false, needsPassword: true, name: meta.name, wrongPassword: true });
+        return;
+    }
+    res.json({ valid: true, needsPassword: false, name: meta.name });
 });
 
 app.get('/settings', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/settings.html'));
 });
-// Serve static index.html for session URLs
+
+// Serve session page for valid room codes
 app.get('/:code', (req, res) => {
     const code = req.params.code;
     if (code.length === 5 && /^[A-Za-z0-9]{5}$/.test(code)) {
@@ -66,7 +95,6 @@ app.get('/:code', (req, res) => {
         res.status(404).send('Not Found');
     }
 });
-
 
 app.use(express.static(path.join(__dirname, 'public')));
 

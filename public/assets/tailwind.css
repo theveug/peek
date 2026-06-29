@@ -121,6 +121,82 @@ body.light {
   height: 100%;
 }
 
+/* ===== Toasts ===== */
+.toast-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  background: var(--surface-elevated);
+  color: var(--color-foreground);
+  border: 1px solid var(--color-separator);
+  border-left: 3px solid var(--color-muted);
+  font-size: 0.8125rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  animation: toast-in 0.3s ease-out;
+  pointer-events: auto;
+}
+
+.toast-join {
+  border-left-color: #22c55e;
+}
+.toast-leave {
+  border-left-color: #ef4444;
+}
+.toast-stream {
+  border-left-color: #6366f1;
+}
+.toast-info {
+  border-left-color: #3b82f6;
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.toast-text {
+  white-space: nowrap;
+}
+
+.toast-out {
+  animation: toast-out 0.3s ease-in forwards;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+}
+
 /* ===== Base ===== */
 html,
 body {
@@ -134,6 +210,43 @@ body:hover #controls {
 
 #controls {
   display: none;
+}
+
+/* ===== Typing indicator ===== */
+.typing-indicator {
+  padding: 0.25rem 1rem;
+  font-size: 0.6875rem;
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.typing-dots {
+  display: inline;
+}
+
+.typing-dots span {
+  animation: typing-bounce 1.4s infinite;
+  font-style: normal;
+  font-weight: bold;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+  }
+  30% {
+    opacity: 1;
+  }
 }
 
 /* ===== Chat messages ===== */
@@ -157,6 +270,210 @@ body:hover #controls {
   --tw-prose-headings: var(--color-foreground);
   --tw-prose-bold: var(--color-foreground);
   --tw-prose-links: var(--chat-sender);
+}
+
+/* ===== File sharing ===== */
+.drop-zone-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(99, 102, 241, 0.1);
+  border: 2px dashed rgba(99, 102, 241, 0.5);
+  border-radius: 0.5rem;
+  color: var(--chat-sender);
+  font-size: 0.875rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.file-progress {
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.file-progress-label {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.file-progress-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--surface-input);
+  overflow: hidden;
+}
+
+.file-progress-fill {
+  height: 100%;
+  background: #6366f1;
+  border-radius: 2px;
+  transition: width 0.15s ease;
+}
+
+.file-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--surface-input);
+  border: 1px solid var(--color-separator);
+  margin-top: 0.25rem;
+}
+
+.file-card-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.file-card-name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-card-size {
+  font-size: 0.6875rem;
+  color: var(--color-muted);
+}
+
+.file-card-download {
+  font-size: 1.25rem;
+  color: var(--chat-sender);
+  text-decoration: none;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  transition: background 0.15s;
+  line-height: 1;
+}
+
+.file-card-download:hover {
+  background: var(--card-hover);
+}
+
+/* ===== Reactions ===== */
+.reaction-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+  min-height: 0;
+}
+
+.reaction-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  background: var(--surface-input);
+  border: 1px solid var(--color-separator);
+  cursor: pointer;
+  transition: background 0.15s;
+  line-height: 1.4;
+}
+
+.reaction-badge:hover {
+  background: var(--card-hover);
+}
+
+.emoji-trigger {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  opacity: 0;
+  font-size: 0.75rem;
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  background: var(--surface-input);
+  cursor: pointer;
+  transition: opacity 0.15s;
+  line-height: 1;
+}
+
+.chat-message {
+  position: relative;
+}
+
+.chat-message:hover .emoji-trigger {
+  opacity: 1;
+}
+
+.emoji-picker {
+  position: absolute;
+  right: 0.25rem;
+  top: -2rem;
+  display: flex;
+  gap: 0.125rem;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  background: var(--surface-elevated);
+  border: 1px solid var(--color-separator);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+}
+
+.emoji-picker button {
+  font-size: 1rem;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: background 0.1s;
+  line-height: 1;
+}
+
+.emoji-picker button:hover {
+  background: var(--card-hover);
+}
+
+/* ===== Link previews ===== */
+a.link-preview {
+  display: inline-flex;
+  flex-direction: column;
+  padding: 0.25rem 0.5rem;
+  border-left: 2px solid var(--chat-sender);
+  border-radius: 0 0.25rem 0.25rem 0;
+  background: var(--surface-input);
+  text-decoration: none;
+  transition: background 0.15s;
+  margin-top: 0.25rem;
+}
+
+a.link-preview:hover {
+  background: var(--card-hover);
+}
+
+.link-host {
+  display: block;
+  font-size: 0.625rem;
+  color: var(--color-muted);
+  margin-top: 0.125rem;
+}
+
+.chat-image-preview {
+  margin-top: 0.375rem;
+}
+
+.chat-image-preview img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.chat-image-preview img:hover {
+  opacity: 0.9;
 }
 
 /* ===== Chat avatar ===== */
