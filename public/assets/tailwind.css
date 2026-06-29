@@ -852,6 +852,10 @@ body,
     transform: translateX(-100%);
   }
 
+  .chat-panel.hidden.mobile-open {
+    transform: translateX(0);
+  }
+
   /* Members panel as right drawer overlay */
   .members-panel {
     position: fixed !important;

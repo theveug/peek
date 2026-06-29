@@ -305,7 +305,7 @@ chatButton.addEventListener('click', () => {
 const chatBox = document.getElementById('chat');
 const chatHandle = document.getElementById('chat-resize-handle');
 if (isMobile()) {
-    chatBox.classList.add('hidden');
+    // On mobile, visibility is controlled purely by the .mobile-open transform — leave 'hidden' untouched.
 } else if (localStorage.getItem('chatHidden') === '1') {
     chatBox.classList.add('hidden');
     if (chatHandle) chatHandle.style.display = 'none';
