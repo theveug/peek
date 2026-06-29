@@ -34,23 +34,11 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('soundVolume', volumeSlider.value);
 
         alert('Settings saved!');
-
-        const sessionId = localStorage.getItem('lastSessionId');
-        if (sessionId) {
-            window.location.href = `/${sessionId}`;
-        } else {
-            window.location.href = '/';
-        }
+        window.close();
     });
 
-    // Cancel button returns without saving
     cancelButton.addEventListener('click', (e) => {
         e.preventDefault();
-        const sessionId = localStorage.getItem('lastSessionId');
-        if (sessionId) {
-            window.location.href = `/${sessionId}`;
-        } else {
-            window.location.href = '/';
-        }
+        window.close();
     });
 });

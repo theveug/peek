@@ -148,7 +148,8 @@ export class PeerManager {
         };
 
         pc.ontrack = (e) => {
-            this.ui.addStream(remotePeerId, e.streams[0]);
+            const stream = e.streams[0] || new MediaStream([e.track]);
+            this.ui.addStream(remotePeerId, stream);
         };
 
         pc.onconnectionstatechange = () => {
@@ -157,20 +158,18 @@ export class PeerManager {
             }
         };
 
-        // Always include a video transceiver so the offer/answer has a media
-        // section even when the local peer isn't sharing yet.
-        pc.addTransceiver('video', { direction: this.stream ? 'sendrecv' : 'recvonly' });
-
-        if (this.stream) {
-            this.stream.getTracks().forEach(track => pc.addTrack(track, this.stream));
-        }
-
         this.peers[remotePeerId] = pc;
         return pc;
     }
 
     initiateConnection(peerId) {
         const pc = this.createPeerConnection(peerId);
+
+        if (this.stream) {
+            this.stream.getTracks().forEach(track => pc.addTrack(track, this.stream));
+        } else {
+            pc.addTransceiver('video', { direction: 'recvonly' });
+        }
 
         pc.createOffer()
             .then(offer => pc.setLocalDescription(offer))
@@ -189,8 +188,7 @@ export class PeerManager {
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
         if (this.stream) {
-            const senders = pc.getSenders();
-            const hasSender = senders.some(s => s.track);
+            const hasSender = pc.getSenders().some(s => s.track);
             if (!hasSender) {
                 this.stream.getTracks().forEach(track => pc.addTrack(track, this.stream));
             }
