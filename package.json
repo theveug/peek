@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "concurrently \"npm:serve\" \"npm:tailwind\"",
     "serve": "nodemon server.js",
+    "start": "node server.js",
+    "build:css": "tailwindcss -i ./public/assets/tailwind.css -o ./public/assets/style.css --minify",
     "tailwind": "tailwindcss -i ./public/assets/tailwind.css -o ./public/assets/style.css --watch"
   },
   "author": "",
