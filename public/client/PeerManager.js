@@ -16,6 +16,9 @@ export class PeerManager {
 
         switch (type) {
             case 'init':
+                // Clean up stale connections from a previous session
+                Object.keys(this.peers).forEach(id => this.removePeer(id));
+
                 this.peerId = peerId;
                 if (iceServers) this.iceServers = iceServers;
                 peers.forEach(id => {
@@ -154,7 +157,7 @@ export class PeerManager {
         };
 
         pc.onconnectionstatechange = () => {
-            if (pc.connectionState === 'disconnected') {
+            if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
                 this.removePeer(peerId);
             }
         };
@@ -167,22 +170,26 @@ export class PeerManager {
     }
 
     receiveOffer(from, offer) {
-        const pc = new RTCPeerConnection({ iceServers: this.iceServers });
-        this.peers[from] = pc;
+        let pc = this.peers[from];
 
-        if (this.stream) {
-            this.stream.getTracks().forEach(track => pc.addTrack(track, this.stream));
-        }
+        if (!pc) {
+            pc = new RTCPeerConnection({ iceServers: this.iceServers });
+            this.peers[from] = pc;
 
-        pc.onicecandidate = (e) => {
-            if (e.candidate) {
-                this.send('ice-candidate', from, e.candidate);
+            if (this.stream) {
+                this.stream.getTracks().forEach(track => pc.addTrack(track, this.stream));
             }
-        };
 
-        pc.ontrack = (e) => {
-            this.ui.addStream(from, e.streams[0]);
-        };
+            pc.onicecandidate = (e) => {
+                if (e.candidate) {
+                    this.send('ice-candidate', from, e.candidate);
+                }
+            };
+
+            pc.ontrack = (e) => {
+                this.ui.addStream(from, e.streams[0]);
+            };
+        }
 
         pc.setRemoteDescription(new RTCSessionDescription(offer))
             .then(() => pc.createAnswer())
@@ -222,6 +229,8 @@ export class PeerManager {
 
 
     send(type, to, payload) {
-        this.socket.send(JSON.stringify({ type, to, payload }));
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify({ type, to, payload }));
+        }
     }
 }

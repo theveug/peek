@@ -4,30 +4,40 @@ import { UIController } from './UIController.js';
 
 const sessionId = location.pathname.split('/').pop();
 const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-const socket = new WebSocket(`${protocol}://${location.host}`);
 
 const ui = new UIController();
-const peerManager = new PeerManager(socket, ui);
+const peerManager = new PeerManager(null, ui);
 
-const savedRes = localStorage.getItem('screenShareRes');
-const savedFps = localStorage.getItem('screenShareFps');
+let socket;
+let reconnectTimer;
 
-socket.onopen = () => {
-    socket.send(JSON.stringify({ type: 'join', sessionId }));
-};
+function connect() {
+    socket = new WebSocket(`${protocol}://${location.host}`);
+    peerManager.socket = socket;
 
-socket.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-    if (msg.type === 'chat') {
-        // Only show if it's NOT from me
-        if (msg.from !== peerManager.peerId) {
-            const displayName = msg.nickname || msg.from;
-            ui.addChatMessage(displayName, msg.text);
+    socket.onopen = () => {
+        socket.send(JSON.stringify({ type: 'join', sessionId }));
+    };
+
+    socket.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'chat') {
+            if (msg.from !== peerManager.peerId) {
+                const displayName = msg.nickname || msg.from;
+                ui.addChatMessage(displayName, msg.text);
+            }
+        } else {
+            peerManager.handleSignal(msg);
         }
-    } else {
-        peerManager.handleSignal(msg);
-    }
-};
+    };
+
+    socket.onclose = () => {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connect, 2000);
+    };
+}
+
+connect();
 
 // Chat UI interactions
 const input = document.getElementById('message');
@@ -121,12 +131,7 @@ if (localStorage.getItem('chatHidden') === '1') {
 const settingsButton = document.getElementById('settings-button');
 if (settingsButton) {
     settingsButton.addEventListener('click', () => {
-        const sessionId = location.pathname.split('/').pop();
-
-        if (sessionId) {
-            localStorage.setItem('lastSessionId', sessionId);
-        }
-        window.location.href = '/settings';
+        window.open('/settings', '_blank');
     });
 }
 
