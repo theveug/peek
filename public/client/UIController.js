@@ -794,8 +794,10 @@ export class UIController {
         const newMessageIndicator = document.getElementById('new-message-indicator');
         const tabFocused = document.hasFocus();
         const isFromOther = sender !== 'Me';
+        const chatPanel = document.getElementById('chat');
+        const chatHiddenOnMobile = chatPanel && window.innerWidth < 768 && !chatPanel.classList.contains('mobile-open');
 
-        if (!tabFocused && isFromOther) {
+        if (isFromOther && (!tabFocused || chatHiddenOnMobile)) {
             newMessageIndicator.classList.remove('hidden');
             playSound('newMessage');
         } else {

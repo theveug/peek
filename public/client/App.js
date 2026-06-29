@@ -260,11 +260,42 @@ document.addEventListener('visibilitychange', () => {
 });
 
 
+// --- Mobile detection helper ---
+function isMobile() {
+    return window.innerWidth < 768;
+}
+
+const mobileBackdrop = document.getElementById('mobile-backdrop');
+
+function closeMobilePanels() {
+    const chatBox = document.getElementById('chat');
+    const membersSidebar = document.getElementById('members-sidebar');
+    if (chatBox) chatBox.classList.remove('mobile-open');
+    if (membersSidebar) membersSidebar.classList.remove('mobile-open');
+    if (mobileBackdrop) mobileBackdrop.classList.remove('active');
+}
+
+if (mobileBackdrop) {
+    mobileBackdrop.addEventListener('click', closeMobilePanels);
+}
+
 const chatButton = document.getElementById('togglechat');
 chatButton.addEventListener('click', () => {
     const chatBox = document.getElementById('chat');
     const handle = document.getElementById('chat-resize-handle');
-    if (chatBox) {
+    if (!chatBox) return;
+
+    if (isMobile()) {
+        const membersSidebar = document.getElementById('members-sidebar');
+        if (membersSidebar) membersSidebar.classList.remove('mobile-open');
+        const opening = !chatBox.classList.contains('mobile-open');
+        chatBox.classList.toggle('mobile-open');
+        if (mobileBackdrop) mobileBackdrop.classList.toggle('active', opening);
+        if (opening) {
+            const indicator = document.getElementById('new-message-indicator');
+            if (indicator) indicator.classList.add('hidden');
+        }
+    } else {
         const isHidden = chatBox.classList.toggle('hidden');
         if (handle) handle.style.display = isHidden ? 'none' : '';
         localStorage.setItem('chatHidden', isHidden ? '1' : '0');
@@ -273,22 +304,25 @@ chatButton.addEventListener('click', () => {
 
 const chatBox = document.getElementById('chat');
 const chatHandle = document.getElementById('chat-resize-handle');
-if (localStorage.getItem('chatHidden') === '1') {
+if (isMobile()) {
+    chatBox.classList.add('hidden');
+} else if (localStorage.getItem('chatHidden') === '1') {
     chatBox.classList.add('hidden');
     if (chatHandle) chatHandle.style.display = 'none';
 } else {
     chatBox.classList.remove('hidden');
 }
 
-// Resizable chat panel (width persists to localStorage)
+// Resizable chat panel (width persists to localStorage) — desktop only
 (function initChatResize() {
     const handle = document.getElementById('chat-resize-handle');
     const chat = document.getElementById('chat');
     if (!handle || !chat) return;
     const savedW = localStorage.getItem('chatWidth');
-    if (savedW) chat.style.width = savedW + 'px';
+    if (savedW && !isMobile()) chat.style.width = savedW + 'px';
     let startX, startW;
     handle.addEventListener('mousedown', (e) => {
+        if (isMobile()) return;
         e.preventDefault();
         startX = e.clientX;
         startW = chat.offsetWidth;
@@ -317,26 +351,35 @@ const membersToggle = document.getElementById('toggle-members');
 const membersSidebar = document.getElementById('members-sidebar');
 const membersHandle = document.getElementById('members-resize-handle');
 if (membersToggle && membersSidebar) {
-    if (localStorage.getItem('membersHidden') === '1') {
+    if (!isMobile() && localStorage.getItem('membersHidden') === '1') {
         membersSidebar.classList.add('collapsed');
         if (membersHandle) membersHandle.style.display = 'none';
     }
     membersToggle.addEventListener('click', () => {
-        const collapsed = membersSidebar.classList.toggle('collapsed');
-        if (membersHandle) membersHandle.style.display = collapsed ? 'none' : '';
-        localStorage.setItem('membersHidden', collapsed ? '1' : '0');
+        if (isMobile()) {
+            const chatBox = document.getElementById('chat');
+            if (chatBox) chatBox.classList.remove('mobile-open');
+            const opening = !membersSidebar.classList.contains('mobile-open');
+            membersSidebar.classList.toggle('mobile-open');
+            if (mobileBackdrop) mobileBackdrop.classList.toggle('active', opening);
+        } else {
+            const collapsed = membersSidebar.classList.toggle('collapsed');
+            if (membersHandle) membersHandle.style.display = collapsed ? 'none' : '';
+            localStorage.setItem('membersHidden', collapsed ? '1' : '0');
+        }
     });
 }
 
-// Resizable members panel (width persists to localStorage)
+// Resizable members panel (width persists to localStorage) — desktop only
 (function initMembersResize() {
     const handle = document.getElementById('members-resize-handle');
     const panel = document.getElementById('members-sidebar');
     if (!handle || !panel) return;
     const savedW = localStorage.getItem('membersWidth');
-    if (savedW) panel.style.width = savedW + 'px';
+    if (savedW && !isMobile()) panel.style.width = savedW + 'px';
     let startX, startW;
     handle.addEventListener('mousedown', (e) => {
+        if (isMobile()) return;
         e.preventDefault();
         startX = e.clientX;
         startW = panel.offsetWidth;
@@ -359,6 +402,13 @@ if (membersToggle && membersSidebar) {
         window.addEventListener('mouseup', onUp);
     });
 })();
+
+// Close mobile panels on resize to desktop
+window.addEventListener('resize', () => {
+    if (!isMobile()) {
+        closeMobilePanels();
+    }
+});
 
 // --- Settings modal ---
 const settingsModal = document.getElementById('settings-modal');
