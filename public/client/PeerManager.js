@@ -124,6 +124,25 @@ export class PeerManager {
         }
     }
 
+    async applyQualitySettings() {
+        if (!this.stream) return;
+        const track = this.stream.getVideoTracks()[0];
+        if (!track) return;
+
+        const resVal = localStorage.getItem('screenShareRes') || '1280x720';
+        const fpsVal = parseInt(localStorage.getItem('screenShareFps') || '30', 10);
+
+        const constraints = {};
+        if (resVal !== 'source') {
+            const [width, height] = resVal.split('x').map(Number);
+            constraints.width = { max: width };
+            constraints.height = { max: height };
+        }
+        constraints.frameRate = fpsVal;
+
+        await track.applyConstraints(constraints);
+    }
+
     stopSharing() {
         if (this.stream) {
             this.stream.getTracks().forEach(track => track.stop());
