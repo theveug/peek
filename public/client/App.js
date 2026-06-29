@@ -77,6 +77,10 @@ document.getElementById('start-share').onclick = () => {
     peerManager.startSharing();
 };
 
+document.getElementById('grid-button').addEventListener('click', () => {
+    ui.toggleViewMode();
+});
+
 const handleFocusChange = () => {
     const blurred = document.hidden || !document.hasFocus();
     ui.handleVisibilityChange(blurred);

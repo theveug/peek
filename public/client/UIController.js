@@ -5,12 +5,13 @@ export class UIController {
         this.container = document.getElementById('videos');
         this.chatLog = document.getElementById('chat-log');
         this.videoContainer = document.getElementById('videos');
-        this.thumbnails = document.getElementById('thumbnails');
         this.focusedView = document.getElementById('focused-view');
         this.focusedVideo = document.getElementById('focused-video');
+        this.gridView = document.getElementById('grid-view');
         this.maxMessages = 100;
         this.streams = {};
         this.focusedPeerId = null;
+        this.viewMode = 'focus'; // 'focus' or 'grid'
         this.zoom = 1;
         this.panX = 0;
         this.panY = 0;
@@ -79,18 +80,22 @@ export class UIController {
         const scaledW = vid.videoWidth ? Math.min(vid.clientWidth, viewRect.width) * this.zoom : viewRect.width * this.zoom;
         const scaledH = vid.videoHeight ? Math.min(vid.clientHeight, viewRect.height) * this.zoom : viewRect.height * this.zoom;
 
-        const maxX = 0;
-        const minX = viewRect.width - scaledW;
-        const maxY = 0;
-        const minY = viewRect.height - scaledH;
-
-        this.panX = Math.min(maxX, Math.max(minX, this.panX));
-        this.panY = Math.min(maxY, Math.max(minY, this.panY));
+        this.panX = Math.min(0, Math.max(viewRect.width - scaledW, this.panX));
+        this.panY = Math.min(0, Math.max(viewRect.height - scaledH, this.panY));
     }
 
     applyTransform() {
         this.focusedVideo.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})`;
         this.focusedView.style.cursor = this.zoom > 1 ? 'grab' : '';
+    }
+
+    setViewMode(mode) {
+        this.viewMode = mode;
+        this.updateLayout();
+    }
+
+    toggleViewMode() {
+        this.setViewMode(this.viewMode === 'focus' ? 'grid' : 'focus');
     }
 
     focusStream(peerId) {
@@ -99,16 +104,39 @@ export class UIController {
 
         this.focusedPeerId = peerId;
         this.focusedVideo.srcObject = stream;
-        this.focusedView.style.display = 'flex';
         this.zoom = 1;
         this.panX = 0;
         this.panY = 0;
         this.applyTransform();
+        this.setViewMode('focus');
+    }
 
-        this.thumbnails.querySelectorAll('.thumb').forEach(t => {
-            t.classList.toggle('ring-2', t.dataset.peerId === peerId);
-            t.classList.toggle('ring-blue-500', t.dataset.peerId === peerId);
-            t.classList.toggle('opacity-50', t.dataset.peerId !== peerId);
+    buildGrid() {
+        this.gridView.innerHTML = '';
+        const remoteIds = Object.keys(this.streams).filter(id => id !== 'me');
+        const count = remoteIds.length;
+        if (count === 0) return;
+
+        const cols = count <= 1 ? 1 : 2;
+        const rows = Math.ceil(count / cols);
+        this.gridView.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        this.gridView.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
+        remoteIds.forEach(peerId => {
+            const cell = document.createElement('div');
+            cell.className = 'relative overflow-hidden cursor-pointer bg-black flex items-center justify-center';
+            cell.dataset.peerId = peerId;
+
+            const video = document.createElement('video');
+            video.muted = true;
+            video.autoplay = true;
+            video.playsInline = true;
+            video.srcObject = this.streams[peerId];
+            video.className = 'w-full h-full object-contain';
+
+            cell.appendChild(video);
+            cell.addEventListener('click', () => this.focusStream(peerId));
+            this.gridView.appendChild(cell);
         });
     }
 
@@ -142,41 +170,23 @@ export class UIController {
             return;
         }
 
-        const existing = this.thumbnails.querySelector(`[data-peer-id="${peerId}"]`);
-        if (existing) {
-            existing.querySelector('video').srcObject = stream;
-        } else {
-            const thumb = document.createElement('div');
-            thumb.className = 'thumb relative cursor-pointer rounded overflow-hidden flex-shrink-0';
-            thumb.dataset.peerId = peerId;
-            thumb.style.cssText = 'width:160px; height:90px;';
-            const video = document.createElement('video');
-            video.muted = true;
-            video.autoplay = true;
-            video.playsInline = true;
-            video.srcObject = stream;
-            video.className = 'w-full h-full object-cover';
-            thumb.appendChild(video);
-            thumb.addEventListener('click', () => this.focusStream(peerId));
-            this.thumbnails.appendChild(thumb);
-        }
-
         playSound('streamUp');
-        this.updateLayout();
 
         if (!this.focusedPeerId || !this.streams[this.focusedPeerId]) {
-            this.focusStream(peerId);
+            this.focusedPeerId = peerId;
+            this.focusedVideo.srcObject = stream;
         }
+
+        this.updateLayout();
     }
 
     addChatMessage(sender, text) {
         const chatLog = document.getElementById('chat-log');
         const msgContainer = document.createElement('div');
 
-        // Sanitize + parse markdown
         const raw = marked.parse(text);
-        const timestanmp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        msgContainer.innerHTML = `<div class="p-2 hover:bg-neutral-950 text-sm"><div class="flex justify-between"><span class="text-blue-600">${sender}:</span><span class="text-neutral-700 text-xs">${timestanmp}</span></div><div class="chat-markdown prose prose-invert">${raw}</div></div>`;
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        msgContainer.innerHTML = `<div class="p-2 hover:bg-neutral-950 text-sm"><div class="flex justify-between"><span class="text-blue-600">${sender}:</span><span class="text-neutral-700 text-xs">${timestamp}</span></div><div class="chat-markdown prose prose-invert">${raw}</div></div>`;
         chatLog.appendChild(msgContainer);
 
         while (chatLog.children.length > this.maxMessages) {
@@ -186,19 +196,18 @@ export class UIController {
         msgContainer.querySelectorAll('pre code').forEach((block) => {
             hljs.highlightElement(block);
 
-            // Add copy button
             const pre = block.parentElement;
             pre.style.position = 'relative';
 
             const copyBtn = document.createElement('button');
-            copyBtn.textContent = '📋';
+            copyBtn.textContent = '\u{1F4CB}';
             copyBtn.title = 'Copy code';
             copyBtn.className = 'copy-btn';
 
             copyBtn.addEventListener('click', () => {
                 navigator.clipboard.writeText(block.textContent).then(() => {
                     copyBtn.textContent = '✅';
-                    setTimeout(() => (copyBtn.textContent = '📋'), 1500);
+                    setTimeout(() => (copyBtn.textContent = '\u{1F4CB}'), 1500);
                 });
             });
 
@@ -206,25 +215,20 @@ export class UIController {
         });
         const newMessageIndicator = document.getElementById('new-message-indicator');
         const chatInput = document.getElementById('chat-input');
-        const threshold = chatInput.scrollHeight + 50; // pixels from the bottom to trigger scroll
+        const threshold = chatInput.scrollHeight + 50;
         const isAtBottom = (chatLog.scrollTop + chatLog.clientHeight) >= (chatLog.scrollHeight - threshold);
         if (isAtBottom) {
             newMessageIndicator.classList.add('hidden');
             requestAnimationFrame(() => {
-                chatLog.scrollTo({
-                    top: chatLog.scrollHeight,
-                    behavior: 'smooth'
-                });
+                chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' });
             });
         } else {
-            console.log('not at bottom', sender, chatLog.scrollTop, chatLog.clientHeight, chatLog.scrollHeight);
             if (sender != 'Me') {
                 newMessageIndicator.classList.remove('hidden');
                 playSound('newMessage');
             }
         }
     }
-
 
     handleVisibilityChange(blurred) {
         const myVideo = document.getElementById('self-view');
@@ -234,7 +238,7 @@ export class UIController {
 
         if (!isStreaming) {
             if (placeholder) placeholder.remove();
-            return;  // Exit early if not streaming
+            return;
         }
 
         if (blurred) {
@@ -243,19 +247,10 @@ export class UIController {
             if (!placeholder) {
                 placeholder = document.createElement('div');
                 placeholder.id = 'stream-placeholder';
-                placeholder.textContent = '🟢 Still Streaming...';
-                placeholder.style.position = 'fixed';
-                placeholder.style.bottom = '10px';
-                placeholder.style.right = '10px';
-                placeholder.style.padding = '10px 15px';
-                placeholder.style.background = '#000';
-                placeholder.style.color = '#fff';
-                placeholder.style.borderRadius = '4px';
-                placeholder.style.fontSize = '14px';
-                placeholder.style.zIndex = '1000';
+                placeholder.textContent = '\u{1F7E2} Still Streaming...';
+                placeholder.style.cssText = 'position:fixed; bottom:10px; right:10px; padding:10px 15px; background:#000; color:#fff; border-radius:4px; font-size:14px; z-index:1000;';
                 this.videoContainer.appendChild(placeholder);
             }
-
         } else {
             if (myVideo) myVideo.style.display = 'block';
             if (placeholder) placeholder.remove();
@@ -265,15 +260,35 @@ export class UIController {
     updateLayout() {
         const remoteStreams = Object.keys(this.streams).filter(id => id !== 'me');
         const spinner = document.getElementById('spinner');
+        const gridBtn = document.getElementById('grid-toggle');
 
         if (remoteStreams.length === 0) {
             spinner.classList.remove('hidden');
             this.focusedView.style.display = 'none';
-            this.thumbnails.style.display = 'none';
+            this.gridView.style.display = 'none';
+            if (gridBtn) gridBtn.style.display = 'none';
+            return;
+        }
+
+        spinner.classList.add('hidden');
+
+        if (gridBtn) {
+            gridBtn.style.display = remoteStreams.length > 1 ? 'flex' : 'none';
+        }
+
+        if (remoteStreams.length === 1) {
+            this.viewMode = 'focus';
+            this.focusedPeerId = remoteStreams[0];
+            this.focusedVideo.srcObject = this.streams[remoteStreams[0]];
+        }
+
+        if (this.viewMode === 'grid' && remoteStreams.length > 1) {
+            this.focusedView.style.display = 'none';
+            this.gridView.style.display = 'grid';
+            this.buildGrid();
         } else {
-            spinner.classList.add('hidden');
             this.focusedView.style.display = 'flex';
-            this.thumbnails.style.display = remoteStreams.length > 1 ? 'flex' : 'none';
+            this.gridView.style.display = 'none';
         }
     }
 
@@ -287,18 +302,15 @@ export class UIController {
                 selfView.remove();
             }
         } else {
-            const thumb = this.thumbnails.querySelector(`[data-peer-id="${peerId}"]`);
-            if (thumb) {
-                playSound('streamDown');
-                thumb.remove();
-            }
+            playSound('streamDown');
 
             if (this.focusedPeerId === peerId) {
                 this.focusedPeerId = null;
                 this.focusedVideo.srcObject = null;
                 const remaining = Object.keys(this.streams).filter(id => id !== 'me');
                 if (remaining.length > 0) {
-                    this.focusStream(remaining[0]);
+                    this.focusedPeerId = remaining[0];
+                    this.focusedVideo.srcObject = this.streams[remaining[0]];
                 }
             }
         }
@@ -308,6 +320,4 @@ export class UIController {
 
         this.updateLayout();
     }
-
-
 }

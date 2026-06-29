@@ -30,7 +30,7 @@
                     <div id="focused-view" class="flex-grow w-full flex items-center justify-center relative overflow-hidden" style="display:none;">
                         <video id="focused-video" autoplay playsinline muted class="max-h-full max-w-full" style="transform-origin: 0 0;"></video>
                     </div>
-                    <div id="thumbnails" class="flex gap-2 p-2 overflow-x-auto w-full justify-center flex-shrink-0" style="display:none;"></div>
+                    <div id="grid-view" class="flex-grow w-full gap-1 p-1 overflow-hidden" style="display:none;"></div>
                     <svg
                         id="spinner"
                         width="200"
@@ -109,6 +109,16 @@
                                         stroke-linecap="round"
                                         stroke-linejoin="round"
                                         d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="flex items-center" id="grid-toggle" style="display:none;">
+                            <button
+                                id="grid-button"
+                                title="Toggle Grid View"
+                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white hover:text-black">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                                    <path fill-rule="evenodd" d="M3 6a3 3 0 0 1 3-3h2.25a3 3 0 0 1 3 3v2.25a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6Zm9.75 0a3 3 0 0 1 3-3H18a3 3 0 0 1 3 3v2.25a3 3 0 0 1-3 3h-2.25a3 3 0 0 1-3-3V6ZM3 15.75a3 3 0 0 1 3-3h2.25a3 3 0 0 1 3 3V18a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-2.25Zm9.75 0a3 3 0 0 1 3-3H18a3 3 0 0 1 3 3V18a3 3 0 0 1-3 3h-2.25a3 3 0 0 1-3-3v-2.25Z" clip-rule="evenodd" />
                                 </svg>
                             </button>
                         </div>
