@@ -113,6 +113,8 @@ export function setupWebSocket(wss, turnConfig, manager) {
                 }
 
                 case 'stop-sharing':
+                case 'webcam-start':
+                case 'webcam-stop':
                 case 'mic-status':
                 case 'deafen-status':
                 case 'nickname-update':

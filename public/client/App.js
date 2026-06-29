@@ -216,6 +216,17 @@ function updateShareButton() {
     document.getElementById('share-toggle').title = peerManager.isSharing ? 'Stop sharing' : 'Start sharing';
 }
 
+function updateCamUI(enabled) {
+    document.getElementById('cam-off-icon').classList.toggle('hidden', enabled);
+    document.getElementById('cam-on-icon').classList.toggle('hidden', !enabled);
+    document.getElementById('cam-toggle').title = enabled ? 'Turn off Camera' : 'Turn on Camera';
+}
+
+document.getElementById('cam-toggle').addEventListener('click', async () => {
+    const enabled = await peerManager.toggleCam();
+    updateCamUI(enabled);
+});
+
 document.getElementById('share-toggle').onclick = async () => {
     if (peerManager.isSharing) {
         peerManager.stopSharing();

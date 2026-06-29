@@ -15,6 +15,9 @@ export class PeerManager {
         this._manualStatus = null;
         this.dataChannels = {};
         this.incomingTransfers = {};
+        this.camStream = null;
+        this.camEnabled = false;
+        this.peerCamStreamIds = {};
     }
 
     async handleSignal({ type, peerId, peers, from, payload, iceServers }) {
@@ -52,6 +55,7 @@ export class PeerManager {
                 this.broadcastDeafenStatus();
                 this.broadcastNickname();
                 this.broadcastStatus();
+                this.broadcastCamStreamId();
                 break;
 
             case 'offer':
@@ -73,6 +77,15 @@ export class PeerManager {
 
             case 'stop-sharing':
                 this.removePeerStream(from);
+                break;
+
+            case 'webcam-start':
+                this.peerCamStreamIds[from] = payload.streamId;
+                break;
+
+            case 'webcam-stop':
+                delete this.peerCamStreamIds[from];
+                this.ui.removeStream(from + '-cam');
                 break;
 
             case 'mic-status':
@@ -124,13 +137,14 @@ export class PeerManager {
                 cursor: 'always',
             };
 
-            // Clean up previous stream if active
+            // Clean up previous screen share stream if active
             if (this.stream) {
-                this.stream.getTracks().forEach(t => t.stop());
+                const oldTracks = this.stream.getTracks();
+                oldTracks.forEach(t => t.stop());
 
                 Object.values(this.peers).forEach(pc => {
                     pc.getSenders().forEach(sender => {
-                        if (sender.track && sender.track.kind === 'video') {
+                        if (sender.track && oldTracks.includes(sender.track)) {
                             pc.removeTrack(sender);
                         }
                     });
@@ -301,7 +315,11 @@ export class PeerManager {
                 this.ui.addAudio(remotePeerId, e.track);
             } else {
                 const stream = e.streams[0] || new MediaStream([e.track]);
-                this.ui.addStream(remotePeerId, stream);
+                const camStreamId = this.peerCamStreamIds[remotePeerId];
+                const streamKey = (camStreamId && stream.id === camStreamId)
+                    ? remotePeerId + '-cam'
+                    : remotePeerId;
+                this.ui.addStream(streamKey, stream);
             }
         };
 
@@ -459,6 +477,10 @@ export class PeerManager {
             pc.addTransceiver('video', { direction: 'recvonly' });
         }
 
+        if (this.camStream) {
+            this.camStream.getTracks().forEach(track => pc.addTrack(track, this.camStream));
+        }
+
         if (this.micStream) {
             this.micStream.getTracks().forEach(track => pc.addTrack(track, this.micStream));
         } else {
@@ -485,6 +507,14 @@ export class PeerManager {
             const hasVideoSender = pc.getSenders().some(s => s.track && s.track.kind === 'video');
             if (!hasVideoSender) {
                 this.stream.getTracks().forEach(track => pc.addTrack(track, this.stream));
+            }
+        }
+
+        if (this.camStream) {
+            const camTrackIds = new Set(this.camStream.getTracks().map(t => t.id));
+            const hasCamSender = pc.getSenders().some(s => s.track && camTrackIds.has(s.track.id));
+            if (!hasCamSender) {
+                this.camStream.getTracks().forEach(track => pc.addTrack(track, this.camStream));
             }
         }
 
@@ -518,7 +548,9 @@ export class PeerManager {
         const pc = this.peers[peerId];
         if (pc) pc.close();
         delete this.peers[peerId];
+        delete this.peerCamStreamIds[peerId];
         this.ui.removeStream(peerId);
+        this.ui.removeStream(peerId + '-cam');
     }
 
     removePeerStream(peerId) {
@@ -534,6 +566,66 @@ export class PeerManager {
     }
 
 
+
+    async toggleCam() {
+        if (this.camEnabled) {
+            this.stopCam();
+            return false;
+        }
+        try {
+            this.camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            this.camEnabled = true;
+
+            this.camStream.getVideoTracks()[0].onended = () => {
+                this.stopCam();
+                document.getElementById('cam-on-icon')?.classList.add('hidden');
+                document.getElementById('cam-off-icon')?.classList.remove('hidden');
+            };
+
+            // Signal peers about the stream ID before tracks arrive via WebRTC
+            this.send('webcam-start', null, { streamId: this.camStream.id });
+
+            this.ui.addStream('me-cam', this.camStream);
+
+            for (const [peerId, pc] of Object.entries(this.peers)) {
+                this.camStream.getTracks().forEach(track => pc.addTrack(track, this.camStream));
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                this.send('offer', peerId, offer);
+            }
+
+            return true;
+        } catch (err) {
+            console.warn('Camera access denied:', err);
+            this.camStream = null;
+            this.camEnabled = false;
+            return false;
+        }
+    }
+
+    stopCam() {
+        if (this.camStream) {
+            const camTracks = this.camStream.getTracks();
+            camTracks.forEach(t => t.stop());
+            Object.values(this.peers).forEach(pc => {
+                pc.getSenders().forEach(sender => {
+                    if (sender.track && camTracks.includes(sender.track)) {
+                        pc.removeTrack(sender);
+                    }
+                });
+            });
+            this.camStream = null;
+        }
+        this.camEnabled = false;
+        this.ui.removeStream('me-cam');
+        this.send('webcam-stop', null, {});
+    }
+
+    broadcastCamStreamId() {
+        if (this.camStream) {
+            this.send('webcam-start', null, { streamId: this.camStream.id });
+        }
+    }
 
     send(type, to, payload) {
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
