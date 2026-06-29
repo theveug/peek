@@ -102,6 +102,7 @@ document.getElementById('mic-toggle').addEventListener('click', async () => {
     document.getElementById('mic-off-icon').classList.toggle('hidden', enabled);
     document.getElementById('mic-on-icon').classList.toggle('hidden', !enabled);
     document.getElementById('mic-toggle').title = enabled ? 'Mute Microphone' : 'Unmute Microphone';
+    if (peerManager.peerId) ui.updateParticipantMic(peerManager.peerId, enabled);
 });
 
 document.getElementById('deafen-toggle').addEventListener('click', () => {
@@ -111,16 +112,23 @@ document.getElementById('deafen-toggle').addEventListener('click', () => {
     document.getElementById('deafen-on-icon').classList.toggle('hidden', !peerManager.deafened);
     document.getElementById('deafen-toggle').title = peerManager.deafened ? 'Undeafen' : 'Deafen';
     peerManager.broadcastDeafenStatus();
+    if (peerManager.peerId) ui.updateParticipantDeafen(peerManager.peerId, peerManager.deafened);
 });
 
+// Self-view placeholder on any focus loss (window blur or tab hidden)
 const handleFocusChange = () => {
     const blurred = document.hidden || !document.hasFocus();
     ui.handleVisibilityChange(blurred);
 };
-
 window.addEventListener('blur', handleFocusChange);
 window.addEventListener('focus', handleFocusChange);
-document.addEventListener('visibilitychange', handleFocusChange);
+
+// Video pause + auto-away ONLY when tab is actually hidden (switched tabs),
+// NOT when the window just loses focus (alt-tabbing to another app)
+document.addEventListener('visibilitychange', () => {
+    handleFocusChange();
+    peerManager.handleTabVisibility(document.hidden);
+});
 
 
 const chatButton = document.getElementById('togglechat');
@@ -178,15 +186,50 @@ if (localStorage.getItem('chatHidden') === '1') {
 // Members sidebar toggle
 const membersToggle = document.getElementById('toggle-members');
 const membersSidebar = document.getElementById('members-sidebar');
+const membersHandle = document.getElementById('members-resize-handle');
 if (membersToggle && membersSidebar) {
     if (localStorage.getItem('membersHidden') === '1') {
         membersSidebar.classList.add('collapsed');
+        if (membersHandle) membersHandle.style.display = 'none';
     }
     membersToggle.addEventListener('click', () => {
         const collapsed = membersSidebar.classList.toggle('collapsed');
+        if (membersHandle) membersHandle.style.display = collapsed ? 'none' : '';
         localStorage.setItem('membersHidden', collapsed ? '1' : '0');
     });
 }
+
+// Resizable members panel (width persists to localStorage)
+(function initMembersResize() {
+    const handle = document.getElementById('members-resize-handle');
+    const panel = document.getElementById('members-sidebar');
+    if (!handle || !panel) return;
+    const savedW = localStorage.getItem('membersWidth');
+    if (savedW) panel.style.width = savedW + 'px';
+    let startX, startW;
+    handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        startX = e.clientX;
+        startW = panel.offsetWidth;
+        handle.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        const onMove = (e) => {
+            const w = Math.max(160, Math.min(window.innerWidth * 0.4, startW - (e.clientX - startX)));
+            panel.style.width = w + 'px';
+        };
+        const onUp = () => {
+            handle.classList.remove('active');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            localStorage.setItem('membersWidth', panel.offsetWidth);
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    });
+})();
 
 // --- Settings modal ---
 const settingsModal = document.getElementById('settings-modal');
@@ -202,6 +245,7 @@ function openSettings() {
     document.getElementById('settings-volume').value = vol;
     document.getElementById('settings-volume-value').textContent = `${Math.round(vol * 100)}%`;
     settingsModal.classList.remove('hidden');
+    highlightCurrentStatus();
 }
 
 function closeSettings() {
@@ -222,6 +266,9 @@ settingsForm.addEventListener('submit', (e) => {
     localStorage.setItem('soundVolume', document.getElementById('settings-volume').value);
     peerManager.applyQualitySettings();
     peerManager.broadcastNickname();
+    if (peerManager.peerId) {
+        ui.updateParticipantNickname(peerManager.peerId, document.getElementById('settings-nickname').value.trim());
+    }
     closeSettings();
 });
 
@@ -229,6 +276,26 @@ document.getElementById('settings-button').addEventListener('click', openSetting
 document.getElementById('close-settings').addEventListener('click', closeSettings);
 document.getElementById('cancel-settings').addEventListener('click', closeSettings);
 document.getElementById('settings-backdrop').addEventListener('click', closeSettings);
+
+// Status picker
+document.querySelectorAll('#status-picker .status-pick').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const status = btn.dataset.status;
+        peerManager.setManualStatus(status);
+        document.querySelectorAll('#status-picker .status-pick').forEach(b => {
+            b.classList.toggle('ring-1', b === btn);
+            b.classList.toggle('ring-indigo-500', b === btn);
+        });
+    });
+});
+
+function highlightCurrentStatus() {
+    const current = peerManager.status || 'online';
+    document.querySelectorAll('#status-picker .status-pick').forEach(b => {
+        b.classList.toggle('ring-1', b.dataset.status === current);
+        b.classList.toggle('ring-indigo-500', b.dataset.status === current);
+    });
+}
 
 const shareButton = document.getElementById('share-button');
 if (shareButton) {

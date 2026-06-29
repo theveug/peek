@@ -208,6 +208,7 @@
                 </div>
 
                 <!-- Right sidebar: Active participants (Discord-style) -->
+                <div id="members-resize-handle" class="members-resize-handle"></div>
                 <div class="members-panel surface-glass flex flex-col h-full border-l border-separator" id="members-sidebar">
                     <div class="flex items-center justify-between px-4 py-3 border-b border-separator">
                         <span class="text-xs font-semibold text-muted uppercase tracking-wider">Online</span>
@@ -230,6 +231,20 @@
                     <div>
                         <label for="settings-nickname" class="block mb-1 text-sm text-muted">Nickname</label>
                         <input type="text" id="settings-nickname" class="w-full p-2 rounded surface-input" />
+                    </div>
+                    <div>
+                        <label class="block mb-1 text-sm text-muted">Status</label>
+                        <div id="status-picker" class="flex gap-2">
+                            <button type="button" data-status="online" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" title="Online">
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> Online
+                            </button>
+                            <button type="button" data-status="away" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" title="Away">
+                                <span class="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block"></span> Away
+                            </button>
+                            <button type="button" data-status="dnd" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" title="Do Not Disturb">
+                                <span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> DND
+                            </button>
+                        </div>
                     </div>
                     <div class="flex items-center gap-2">
                         <input type="checkbox" id="settings-mute" class="accent-indigo-500" />

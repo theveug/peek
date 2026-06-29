@@ -11,6 +11,8 @@ export class PeerManager {
         this.micStream = null;
         this.micEnabled = false;
         this.deafened = false;
+        this.status = 'online';
+        this._manualStatus = null;
     }
 
     async handleSignal({ type, peerId, peers, from, payload, iceServers }) {
@@ -24,6 +26,7 @@ export class PeerManager {
 
                 this.peerId = peerId;
                 if (iceServers) this.iceServers = iceServers;
+                this.ui.addSelf(peerId);
                 peers.forEach(id => {
                     this.ui.addParticipant(id);
                     if (this.peerId > id) {
@@ -34,6 +37,7 @@ export class PeerManager {
                     this.broadcastMicStatus();
                     this.broadcastDeafenStatus();
                     this.broadcastNickname();
+                    this.broadcastStatus();
                 }, 500);
                 break;
 
@@ -45,6 +49,7 @@ export class PeerManager {
                 this.broadcastMicStatus();
                 this.broadcastDeafenStatus();
                 this.broadcastNickname();
+                this.broadcastStatus();
                 break;
 
             case 'offer':
@@ -78,6 +83,10 @@ export class PeerManager {
 
             case 'nickname-update':
                 this.ui.updateParticipantNickname(from, payload.nickname);
+                break;
+
+            case 'status-update':
+                this.ui.updateParticipantStatus(from, payload.status);
                 break;
         }
         // console.groupEnd();
@@ -207,6 +216,55 @@ export class PeerManager {
         if (nickname) {
             this.send('nickname-update', null, { nickname });
         }
+    }
+
+    setStatus(status) {
+        this.status = status;
+        this.send('status-update', null, { status });
+        this.ui.updateParticipantStatus(this.peerId, status);
+    }
+
+    setManualStatus(status) {
+        this._manualStatus = status;
+        this.setStatus(status);
+    }
+
+    broadcastStatus() {
+        this.send('status-update', null, { status: this.status });
+    }
+
+    handleTabVisibility(hidden) {
+        if (hidden) {
+            this._pauseIncomingVideo();
+            if (this._manualStatus !== 'dnd') {
+                this.setStatus('away');
+            }
+        } else {
+            this._resumeIncomingVideo();
+            if (this._manualStatus !== 'dnd') {
+                this.setStatus(this._manualStatus || 'online');
+            }
+        }
+    }
+
+    _pauseIncomingVideo() {
+        Object.values(this.peers).forEach(pc => {
+            pc.getReceivers().forEach(r => {
+                if (r.track && r.track.kind === 'video') {
+                    r.track.enabled = false;
+                }
+            });
+        });
+    }
+
+    _resumeIncomingVideo() {
+        Object.values(this.peers).forEach(pc => {
+            pc.getReceivers().forEach(r => {
+                if (r.track && r.track.kind === 'video') {
+                    r.track.enabled = true;
+                }
+            });
+        });
     }
 
     stopSharing() {

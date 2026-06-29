@@ -151,51 +151,141 @@ export class UIController {
         this.removeParticipant(peerId);
     }
 
-    addParticipant(peerId) {
-        const container = document.getElementById('participants');
+    addSelf(peerId) {
         if (document.getElementById(`participant-${peerId}`)) return;
+        this.selfPeerId = peerId;
+        const nickname = localStorage.getItem('nickname') || 'You';
+        this._createParticipantCard(peerId, nickname, true);
+    }
+
+    addParticipant(peerId) {
+        if (document.getElementById(`participant-${peerId}`)) return;
+        this._createParticipantCard(peerId, peerId.substring(0, 8), false);
+    }
+
+    _statusColors = {
+        online:  '#22c55e',
+        away:    '#eab308',
+        dnd:     '#ef4444',
+        offline: '#6b7280',
+    };
+
+    _statusLabels = {
+        online:  'Online',
+        away:    'Away',
+        dnd:     'Do Not Disturb',
+        offline: 'Offline',
+    };
+
+    _createParticipantCard(peerId, displayName, isSelf) {
+        const container = document.getElementById('participants');
 
         const card = document.createElement('div');
         card.id = `participant-${peerId}`;
         card.className = 'participant-card';
+        if (isSelf) card.dataset.self = '1';
 
         const avatarWrap = document.createElement('div');
         avatarWrap.className = 'relative flex-shrink-0';
 
+        const avatarColor = isSelf
+            ? 'bg-emerald-600/30 border-2 border-emerald-500/40'
+            : 'bg-indigo-600/30 border-2 border-indigo-500/40';
         const avatar = document.createElement('div');
-        avatar.className = 'flex items-center justify-center w-9 h-9 rounded-full bg-indigo-600/30 border-2 border-indigo-500/40 text-white text-xs font-bold select-none';
-        avatar.textContent = peerId.substring(0, 2).toUpperCase();
+        avatar.className = `flex items-center justify-center w-9 h-9 rounded-full ${avatarColor} text-white text-xs font-bold select-none`;
+        const initials = displayName.split(/\s+/).map(w => w[0]).join('').substring(0, 2).toUpperCase()
+            || displayName.substring(0, 2).toUpperCase();
+        avatar.textContent = initials;
+
+        const statusDot = document.createElement('div');
+        statusDot.className = 'participant-status-dot absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2';
+        statusDot.style.background = this._statusColors.online;
+        statusDot.title = 'Online';
 
         const micDot = document.createElement('div');
-        micDot.className = 'participant-mic absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center border-2 border-neutral-900';
+        micDot.className = 'participant-mic absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center border-2';
         micDot.style.cssText = 'background:#ef4444; color:white;';
         micDot.innerHTML = this._micOffSvg();
 
         avatarWrap.appendChild(avatar);
+        avatarWrap.appendChild(statusDot);
         avatarWrap.appendChild(micDot);
 
         const info = document.createElement('div');
         info.className = 'flex flex-col min-w-0';
 
-        const name = document.createElement('span');
-        name.className = 'participant-name text-sm font-medium text-neutral-200 truncate';
-        name.textContent = peerId.substring(0, 8);
+        const nameRow = document.createElement('div');
+        nameRow.className = 'flex items-center gap-1.5';
 
-        const status = document.createElement('div');
-        status.className = 'participant-status-icons flex items-center gap-1 mt-0.5';
+        const name = document.createElement('span');
+        name.className = 'participant-name text-sm font-medium truncate';
+        name.textContent = displayName;
+
+        nameRow.appendChild(name);
+
+        if (isSelf) {
+            const youBadge = document.createElement('span');
+            youBadge.className = 'text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-full bg-emerald-600/20 text-emerald-400 leading-none';
+            youBadge.textContent = 'you';
+            nameRow.appendChild(youBadge);
+        }
+
+        const statusRow = document.createElement('div');
+        statusRow.className = 'participant-status-icons flex items-center gap-1.5 mt-0.5';
+
+        const statusLabel = document.createElement('span');
+        statusLabel.className = 'participant-status-label text-[10px] text-emerald-400';
+        statusLabel.textContent = 'Online';
+        statusRow.appendChild(statusLabel);
+
+        const separator = document.createElement('span');
+        separator.className = 'text-[10px] text-muted';
+        separator.textContent = '·';
+        statusRow.appendChild(separator);
 
         const micLabel = document.createElement('span');
-        micLabel.className = 'participant-mic-label text-[10px] text-neutral-500';
+        micLabel.className = 'participant-mic-label text-[10px]';
         micLabel.textContent = 'Muted';
-        status.appendChild(micLabel);
+        statusRow.appendChild(micLabel);
 
-        info.appendChild(name);
-        info.appendChild(status);
+        info.appendChild(nameRow);
+        info.appendChild(statusRow);
 
         card.appendChild(avatarWrap);
         card.appendChild(info);
-        container.appendChild(card);
+
+        if (isSelf) {
+            container.prepend(card);
+        } else {
+            container.appendChild(card);
+        }
         this._updateMemberCount();
+    }
+
+    updateParticipantStatus(peerId, status) {
+        let el = document.getElementById(`participant-${peerId}`);
+        if (!el) return;
+        const dot = el.querySelector('.participant-status-dot');
+        const label = el.querySelector('.participant-status-label');
+        const color = this._statusColors[status] || this._statusColors.online;
+        const text = this._statusLabels[status] || 'Online';
+        if (dot) {
+            dot.style.background = color;
+            dot.title = text;
+            if (status === 'dnd') {
+                dot.innerHTML = `<svg viewBox="0 0 10 10" class="w-1.5 h-1.5" style="margin:auto"><rect x="2" y="4" width="6" height="2" rx="1" fill="white"/></svg>`;
+            } else {
+                dot.innerHTML = '';
+            }
+        }
+        if (label) {
+            label.textContent = text;
+            label.className = `participant-status-label text-[10px]`;
+            if (status === 'online') label.classList.add('text-emerald-400');
+            else if (status === 'away') label.classList.add('text-yellow-400');
+            else if (status === 'dnd') label.classList.add('text-red-400');
+            else label.classList.add('text-muted');
+        }
     }
 
     removeParticipant(peerId) {
@@ -326,13 +416,30 @@ export class UIController {
         this.updateLayout();
     }
 
+    _chatAvatarColors = [
+        '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e',
+        '#f97316', '#eab308', '#22c55e', '#14b8a6',
+        '#06b6d4', '#3b82f6', '#a855f7', '#e11d48',
+    ];
+
+    _colorForName(name) {
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) {
+            hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return this._chatAvatarColors[Math.abs(hash) % this._chatAvatarColors.length];
+    }
+
     addChatMessage(sender, text) {
         const chatLog = document.getElementById('chat-log');
         const msgContainer = document.createElement('div');
 
         const raw = marked.parse(text);
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        msgContainer.innerHTML = `<div class="px-4 py-2 hover:bg-white/2 text-sm transition-colors"><div class="flex justify-between items-baseline mb-0.5"><span class="font-medium text-indigo-400 text-xs">${sender}</span><span class="text-neutral-600 text-[10px]">${timestamp}</span></div><div class="chat-markdown prose prose-invert text-neutral-300">${raw}</div></div>`;
+        const isSelf = sender === 'Me';
+        const initial = isSelf ? (localStorage.getItem('nickname') || 'Me').charAt(0).toUpperCase() : sender.charAt(0).toUpperCase();
+        const color = isSelf ? '#22c55e' : this._colorForName(sender);
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${initial}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${sender}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="chat-markdown chat-body prose ml-7">${raw}</div></div>`;
         chatLog.appendChild(msgContainer);
 
         while (chatLog.children.length > this.maxMessages) {
