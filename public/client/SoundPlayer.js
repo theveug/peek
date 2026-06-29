@@ -9,6 +9,21 @@ const Sounds = {
 
 let soundQueue = [];
 let isPlaying = false;
+let audioUnlocked = false;
+
+function unlockAudio() {
+    if (audioUnlocked) return;
+    Object.values(Sounds).forEach(s => {
+        if (s instanceof Audio) {
+            s.play().then(() => s.pause()).catch(() => {});
+        }
+    });
+    audioUnlocked = true;
+}
+
+['click', 'keydown', 'touchstart'].forEach(evt => {
+    document.addEventListener(evt, unlockAudio, { once: true });
+});
 
 export function playSound(soundName) {
     const muteToggle = localStorage.getItem('muteSounds') === '1';
@@ -18,25 +33,18 @@ export function playSound(soundName) {
     if (!sound || muteToggle) return;
 
     soundQueue.push(() => {
-        try {
-            sound.currentTime = 0;
-            sound.volume = volume;
+        sound.currentTime = 0;
+        sound.volume = volume;
 
-            sound.play().then(() => {
-                console.log(`[SoundPlayer] Playing "${soundName}" at volume ${volume}`);
-            }).catch(err => {
-                console.warn(`[SoundPlayer] Failed to play "${soundName}"`, err);
-            });
-
+        sound.play().then(() => {
             sound.onended = () => {
                 isPlaying = false;
                 processQueue();
             };
-        } catch (e) {
-            console.warn(`[SoundPlayer] Queue playback error for "${soundName}"`, e);
+        }).catch(() => {
             isPlaying = false;
             processQueue();
-        }
+        });
     });
 
     if (!isPlaying) {
