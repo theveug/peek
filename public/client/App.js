@@ -1,12 +1,14 @@
 // --- public/client/App.js ---
 import { PeerManager } from './PeerManager.js';
 import { UIController } from './UIController.js';
+import { DebugPanel } from './DebugPanel.js';
 
 const sessionId = location.pathname.split('/').pop();
 const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
 
 const ui = new UIController();
 const peerManager = new PeerManager(null, ui);
+const debug = new DebugPanel(peerManager);
 
 let socket;
 let reconnectTimer;
@@ -14,6 +16,7 @@ let reconnectTimer;
 function connect() {
     socket = new WebSocket(`${protocol}://${location.host}`);
     peerManager.socket = socket;
+    debug.setSocket(socket);
 
     socket.onopen = () => {
         socket.send(JSON.stringify({ type: 'join', sessionId }));
