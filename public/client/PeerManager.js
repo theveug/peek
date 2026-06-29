@@ -7,15 +7,17 @@ export class PeerManager {
         this.stream = null;
         this.peerId = null;
         this.isSharing = false;
+        this.iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
     }
 
-    async handleSignal({ type, peerId, peers, from, payload }) {
+    async handleSignal({ type, peerId, peers, from, payload, iceServers }) {
         // console.groupCollapsed(`PeerManager.handleSignal(${type})`);
         // console.log('[SIGNAL]', type, { peerId, peers, from, payload });
 
         switch (type) {
             case 'init':
                 this.peerId = peerId;
+                if (iceServers) this.iceServers = iceServers;
                 peers.forEach(id => {
                     if (this.peerId > id) {
                         this.initiateConnection(id);
@@ -134,7 +136,7 @@ export class PeerManager {
 
 
     initiateConnection(peerId) {
-        const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        const pc = new RTCPeerConnection({ iceServers: this.iceServers });
         this.peers[peerId] = pc;
 
         if (this.stream) {
@@ -165,7 +167,7 @@ export class PeerManager {
     }
 
     receiveOffer(from, offer) {
-        const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        const pc = new RTCPeerConnection({ iceServers: this.iceServers });
         this.peers[from] = pc;
 
         if (this.stream) {

@@ -4,7 +4,7 @@ import { SessionManager } from './SessionManager.js';
 
 const manager = new SessionManager();
 
-export function setupWebSocket(wss) {
+export function setupWebSocket(wss, iceServers) {
     wss.on('connection', (ws) => {
         const peerId = uuidv4();
 
@@ -25,7 +25,7 @@ export function setupWebSocket(wss) {
                     const peers = manager.getPeersInSession(sessionId).filter(p => p !== peerId);
 
                     // Notify new peer of their ID and existing peers
-                    ws.send(JSON.stringify({ type: 'init', peerId, peers }));
+                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers }));
 
                     // Notify others of new peer
                     peers.forEach(pid => {

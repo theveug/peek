@@ -1,4 +1,5 @@
 // --- server.js ---
+import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
@@ -14,7 +15,21 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
-setupWebSocket(wss);
+
+const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+if (process.env.TURN_URL && process.env.TURN_SECRET) {
+    iceServers.push({
+        urls: [process.env.TURN_URL, `${process.env.TURN_URL}?transport=tcp`],
+        username: 'peek',
+        credential: process.env.TURN_SECRET,
+    });
+    Debug.log('TURN server configured:', process.env.TURN_URL);
+} else {
+    Debug.log('No TURN server configured — STUN only');
+}
+
+setupWebSocket(wss, iceServers);
 
 const activeSessions = new Set();
 

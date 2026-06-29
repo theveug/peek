@@ -49,10 +49,6 @@ input.addEventListener('keydown', (e) => {
     }
 });
 
-if (!localStorage.getItem('nickname')) {
-    localStorage.setItem('nickname', generateFunnyNickname());
-}
-
 const savedNick = localStorage.getItem('nickname');
 
 function sendMessage() {
@@ -142,20 +138,17 @@ if (shareButton) {
     });
 }
 
-const requiredKeys = [
-    'nickname',
-    'screenShareRes',
-    'screenShareFps',
-    'muteSounds',
-    'soundVolume',
-    'maxMessages'
-];
+const defaults = {
+    nickname: generateFunnyNickname(),
+    screenShareRes: '1280x720',
+    screenShareFps: '30',
+    muteSounds: '0',
+    soundVolume: '0.3',
+    maxMessages: '100'
+};
 
-const firstVisit = requiredKeys.some(key => localStorage.getItem(key) === null);
-
-if (firstVisit) {
-    // Save session to return to after settings
-    const sessionId = location.pathname.split('/').pop();
-    localStorage.setItem('lastSessionId', sessionId);
-    window.location.href = '/settings';
+for (const [key, value] of Object.entries(defaults)) {
+    if (localStorage.getItem(key) === null) {
+        localStorage.setItem(key, value);
+    }
 }
