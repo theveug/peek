@@ -467,13 +467,20 @@ export class UIController {
             pre.appendChild(copyBtn);
         });
         const newMessageIndicator = document.getElementById('new-message-indicator');
-        const tabHidden = document.hidden;
+        const tabFocused = document.hasFocus();
+        const isFromOther = sender !== 'Me';
 
-        if (tabHidden && sender !== 'Me') {
+        if (!tabFocused && isFromOther) {
             newMessageIndicator.classList.remove('hidden');
             playSound('newMessage');
         } else {
             newMessageIndicator.classList.add('hidden');
+        }
+
+        const chatInput = document.getElementById('chat-input');
+        const threshold = chatInput.scrollHeight + 50;
+        const isAtBottom = (chatLog.scrollTop + chatLog.clientHeight) >= (chatLog.scrollHeight - threshold);
+        if (isAtBottom) {
             requestAnimationFrame(() => {
                 chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' });
             });
@@ -505,13 +512,9 @@ export class UIController {
             if (myVideo) myVideo.style.display = 'block';
             if (placeholder) placeholder.remove();
 
-            const indicator = document.getElementById('new-message-indicator');
-            if (indicator) indicator.classList.add('hidden');
-            const chatLog = document.getElementById('chat-log');
-            if (chatLog) {
-                requestAnimationFrame(() => {
-                    chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' });
-                });
+            if (document.hasFocus()) {
+                const indicator = document.getElementById('new-message-indicator');
+                if (indicator) indicator.classList.add('hidden');
             }
         }
     }
