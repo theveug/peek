@@ -467,19 +467,16 @@ export class UIController {
             pre.appendChild(copyBtn);
         });
         const newMessageIndicator = document.getElementById('new-message-indicator');
-        const chatInput = document.getElementById('chat-input');
-        const threshold = chatInput.scrollHeight + 50;
-        const isAtBottom = (chatLog.scrollTop + chatLog.clientHeight) >= (chatLog.scrollHeight - threshold);
-        if (isAtBottom) {
+        const tabHidden = document.hidden;
+
+        if (tabHidden && sender !== 'Me') {
+            newMessageIndicator.classList.remove('hidden');
+            playSound('newMessage');
+        } else {
             newMessageIndicator.classList.add('hidden');
             requestAnimationFrame(() => {
                 chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' });
             });
-        } else {
-            if (sender != 'Me') {
-                newMessageIndicator.classList.remove('hidden');
-                playSound('newMessage');
-            }
         }
     }
 
@@ -507,6 +504,15 @@ export class UIController {
         } else {
             if (myVideo) myVideo.style.display = 'block';
             if (placeholder) placeholder.remove();
+
+            const indicator = document.getElementById('new-message-indicator');
+            if (indicator) indicator.classList.add('hidden');
+            const chatLog = document.getElementById('chat-log');
+            if (chatLog) {
+                requestAnimationFrame(() => {
+                    chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' });
+                });
+            }
         }
     }
 
