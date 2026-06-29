@@ -770,24 +770,35 @@ body,
   display: block;
 }
 
+/* ===== Controls bar positioning (desktop default) ===== */
+.controls-bar {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  top: auto;
+  right: auto;
+  transform: translateX(-50%);
+}
+
 /* ===== Mobile responsive ===== */
 @media (max-width: 767px) {
   /* Controls always visible, fixed to bottom of viewport on mobile */
-  #controls {
-    display: flex !important;
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    top: auto !important;
-    transform: none !important;
-    translate: none !important;
-    border-radius: 0 !important;
-    padding: 0.5rem 0.75rem !important;
-    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom)) !important;
-    gap: 0.25rem !important;
+  .controls-bar {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    transform: none;
+    border-radius: 0;
+    padding: 0.5rem 0.75rem;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+    gap: 0.25rem;
     justify-content: center;
-    z-index: 90 !important;
+    z-index: 90;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   #controls button {
