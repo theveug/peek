@@ -142,11 +142,53 @@ export class UIController {
 
     addPeer(peerId) {
         playSound('peerJoin');
+        this.addParticipant(peerId);
     }
 
     removePeer(peerId) {
         playSound('peerLeft');
         this.removeAudio(peerId);
+        this.removeParticipant(peerId);
+    }
+
+    addParticipant(peerId) {
+        const container = document.getElementById('participants');
+        if (document.getElementById(`participant-${peerId}`)) return;
+
+        const el = document.createElement('div');
+        el.id = `participant-${peerId}`;
+        el.className = 'relative flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800 border-2 border-neutral-600 text-white text-xs font-bold select-none';
+        el.title = peerId.substring(0, 8);
+        el.textContent = peerId.substring(0, 2).toUpperCase();
+
+        const micDot = document.createElement('div');
+        micDot.className = 'participant-mic absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[8px]';
+        micDot.style.cssText = 'background:#ef4444; color:white;';
+        micDot.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-2.5 h-2.5"><path d="M7.22 3.22a.75.75 0 0 1 1.06 0L12 6.94l3.72-3.72a.75.75 0 1 1 1.06 1.06L13.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L12 9.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06L10.94 8 7.22 4.28a.75.75 0 0 1 0-1.06Z" /></svg>`;
+
+        el.appendChild(micDot);
+        container.appendChild(el);
+    }
+
+    removeParticipant(peerId) {
+        const el = document.getElementById(`participant-${peerId}`);
+        if (el) el.remove();
+    }
+
+    updateParticipantMic(peerId, enabled) {
+        let el = document.getElementById(`participant-${peerId}`);
+        if (!el) {
+            this.addParticipant(peerId);
+            el = document.getElementById(`participant-${peerId}`);
+        }
+        const dot = el.querySelector('.participant-mic');
+        if (enabled) {
+            dot.style.background = '#22c55e';
+            dot.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-2.5 h-2.5"><path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 1 1-6 0V4Z" /><path d="M5.5 9.643a.75.75 0 0 1 .75.75v.357a3.75 3.75 0 0 0 7.5 0v-.357a.75.75 0 0 1 1.5 0v.357a5.25 5.25 0 0 1-4.5 5.196V17.5a.75.75 0 0 1-1.5 0v-1.554a5.25 5.25 0 0 1-4.5-5.196v-.357a.75.75 0 0 1 .75-.75Z" /></svg>`;
+        } else {
+            dot.style.background = '#ef4444';
+            dot.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-2.5 h-2.5"><path d="M7.22 3.22a.75.75 0 0 1 1.06 0L12 6.94l3.72-3.72a.75.75 0 1 1 1.06 1.06L13.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L12 9.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06L10.94 8 7.22 4.28a.75.75 0 0 1 0-1.06Z" /></svg>`;
+        }
     }
 
     addAudio(peerId, track) {
@@ -158,6 +200,7 @@ export class UIController {
             document.body.appendChild(audio);
         }
         audio.srcObject = new MediaStream([track]);
+        audio.muted = !document.getElementById('deafen-off-icon') || document.getElementById('deafen-off-icon').classList.contains('hidden');
     }
 
     removeAudio(peerId) {

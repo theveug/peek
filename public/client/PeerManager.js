@@ -24,6 +24,7 @@ export class PeerManager {
                 this.peerId = peerId;
                 if (iceServers) this.iceServers = iceServers;
                 peers.forEach(id => {
+                    this.ui.addParticipant(id);
                     if (this.peerId > id) {
                         this.initiateConnection(id);
                     }
@@ -56,6 +57,10 @@ export class PeerManager {
 
             case 'stop-sharing':
                 this.removePeerStream(from);
+                break;
+
+            case 'mic-status':
+                this.ui.updateParticipantMic(from, payload.enabled);
                 break;
         }
         // console.groupEnd();
@@ -147,46 +152,33 @@ export class PeerManager {
     }
 
     async toggleMic() {
-        if (this.micEnabled) {
-            this.muteMic();
+        if (!this.micStream) {
+            try {
+                this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const audioTrack = this.micStream.getAudioTracks()[0];
+                this.micEnabled = true;
+
+                for (const [peerId, pc] of Object.entries(this.peers)) {
+                    pc.addTrack(audioTrack, this.micStream);
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    this.send('offer', peerId, offer);
+                }
+            } catch (err) {
+                console.warn('Mic access denied:', err);
+                return false;
+            }
         } else {
-            await this.unmuteMic();
+            this.micEnabled = !this.micEnabled;
+            this.micStream.getAudioTracks().forEach(t => { t.enabled = this.micEnabled; });
         }
+
+        this.broadcastMicStatus();
         return this.micEnabled;
     }
 
-    async unmuteMic() {
-        try {
-            this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const audioTrack = this.micStream.getAudioTracks()[0];
-            this.micEnabled = true;
-
-            for (const [peerId, pc] of Object.entries(this.peers)) {
-                pc.addTrack(audioTrack, this.micStream);
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                this.send('offer', peerId, offer);
-            }
-        } catch (err) {
-            console.warn('Mic access denied:', err);
-        }
-    }
-
-    muteMic() {
-        if (this.micStream) {
-            this.micStream.getTracks().forEach(t => t.stop());
-            this.micStream = null;
-        }
-
-        Object.values(this.peers).forEach(pc => {
-            pc.getSenders().forEach(sender => {
-                if (sender.track && sender.track.kind === 'audio') {
-                    pc.removeTrack(sender);
-                }
-            });
-        });
-
-        this.micEnabled = false;
+    broadcastMicStatus() {
+        this.send('mic-status', null, { enabled: this.micEnabled });
     }
 
     stopSharing() {

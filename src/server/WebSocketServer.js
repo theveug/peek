@@ -99,13 +99,14 @@ export function setupWebSocket(wss, turnConfig) {
                     break;
                 }
 
-                case 'stop-sharing': {
+                case 'stop-sharing':
+                case 'mic-status': {
                     const sessionId = manager.getSessionId(peerId);
                     const peers = manager.getPeersInSession(sessionId).filter(id => id !== peerId);
                     peers.forEach(pid => {
                         const socket = manager.getPeerSocket(pid);
                         if (socket) {
-                            socket.send(JSON.stringify({ type: 'stop-sharing', from: peerId }));
+                            socket.send(JSON.stringify({ type, from: peerId, payload }));
                         }
                     });
                     break;

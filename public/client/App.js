@@ -96,6 +96,16 @@ document.getElementById('mic-toggle').addEventListener('click', async () => {
     const enabled = await peerManager.toggleMic();
     document.getElementById('mic-off-icon').classList.toggle('hidden', enabled);
     document.getElementById('mic-on-icon').classList.toggle('hidden', !enabled);
+    document.getElementById('mic-toggle').title = enabled ? 'Mute Microphone' : 'Unmute Microphone';
+});
+
+let deafened = false;
+document.getElementById('deafen-toggle').addEventListener('click', () => {
+    deafened = !deafened;
+    document.querySelectorAll('audio').forEach(a => { a.muted = deafened; });
+    document.getElementById('deafen-off-icon').classList.toggle('hidden', deafened);
+    document.getElementById('deafen-on-icon').classList.toggle('hidden', !deafened);
+    document.getElementById('deafen-toggle').title = deafened ? 'Undeafen' : 'Deafen';
 });
 
 const handleFocusChange = () => {
