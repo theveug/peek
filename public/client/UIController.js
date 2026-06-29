@@ -264,8 +264,14 @@ export class UIController {
             this.addParticipant(peerId);
             el = document.getElementById(`participant-${peerId}`);
         }
+        if (!nickname) return;
         const nameEl = el.querySelector('.participant-name');
-        if (nameEl && nickname) nameEl.textContent = nickname;
+        if (nameEl) nameEl.textContent = nickname;
+        const avatar = el.querySelector('.flex-shrink-0 > div:first-child');
+        if (avatar) {
+            const initials = nickname.split(/\s+/).map(w => w[0]).join('').substring(0, 2).toUpperCase();
+            avatar.textContent = initials || nickname.substring(0, 2).toUpperCase();
+        }
     }
 
     addAudio(peerId, track) {

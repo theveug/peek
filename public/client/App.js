@@ -221,6 +221,7 @@ settingsForm.addEventListener('submit', (e) => {
     localStorage.setItem('maxMessages', document.getElementById('settings-max-messages').value);
     localStorage.setItem('soundVolume', document.getElementById('settings-volume').value);
     peerManager.applyQualitySettings();
+    peerManager.broadcastNickname();
     closeSettings();
 });
 

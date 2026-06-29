@@ -33,6 +33,7 @@ export class PeerManager {
                 setTimeout(() => {
                     this.broadcastMicStatus();
                     this.broadcastDeafenStatus();
+                    this.broadcastNickname();
                 }, 500);
                 break;
 
@@ -43,6 +44,7 @@ export class PeerManager {
                 }
                 this.broadcastMicStatus();
                 this.broadcastDeafenStatus();
+                this.broadcastNickname();
                 break;
 
             case 'offer':
@@ -72,6 +74,10 @@ export class PeerManager {
 
             case 'deafen-status':
                 this.ui.updateParticipantDeafen(from, payload.deafened);
+                break;
+
+            case 'nickname-update':
+                this.ui.updateParticipantNickname(from, payload.nickname);
                 break;
         }
         // console.groupEnd();
@@ -194,6 +200,13 @@ export class PeerManager {
 
     broadcastDeafenStatus() {
         this.send('deafen-status', null, { deafened: this.deafened || false });
+    }
+
+    broadcastNickname() {
+        const nickname = (localStorage.getItem('nickname') || '').trim();
+        if (nickname) {
+            this.send('nickname-update', null, { nickname });
+        }
     }
 
     stopSharing() {
