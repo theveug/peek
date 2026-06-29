@@ -106,9 +106,10 @@ export class PeerManager {
             this.ui.addStream('me', this.stream);
             this.isSharing = true;
 
-            // Detect when user manually stops sharing
             this.stream.getVideoTracks()[0].onended = () => {
                 this.stopSharing();
+                document.getElementById('share-play-icon')?.classList.remove('hidden');
+                document.getElementById('share-stop-icon')?.classList.add('hidden');
             };
 
             // Add tracks to existing connections

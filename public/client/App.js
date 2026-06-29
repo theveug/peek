@@ -73,8 +73,19 @@ function sendMessage() {
     }
 }
 
-document.getElementById('start-share').onclick = () => {
-    peerManager.startSharing();
+function updateShareButton() {
+    document.getElementById('share-play-icon').classList.toggle('hidden', peerManager.isSharing);
+    document.getElementById('share-stop-icon').classList.toggle('hidden', !peerManager.isSharing);
+    document.getElementById('share-toggle').title = peerManager.isSharing ? 'Stop sharing' : 'Start sharing';
+}
+
+document.getElementById('share-toggle').onclick = async () => {
+    if (peerManager.isSharing) {
+        peerManager.stopSharing();
+    } else {
+        await peerManager.startSharing();
+    }
+    updateShareButton();
 };
 
 document.getElementById('grid-button').addEventListener('click', () => {
