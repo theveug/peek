@@ -138,29 +138,39 @@ export class PeerManager {
     }
 
 
-    initiateConnection(peerId) {
+    createPeerConnection(remotePeerId) {
         const pc = new RTCPeerConnection({ iceServers: this.iceServers });
-        this.peers[peerId] = pc;
+
+        pc.onicecandidate = (e) => {
+            if (e.candidate) {
+                this.send('ice-candidate', remotePeerId, e.candidate);
+            }
+        };
+
+        pc.ontrack = (e) => {
+            this.ui.addStream(remotePeerId, e.streams[0]);
+        };
+
+        pc.onconnectionstatechange = () => {
+            if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                this.removePeer(remotePeerId);
+            }
+        };
+
+        // Always include a video transceiver so the offer/answer has a media
+        // section even when the local peer isn't sharing yet.
+        pc.addTransceiver('video', { direction: this.stream ? 'sendrecv' : 'recvonly' });
 
         if (this.stream) {
             this.stream.getTracks().forEach(track => pc.addTrack(track, this.stream));
         }
 
-        pc.onicecandidate = (e) => {
-            if (e.candidate) {
-                this.send('ice-candidate', peerId, e.candidate);
-            }
-        };
+        this.peers[remotePeerId] = pc;
+        return pc;
+    }
 
-        pc.ontrack = (e) => {
-            this.ui.addStream(peerId, e.streams[0]);
-        };
-
-        pc.onconnectionstatechange = () => {
-            if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-                this.removePeer(peerId);
-            }
-        };
+    initiateConnection(peerId) {
+        const pc = this.createPeerConnection(peerId);
 
         pc.createOffer()
             .then(offer => pc.setLocalDescription(offer))
@@ -169,42 +179,40 @@ export class PeerManager {
             });
     }
 
-    receiveOffer(from, offer) {
+    async receiveOffer(from, offer) {
         let pc = this.peers[from];
 
         if (!pc) {
-            pc = new RTCPeerConnection({ iceServers: this.iceServers });
-            this.peers[from] = pc;
-
-            if (this.stream) {
-                this.stream.getTracks().forEach(track => pc.addTrack(track, this.stream));
-            }
-
-            pc.onicecandidate = (e) => {
-                if (e.candidate) {
-                    this.send('ice-candidate', from, e.candidate);
-                }
-            };
-
-            pc.ontrack = (e) => {
-                this.ui.addStream(from, e.streams[0]);
-            };
+            pc = this.createPeerConnection(from);
         }
 
-        pc.setRemoteDescription(new RTCSessionDescription(offer))
-            .then(() => pc.createAnswer())
-            .then(answer => pc.setLocalDescription(answer))
-            .then(() => {
-                this.send('answer', from, pc.localDescription);
-            });
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+        if (this.stream) {
+            const senders = pc.getSenders();
+            const hasSender = senders.some(s => s.track);
+            if (!hasSender) {
+                this.stream.getTracks().forEach(track => pc.addTrack(track, this.stream));
+            }
+        }
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        this.send('answer', from, pc.localDescription);
     }
 
     receiveAnswer(from, answer) {
-        this.peers[from].setRemoteDescription(new RTCSessionDescription(answer));
+        const pc = this.peers[from];
+        if (pc) {
+            pc.setRemoteDescription(new RTCSessionDescription(answer));
+        }
     }
 
     receiveCandidate(from, candidate) {
-        this.peers[from].addIceCandidate(new RTCIceCandidate(candidate));
+        const pc = this.peers[from];
+        if (pc) {
+            pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
     }
 
     removePeer(peerId) {
