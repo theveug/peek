@@ -15,48 +15,82 @@ export class UIController {
         this.panX = 0;
         this.panY = 0;
         this.isPanning = false;
-        this.setupZoomAndPan();
+        this.setupZoom();
     }
 
-    setupZoomAndPan() {
-        this.focusedView.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const delta = e.deltaY > 0 ? -0.1 : 0.1;
-            this.zoom = Math.max(1, Math.min(10, this.zoom + delta));
-            if (this.zoom === 1) { this.panX = 0; this.panY = 0; }
-            this.applyTransform();
-        });
+    setupZoom() {
+        const view = this.focusedView;
+        const vid = this.focusedVideo;
 
-        this.focusedView.addEventListener('mousedown', (e) => {
+        view.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = vid.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const prevZoom = this.zoom;
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            this.zoom = Math.max(1, Math.min(10, this.zoom * delta));
+
+            const scale = this.zoom / prevZoom;
+            this.panX = mouseX - scale * (mouseX - this.panX);
+            this.panY = mouseY - scale * (mouseY - this.panY);
+
+            if (this.zoom <= 1) { this.panX = 0; this.panY = 0; this.zoom = 1; }
+            this.clampPan();
+            this.applyTransform();
+        }, { passive: false });
+
+        view.addEventListener('mousedown', (e) => {
             if (this.zoom <= 1) return;
+            e.preventDefault();
             this.isPanning = true;
-            this.panStartX = e.clientX - this.panX;
-            this.panStartY = e.clientY - this.panY;
-            this.focusedView.style.cursor = 'grabbing';
+            this.dragStartX = e.clientX - this.panX;
+            this.dragStartY = e.clientY - this.panY;
+            view.style.cursor = 'grabbing';
         });
 
         window.addEventListener('mousemove', (e) => {
             if (!this.isPanning) return;
-            this.panX = e.clientX - this.panStartX;
-            this.panY = e.clientY - this.panStartY;
+            this.panX = e.clientX - this.dragStartX;
+            this.panY = e.clientY - this.dragStartY;
+            this.clampPan();
             this.applyTransform();
         });
 
         window.addEventListener('mouseup', () => {
+            if (!this.isPanning) return;
             this.isPanning = false;
-            this.focusedView.style.cursor = 'grab';
+            this.focusedView.style.cursor = this.zoom > 1 ? 'grab' : '';
         });
 
-        this.focusedView.addEventListener('dblclick', () => {
+        view.addEventListener('dblclick', () => {
             this.zoom = 1;
             this.panX = 0;
             this.panY = 0;
             this.applyTransform();
+            view.style.cursor = '';
         });
+    }
+
+    clampPan() {
+        const vid = this.focusedVideo;
+        const viewRect = this.focusedView.getBoundingClientRect();
+        const scaledW = vid.videoWidth ? Math.min(vid.clientWidth, viewRect.width) * this.zoom : viewRect.width * this.zoom;
+        const scaledH = vid.videoHeight ? Math.min(vid.clientHeight, viewRect.height) * this.zoom : viewRect.height * this.zoom;
+
+        const maxX = 0;
+        const minX = viewRect.width - scaledW;
+        const maxY = 0;
+        const minY = viewRect.height - scaledH;
+
+        this.panX = Math.min(maxX, Math.max(minX, this.panX));
+        this.panY = Math.min(maxY, Math.max(minY, this.panY));
     }
 
     applyTransform() {
         this.focusedVideo.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})`;
+        this.focusedView.style.cursor = this.zoom > 1 ? 'grab' : '';
     }
 
     focusStream(peerId) {

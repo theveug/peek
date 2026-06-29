@@ -62,11 +62,9 @@ input.addEventListener('keydown', (e) => {
     }
 });
 
-const savedNick = localStorage.getItem('nickname');
-
 function sendMessage() {
     const text = input.value.trim();
-    const nickname = savedNick.trim();
+    const nickname = (localStorage.getItem('nickname') || 'Anonymous').trim();
 
     if (text) {
         socket.send(JSON.stringify({ type: 'chat', text, nickname }));
@@ -88,32 +86,6 @@ window.addEventListener('blur', handleFocusChange);
 window.addEventListener('focus', handleFocusChange);
 document.addEventListener('visibilitychange', handleFocusChange);
 
-function updateWarning(includeWarning = false) {
-    const res = document.getElementById('res').value;
-    const fps = parseInt(document.getElementById('fps').value) || 30;
-
-    const warningEl = document.getElementById('quality-warning');
-
-    if (res === 'source') {
-        warningEl.textContent = '⚠️ Unpredictable load';
-        return;
-    }
-
-    let [w, h] = res !== 'default' ? res.split('x').map(Number) : [1280, 720];
-    const pixelsPerSecond = w * h * fps;
-
-    if (pixelsPerSecond > 1920 * 1080 * 30) {
-        warningEl.textContent = '⚠️ High load';
-    } else if (pixelsPerSecond > 1280 * 720 * 30) {
-        warningEl.textContent = '🟠 Moderate load';
-    } else {
-        warningEl.textContent = '🟢 Low load';
-    }
-    if (includeWarning) {
-        alert('Restart stream to apply changes.');
-    }
-}
-
 
 const chatButton = document.getElementById('togglechat');
 chatButton.addEventListener('click', () => {
@@ -131,21 +103,54 @@ if (localStorage.getItem('chatHidden') === '1') {
     chatBox.classList.remove('hidden');
 }
 
-const settingsButton = document.getElementById('settings-button');
-if (settingsButton) {
-    settingsButton.addEventListener('click', () => {
-        window.open('/settings', '_blank');
-    });
+// --- Settings modal ---
+const settingsModal = document.getElementById('settings-modal');
+const settingsForm = document.getElementById('settings-form');
+
+function openSettings() {
+    document.getElementById('settings-nickname').value = localStorage.getItem('nickname') || '';
+    document.getElementById('settings-mute').checked = localStorage.getItem('muteSounds') === '1';
+    document.getElementById('settings-res').value = localStorage.getItem('screenShareRes') || '1280x720';
+    document.getElementById('settings-fps').value = localStorage.getItem('screenShareFps') || '30';
+    document.getElementById('settings-max-messages').value = localStorage.getItem('maxMessages') || '100';
+    const vol = localStorage.getItem('soundVolume') || '0.3';
+    document.getElementById('settings-volume').value = vol;
+    document.getElementById('settings-volume-value').textContent = `${Math.round(vol * 100)}%`;
+    settingsModal.classList.remove('hidden');
 }
+
+function closeSettings() {
+    settingsModal.classList.add('hidden');
+}
+
+document.getElementById('settings-volume').addEventListener('input', (e) => {
+    document.getElementById('settings-volume-value').textContent = `${Math.round(e.target.value * 100)}%`;
+});
+
+settingsForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    localStorage.setItem('nickname', document.getElementById('settings-nickname').value.trim());
+    localStorage.setItem('muteSounds', document.getElementById('settings-mute').checked ? '1' : '0');
+    localStorage.setItem('screenShareRes', document.getElementById('settings-res').value);
+    localStorage.setItem('screenShareFps', document.getElementById('settings-fps').value);
+    localStorage.setItem('maxMessages', document.getElementById('settings-max-messages').value);
+    localStorage.setItem('soundVolume', document.getElementById('settings-volume').value);
+    closeSettings();
+});
+
+document.getElementById('settings-button').addEventListener('click', openSettings);
+document.getElementById('close-settings').addEventListener('click', closeSettings);
+document.getElementById('cancel-settings').addEventListener('click', closeSettings);
+document.getElementById('settings-backdrop').addEventListener('click', closeSettings);
 
 const shareButton = document.getElementById('share-button');
 if (shareButton) {
     shareButton.addEventListener('click', () => {
-        const url = window.location.href;
-        navigator.clipboard.writeText(url);
+        navigator.clipboard.writeText(window.location.href);
     });
 }
 
+// --- Defaults ---
 const defaults = {
     nickname: generateFunnyNickname(),
     screenShareRes: '1280x720',
