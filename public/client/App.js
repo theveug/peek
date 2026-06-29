@@ -102,15 +102,31 @@ const chatPanel = document.getElementById('chat');
 const dropOverlay = document.getElementById('drop-zone-overlay');
 const fileInput = document.getElementById('file-input');
 const fileAttachBtn = document.getElementById('file-attach-btn');
-let dragCounter = 0;
 
 if (chatPanel && dropOverlay) {
-    chatPanel.addEventListener('dragenter', (e) => { e.preventDefault(); dragCounter++; dropOverlay.classList.remove('hidden'); });
-    chatPanel.addEventListener('dragleave', (e) => { e.preventDefault(); dragCounter--; if (dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.add('hidden'); } });
-    chatPanel.addEventListener('dragover', (e) => e.preventDefault());
-    chatPanel.addEventListener('drop', (e) => {
+    chatPanel.addEventListener('dragenter', (e) => {
         e.preventDefault();
-        dragCounter = 0;
+        e.stopPropagation();
+        dropOverlay.classList.remove('hidden');
+    });
+
+    dropOverlay.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
+    dropOverlay.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = dropOverlay.getBoundingClientRect();
+        if (e.clientX <= rect.left || e.clientX >= rect.right || e.clientY <= rect.top || e.clientY >= rect.bottom) {
+            dropOverlay.classList.add('hidden');
+        }
+    });
+
+    dropOverlay.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         dropOverlay.classList.add('hidden');
         if (e.dataTransfer.files.length) {
             [...e.dataTransfer.files].forEach(f => peerManager.sendFileToAll(f));

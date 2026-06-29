@@ -280,13 +280,12 @@ body:hover #controls {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(99, 102, 241, 0.15);
   border: 2px dashed rgba(99, 102, 241, 0.5);
   border-radius: 0.5rem;
   color: var(--chat-sender);
   font-size: 0.875rem;
   font-weight: 600;
-  pointer-events: none;
 }
 
 .file-progress {
