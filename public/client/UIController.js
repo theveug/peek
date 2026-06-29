@@ -187,7 +187,14 @@ export class UIController {
     addPeer(peerId) {
         playSound('peerJoin');
         this.addParticipant(peerId);
-        setTimeout(() => this.showToast(`${this._peerNickname(peerId)} joined`, 'join'), 100);
+        if (!this._pendingJoinToasts) this._pendingJoinToasts = new Set();
+        this._pendingJoinToasts.add(peerId);
+        setTimeout(() => {
+            if (this._pendingJoinToasts.has(peerId)) {
+                this._pendingJoinToasts.delete(peerId);
+                this.showToast(`${this._peerNickname(peerId)} joined`, 'join');
+            }
+        }, 2000);
     }
 
     removePeer(peerId) {
@@ -436,6 +443,11 @@ export class UIController {
         if (avatar) {
             const initials = nickname.split(/\s+/).map(w => w[0]).join('').substring(0, 2).toUpperCase();
             avatar.textContent = initials || nickname.substring(0, 2).toUpperCase();
+        }
+
+        if (this._pendingJoinToasts && this._pendingJoinToasts.has(peerId)) {
+            this._pendingJoinToasts.delete(peerId);
+            this.showToast(`${nickname} joined`, 'join');
         }
     }
 
