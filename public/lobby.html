@@ -67,20 +67,29 @@
             initGradientBackground();
 
             // Create room
+            const createBtn = document.querySelector('#create-form button[type="submit"]');
             document.getElementById('create-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const name = document.getElementById('create-name').value.trim();
-                const password = document.getElementById('create-password').value;
-                const res = await fetch('/api/create-room', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name || null, password: password || null }),
-                });
-                const { code } = await res.json();
-                if (password) {
-                    sessionStorage.setItem('roomPassword', password);
+                createBtn.disabled = true;
+                createBtn.textContent = 'Creating...';
+                try {
+                    const name = document.getElementById('create-name').value.trim();
+                    const password = document.getElementById('create-password').value;
+                    const res = await fetch('/api/create-room', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: name || null, password: password || null }),
+                    });
+                    const { code } = await res.json();
+                    if (password) {
+                        sessionStorage.setItem('roomPassword', password);
+                    }
+                    createBtn.textContent = 'Joining...';
+                    window.location.href = '/' + code;
+                } catch {
+                    createBtn.disabled = false;
+                    createBtn.textContent = 'Create Room';
                 }
-                window.location.href = '/' + code;
             });
 
             // Join room
@@ -91,38 +100,48 @@
             const joinError = document.getElementById('join-error');
             const joinRoomName = document.getElementById('join-room-name');
 
+            const joinBtn = joinForm.querySelector('button[type="submit"]');
             joinForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const code = joinCode.value.trim();
                 if (code.length !== 5) return;
 
-                const password = joinPassword.value;
-                const res = await fetch('/api/validate-room', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code, password: password || null }),
-                });
-                const result = await res.json();
+                joinBtn.disabled = true;
+                joinBtn.textContent = 'Joining...';
+                try {
+                    const password = joinPassword.value;
+                    const res = await fetch('/api/validate-room', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code, password: password || null }),
+                    });
+                    const result = await res.json();
 
-                if (result.needsPassword) {
-                    joinPasswordRow.classList.remove('hidden');
-                    joinPassword.focus();
-                    if (result.name) {
-                        joinRoomName.textContent = `Room: ${result.name}`;
-                        joinRoomName.classList.remove('hidden');
+                    if (result.needsPassword) {
+                        joinPasswordRow.classList.remove('hidden');
+                        joinPassword.focus();
+                        joinBtn.disabled = false;
+                        joinBtn.textContent = 'Join Room';
+                        if (result.name) {
+                            joinRoomName.textContent = `Room: ${result.name}`;
+                            joinRoomName.classList.remove('hidden');
+                        }
+                        if (result.wrongPassword) {
+                            joinError.textContent = 'Wrong password. Try again.';
+                            joinError.classList.remove('hidden');
+                        }
+                        return;
                     }
-                    if (result.wrongPassword) {
-                        joinError.textContent = 'Wrong password. Try again.';
-                        joinError.classList.remove('hidden');
-                    }
-                    return;
-                }
 
-                joinError.classList.add('hidden');
-                if (password) {
-                    sessionStorage.setItem('roomPassword', password);
+                    joinError.classList.add('hidden');
+                    if (password) {
+                        sessionStorage.setItem('roomPassword', password);
+                    }
+                    window.location.href = '/' + code;
+                } catch {
+                    joinBtn.disabled = false;
+                    joinBtn.textContent = 'Join Room';
                 }
-                window.location.href = '/' + code;
             });
 
             // Auto-uppercase room code
