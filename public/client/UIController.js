@@ -19,6 +19,7 @@ export class UIController {
         this._typingPeers = new Set();
         this._reactions = new Map();
         this._onReaction = null;
+        this._replyTo = null;
         this.setupZoom();
         this._createToastContainer();
     }
@@ -506,12 +507,51 @@ export class UIController {
 
     _emojiSet = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
+    setReplyTo(messageId, sender, text) {
+        this._replyTo = { messageId, sender, text };
+        const preview = document.getElementById('reply-preview');
+        if (!preview) return;
+        const truncated = text.length > 80 ? text.substring(0, 80) + '...' : text;
+        preview.innerHTML = `<div class="reply-preview-content"><span class="reply-preview-sender">${sender}</span> <span class="reply-preview-text">${truncated}</span></div><button class="reply-preview-close">&times;</button>`;
+        preview.classList.remove('hidden');
+        preview.querySelector('.reply-preview-close').addEventListener('click', () => this.clearReply());
+        document.getElementById('message')?.focus();
+    }
+
+    clearReply() {
+        this._replyTo = null;
+        const preview = document.getElementById('reply-preview');
+        if (preview) preview.classList.add('hidden');
+    }
+
+    getReplyTo() {
+        return this._replyTo;
+    }
+
     _setupEmojiPicker(msgEl, messageId) {
+        const actionBar = document.createElement('div');
+        actionBar.className = 'msg-action-bar';
+
+        const replyBtn = document.createElement('button');
+        replyBtn.className = 'msg-action-btn';
+        replyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 0 1-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 0 1 0 10.75H10.75a.75.75 0 0 1 0-1.5h2.875a3.875 3.875 0 0 0 0-7.75H3.622l4.146 3.957a.75.75 0 0 1-1.036 1.085l-5.5-5.25a.75.75 0 0 1 0-1.085l5.5-5.25a.75.75 0 0 1 1.06.025Z" clip-rule="evenodd" /></svg>';
+        replyBtn.title = 'Reply';
+        replyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const senderEl = msgEl.querySelector('.chat-sender');
+            const bodyEl = msgEl.querySelector('.chat-markdown');
+            const sender = senderEl ? senderEl.textContent : '?';
+            const text = bodyEl ? bodyEl.textContent : '';
+            this.setReplyTo(messageId, sender, text);
+        });
+        actionBar.appendChild(replyBtn);
+
         const btn = document.createElement('button');
-        btn.className = 'emoji-trigger';
+        btn.className = 'msg-action-btn';
         btn.textContent = '😀';
         btn.title = 'React';
-        msgEl.appendChild(btn);
+        actionBar.appendChild(btn);
+        msgEl.appendChild(actionBar);
 
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -687,7 +727,7 @@ export class UIController {
         return this._chatAvatarColors[Math.abs(hash) % this._chatAvatarColors.length];
     }
 
-    addChatMessage(sender, text, messageId) {
+    addChatMessage(sender, text, messageId, replyData) {
         const chatLog = document.getElementById('chat-log');
         const msgContainer = document.createElement('div');
         if (!messageId) messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
@@ -698,7 +738,27 @@ export class UIController {
         const isSelf = sender === 'Me';
         const initial = isSelf ? (localStorage.getItem('nickname') || 'Me').charAt(0).toUpperCase() : sender.charAt(0).toUpperCase();
         const color = isSelf ? '#22c55e' : this._colorForName(sender);
-        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${initial}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${sender}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="chat-markdown chat-body prose ml-7">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
+
+        let replyHtml = '';
+        if (replyData && replyData.sender && replyData.text) {
+            const rColor = replyData.sender === 'Me' ? '#22c55e' : this._colorForName(replyData.sender);
+            const rText = replyData.text.length > 80 ? replyData.text.substring(0, 80) + '...' : replyData.text;
+            replyHtml = `<div class="chat-reply-quote ml-7" data-reply-to="${replyData.messageId || ''}"><span class="chat-reply-sender" style="color:${rColor}">${replyData.sender}</span> ${rText}</div>`;
+        }
+
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${initial}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${sender}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}<div class="chat-markdown chat-body prose ml-7">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
+
+        const replyQuote = msgContainer.querySelector('.chat-reply-quote');
+        if (replyQuote) {
+            replyQuote.addEventListener('click', () => {
+                const target = document.querySelector(`[data-message-id="${replyQuote.dataset.replyTo}"]`);
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    target.querySelector('.chat-message')?.classList.add('chat-message-highlight');
+                    setTimeout(() => target.querySelector('.chat-message')?.classList.remove('chat-message-highlight'), 1500);
+                }
+            });
+        }
 
         const msg = msgContainer.querySelector('.chat-message');
         this._setupEmojiPicker(msg, messageId);

@@ -41,7 +41,7 @@ function connect() {
         if (msg.type === 'chat') {
             if (msg.from !== peerManager.peerId) {
                 const displayName = msg.nickname || msg.from;
-                ui.addChatMessage(displayName, msg.text, msg.messageId);
+                ui.addChatMessage(displayName, msg.text, msg.messageId, msg.replyTo || null);
                 ui.updateTypingIndicator(msg.from, false);
             }
         } else if (msg.type === 'reaction') {
@@ -198,8 +198,12 @@ function sendMessage() {
 
     if (text) {
         const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
-        socket.send(JSON.stringify({ type: 'chat', text, nickname, messageId }));
-        ui.addChatMessage('Me', text, messageId);
+        const reply = ui.getReplyTo();
+        const chatMsg = { type: 'chat', text, nickname, messageId };
+        if (reply) chatMsg.replyTo = { messageId: reply.messageId, sender: reply.sender, text: reply.text };
+        socket.send(JSON.stringify(chatMsg));
+        ui.addChatMessage('Me', text, messageId, reply);
+        ui.clearReply();
         input.value = '';
     }
     clearTimeout(typingTimer);

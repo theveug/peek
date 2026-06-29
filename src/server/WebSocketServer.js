@@ -94,7 +94,7 @@ export function setupWebSocket(wss, turnConfig, manager) {
                     peers.forEach(pid => {
                         const socket = manager.getPeerSocket(pid);
                         if (socket) {
-                            socket.send(JSON.stringify({ type: 'chat', from: peerId, text, nickname, messageId }));
+                            socket.send(JSON.stringify({ type: 'chat', from: peerId, text, nickname, messageId, replyTo: msg.replyTo || null }));
                         }
                     });
                     break;
