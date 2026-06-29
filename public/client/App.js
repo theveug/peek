@@ -99,10 +99,7 @@ document.getElementById('grid-button').addEventListener('click', () => {
 
 document.getElementById('mic-toggle').addEventListener('click', async () => {
     const enabled = await peerManager.toggleMic();
-    document.getElementById('mic-off-icon').classList.toggle('hidden', enabled);
-    document.getElementById('mic-on-icon').classList.toggle('hidden', !enabled);
-    document.getElementById('mic-toggle').title = enabled ? 'Mute Microphone' : 'Unmute Microphone';
-    if (peerManager.peerId) ui.updateParticipantMic(peerManager.peerId, enabled);
+    updateMicUI(enabled);
 });
 
 document.getElementById('deafen-toggle').addEventListener('click', () => {
@@ -246,6 +243,7 @@ function openSettings() {
     document.getElementById('settings-volume-value').textContent = `${Math.round(vol * 100)}%`;
     settingsModal.classList.remove('hidden');
     highlightCurrentStatus();
+    highlightMicMode();
 }
 
 function closeSettings() {
@@ -296,6 +294,113 @@ function highlightCurrentStatus() {
         b.classList.toggle('ring-indigo-500', b.dataset.status === current);
     });
 }
+
+// --- Mic mode & keybinds ---
+let micMode = localStorage.getItem('micMode') || 'toggle';
+let micKeybind = localStorage.getItem('micKeybind') || '';
+let keybindListening = false;
+
+function updateMicUI(enabled) {
+    document.getElementById('mic-off-icon').classList.toggle('hidden', enabled);
+    document.getElementById('mic-on-icon').classList.toggle('hidden', !enabled);
+    document.getElementById('mic-toggle').title = enabled ? 'Mute Microphone' : 'Unmute Microphone';
+    if (peerManager.peerId) ui.updateParticipantMic(peerManager.peerId, enabled);
+}
+
+function highlightMicMode() {
+    const keybindRow = document.getElementById('keybind-row');
+    document.querySelectorAll('.mic-mode-pick').forEach(b => {
+        const active = b.dataset.micMode === micMode;
+        b.classList.toggle('ring-1', active);
+        b.classList.toggle('ring-indigo-500', active);
+    });
+    if (keybindRow) keybindRow.classList.toggle('hidden', micMode === 'toggle');
+    const keybindInput = document.getElementById('settings-keybind');
+    if (keybindInput) keybindInput.value = micKeybind || '';
+}
+
+document.querySelectorAll('.mic-mode-pick').forEach(btn => {
+    btn.addEventListener('click', () => {
+        micMode = btn.dataset.micMode;
+        localStorage.setItem('micMode', micMode);
+        highlightMicMode();
+    });
+});
+
+const keybindInput = document.getElementById('settings-keybind');
+if (keybindInput) {
+    keybindInput.addEventListener('click', () => {
+        keybindListening = true;
+        keybindInput.value = 'Press a key...';
+        keybindInput.classList.add('ring-1', 'ring-indigo-500');
+    });
+
+    keybindInput.addEventListener('keydown', (e) => {
+        if (!keybindListening) return;
+        e.preventDefault();
+        e.stopPropagation();
+        micKeybind = e.code;
+        localStorage.setItem('micKeybind', micKeybind);
+        keybindInput.value = e.code;
+        keybindInput.classList.remove('ring-1', 'ring-indigo-500');
+        keybindListening = false;
+    });
+
+    keybindInput.addEventListener('blur', () => {
+        if (keybindListening) {
+            keybindInput.value = micKeybind || '';
+            keybindInput.classList.remove('ring-1', 'ring-indigo-500');
+            keybindListening = false;
+        }
+    });
+}
+
+const keybindClear = document.getElementById('keybind-clear');
+if (keybindClear) {
+    keybindClear.addEventListener('click', () => {
+        micKeybind = '';
+        localStorage.setItem('micKeybind', '');
+        if (keybindInput) keybindInput.value = '';
+    });
+}
+
+// Push-to-talk / push-to-mute keydown/keyup
+window.addEventListener('keydown', (e) => {
+    if (keybindListening) return;
+    if (!micKeybind || e.code !== micKeybind) return;
+    if (e.repeat) return;
+    const focused = document.activeElement;
+    if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
+
+    if (micMode === 'push-to-talk') {
+        if (!peerManager.micStream) {
+            peerManager.toggleMic().then(enabled => updateMicUI(enabled));
+        } else if (!peerManager.micEnabled) {
+            peerManager.toggleMic().then(enabled => updateMicUI(enabled));
+        }
+    } else if (micMode === 'push-to-mute') {
+        if (peerManager.micEnabled) {
+            peerManager.toggleMic().then(enabled => updateMicUI(enabled));
+        }
+    }
+});
+
+window.addEventListener('keyup', (e) => {
+    if (keybindListening) return;
+    if (!micKeybind || e.code !== micKeybind) return;
+    const focused = document.activeElement;
+    if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
+
+    if (micMode === 'push-to-talk') {
+        if (peerManager.micEnabled) {
+            peerManager.toggleMic().then(enabled => updateMicUI(enabled));
+        }
+    } else if (micMode === 'push-to-mute') {
+        if (!peerManager.micEnabled && peerManager.micStream) {
+            peerManager.toggleMic().then(enabled => updateMicUI(enabled));
+        }
+    }
+});
 
 const shareButton = document.getElementById('share-button');
 if (shareButton) {

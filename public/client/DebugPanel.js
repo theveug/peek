@@ -20,17 +20,6 @@ export class DebugPanel {
         `;
         document.body.appendChild(this.panel);
 
-        const btn = document.createElement('button');
-        btn.textContent = 'DBG';
-        btn.style.cssText = `
-            position: fixed; top: 10px; right: 10px; z-index: 10000;
-            background: rgba(0,0,0,0.7); color: #0f0; font-family: monospace;
-            font-size: 11px; padding: 4px 8px; border-radius: 4px;
-            border: 1px solid #333; cursor: pointer;
-        `;
-        btn.addEventListener('click', () => this.toggle());
-        document.body.appendChild(btn);
-
         document.addEventListener('keydown', (e) => {
             if (e.key === 'F2') {
                 this.toggle();

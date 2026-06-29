@@ -276,6 +276,22 @@
                         <label for="settings-max-messages" class="block mb-1 text-sm text-muted">Max Chat Messages</label>
                         <input type="number" id="settings-max-messages" class="w-24 p-2 surface-input rounded text-sm" min="10" max="500" />
                     </div>
+                    <div class="border-t border-separator pt-4">
+                        <label class="block mb-2 text-sm text-muted font-medium">Mic Mode</label>
+                        <div class="flex gap-2 mb-3">
+                            <button type="button" data-mic-mode="toggle" class="mic-mode-pick flex-1 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all text-center">Toggle</button>
+                            <button type="button" data-mic-mode="push-to-talk" class="mic-mode-pick flex-1 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all text-center">Push to Talk</button>
+                            <button type="button" data-mic-mode="push-to-mute" class="mic-mode-pick flex-1 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all text-center">Push to Mute</button>
+                        </div>
+                        <div id="keybind-row" class="hidden">
+                            <label class="block mb-1 text-sm text-muted">Keybind</label>
+                            <div class="flex items-center gap-2">
+                                <input type="text" id="settings-keybind" readonly class="w-full p-2 surface-input rounded text-sm text-center cursor-pointer" placeholder="Click then press a key..." />
+                                <button type="button" id="keybind-clear" class="text-xs text-muted hover:text-foreground px-2 py-1">&times;</button>
+                            </div>
+                            <p class="text-[10px] text-muted mt-1">Click the field, then press the key you want to bind.</p>
+                        </div>
+                    </div>
                     <div class="flex gap-3 pt-2">
                         <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded text-sm">Save</button>
                         <button type="button" id="cancel-settings" class="surface-input hover:opacity-80 px-4 py-2 rounded text-sm">Cancel</button>
