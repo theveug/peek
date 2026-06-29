@@ -8,6 +8,8 @@ export class PeerManager {
         this.peerId = null;
         this.isSharing = false;
         this.iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+        this.micStream = null;
+        this.micEnabled = false;
     }
 
     async handleSignal({ type, peerId, peers, from, payload, iceServers }) {
@@ -143,6 +145,49 @@ export class PeerManager {
         await track.applyConstraints(constraints);
     }
 
+    async toggleMic() {
+        if (this.micEnabled) {
+            this.muteMic();
+        } else {
+            await this.unmuteMic();
+        }
+        return this.micEnabled;
+    }
+
+    async unmuteMic() {
+        try {
+            this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const audioTrack = this.micStream.getAudioTracks()[0];
+            this.micEnabled = true;
+
+            for (const [peerId, pc] of Object.entries(this.peers)) {
+                pc.addTrack(audioTrack, this.micStream);
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                this.send('offer', peerId, offer);
+            }
+        } catch (err) {
+            console.warn('Mic access denied:', err);
+        }
+    }
+
+    muteMic() {
+        if (this.micStream) {
+            this.micStream.getTracks().forEach(t => t.stop());
+            this.micStream = null;
+        }
+
+        Object.values(this.peers).forEach(pc => {
+            pc.getSenders().forEach(sender => {
+                if (sender.track && sender.track.kind === 'audio') {
+                    pc.removeTrack(sender);
+                }
+            });
+        });
+
+        this.micEnabled = false;
+    }
+
     stopSharing() {
         if (this.stream) {
             this.stream.getTracks().forEach(track => track.stop());
@@ -167,8 +212,12 @@ export class PeerManager {
         };
 
         pc.ontrack = (e) => {
-            const stream = e.streams[0] || new MediaStream([e.track]);
-            this.ui.addStream(remotePeerId, stream);
+            if (e.track.kind === 'audio') {
+                this.ui.addAudio(remotePeerId, e.track);
+            } else {
+                const stream = e.streams[0] || new MediaStream([e.track]);
+                this.ui.addStream(remotePeerId, stream);
+            }
         };
 
         pc.onconnectionstatechange = () => {
@@ -190,6 +239,12 @@ export class PeerManager {
             pc.addTransceiver('video', { direction: 'recvonly' });
         }
 
+        if (this.micStream) {
+            this.micStream.getTracks().forEach(track => pc.addTrack(track, this.micStream));
+        } else {
+            pc.addTransceiver('audio', { direction: 'recvonly' });
+        }
+
         pc.createOffer()
             .then(offer => pc.setLocalDescription(offer))
             .then(() => {
@@ -207,9 +262,16 @@ export class PeerManager {
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
         if (this.stream) {
-            const hasSender = pc.getSenders().some(s => s.track);
-            if (!hasSender) {
+            const hasVideoSender = pc.getSenders().some(s => s.track && s.track.kind === 'video');
+            if (!hasVideoSender) {
                 this.stream.getTracks().forEach(track => pc.addTrack(track, this.stream));
+            }
+        }
+
+        if (this.micStream) {
+            const hasAudioSender = pc.getSenders().some(s => s.track && s.track.kind === 'audio');
+            if (!hasAudioSender) {
+                this.micStream.getTracks().forEach(track => pc.addTrack(track, this.micStream));
             }
         }
 

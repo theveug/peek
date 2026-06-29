@@ -146,6 +146,26 @@ export class UIController {
 
     removePeer(peerId) {
         playSound('peerLeft');
+        this.removeAudio(peerId);
+    }
+
+    addAudio(peerId, track) {
+        let audio = document.getElementById(`audio-${peerId}`);
+        if (!audio) {
+            audio = document.createElement('audio');
+            audio.id = `audio-${peerId}`;
+            audio.autoplay = true;
+            document.body.appendChild(audio);
+        }
+        audio.srcObject = new MediaStream([track]);
+    }
+
+    removeAudio(peerId) {
+        const audio = document.getElementById(`audio-${peerId}`);
+        if (audio) {
+            audio.srcObject = null;
+            audio.remove();
+        }
     }
 
     addStream(peerId, stream) {
@@ -292,6 +312,7 @@ export class UIController {
 
     removeStream(peerId) {
         delete this.streams[peerId];
+        this.removeAudio(peerId);
 
         if (peerId === 'me') {
             const selfView = document.getElementById('self-view');

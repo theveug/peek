@@ -81,6 +81,12 @@ document.getElementById('grid-button').addEventListener('click', () => {
     ui.toggleViewMode();
 });
 
+document.getElementById('mic-toggle').addEventListener('click', async () => {
+    const enabled = await peerManager.toggleMic();
+    document.getElementById('mic-off-icon').classList.toggle('hidden', enabled);
+    document.getElementById('mic-on-icon').classList.toggle('hidden', !enabled);
+});
+
 const handleFocusChange = () => {
     const blurred = document.hidden || !document.hasFocus();
     ui.handleVisibilityChange(blurred);
