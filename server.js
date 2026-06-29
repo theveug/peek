@@ -16,20 +16,17 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+const turnConfig = (process.env.TURN_URL && process.env.TURN_SECRET)
+    ? { url: process.env.TURN_URL, secret: process.env.TURN_SECRET }
+    : null;
 
-if (process.env.TURN_URL && process.env.TURN_SECRET) {
-    iceServers.push({
-        urls: [process.env.TURN_URL, `${process.env.TURN_URL}?transport=tcp`],
-        username: 'peek',
-        credential: process.env.TURN_SECRET,
-    });
-    Debug.log('TURN server configured:', process.env.TURN_URL);
+if (turnConfig) {
+    Debug.log('TURN server configured:', turnConfig.url);
 } else {
     Debug.log('No TURN server configured — STUN only');
 }
 
-setupWebSocket(wss, iceServers);
+setupWebSocket(wss, turnConfig);
 
 const activeSessions = new Set();
 

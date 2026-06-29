@@ -1,10 +1,32 @@
 // --- src/server/WebSocketServer.js ---
 import { v4 as uuidv4 } from 'uuid';
+import { createHmac } from 'crypto';
 import { SessionManager } from './SessionManager.js';
 
 const manager = new SessionManager();
 
-export function setupWebSocket(wss, iceServers) {
+function generateIceServers(turnConfig) {
+    const servers = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+    if (turnConfig) {
+        const ttl = 24 * 60 * 60;
+        const expiry = Math.floor(Date.now() / 1000) + ttl;
+        const username = `${expiry}:peek`;
+        const credential = createHmac('sha1', turnConfig.secret)
+            .update(username)
+            .digest('base64');
+
+        servers.push({
+            urls: [turnConfig.url, `${turnConfig.url}?transport=tcp`],
+            username,
+            credential,
+        });
+    }
+
+    return servers;
+}
+
+export function setupWebSocket(wss, turnConfig) {
     wss.on('connection', (ws) => {
         const peerId = uuidv4();
 
@@ -25,6 +47,7 @@ export function setupWebSocket(wss, iceServers) {
                     const peers = manager.getPeersInSession(sessionId).filter(p => p !== peerId);
 
                     // Notify new peer of their ID and existing peers
+                    const iceServers = generateIceServers(turnConfig);
                     ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers }));
 
                     // Notify others of new peer
