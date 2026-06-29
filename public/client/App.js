@@ -2,6 +2,11 @@
 import { PeerManager } from './PeerManager.js';
 import { UIController } from './UIController.js';
 import { DebugPanel } from './DebugPanel.js';
+import { initGradientBackground } from './GradientBackground.js';
+import { initTheme } from './ThemeManager.js';
+
+initTheme();
+initGradientBackground();
 
 const sessionId = location.pathname.split('/').pop();
 const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -99,13 +104,13 @@ document.getElementById('mic-toggle').addEventListener('click', async () => {
     document.getElementById('mic-toggle').title = enabled ? 'Mute Microphone' : 'Unmute Microphone';
 });
 
-let deafened = false;
 document.getElementById('deafen-toggle').addEventListener('click', () => {
-    deafened = !deafened;
-    document.querySelectorAll('audio').forEach(a => { a.muted = deafened; });
-    document.getElementById('deafen-off-icon').classList.toggle('hidden', deafened);
-    document.getElementById('deafen-on-icon').classList.toggle('hidden', !deafened);
-    document.getElementById('deafen-toggle').title = deafened ? 'Undeafen' : 'Deafen';
+    peerManager.deafened = !peerManager.deafened;
+    document.querySelectorAll('audio').forEach(a => { a.muted = peerManager.deafened; });
+    document.getElementById('deafen-off-icon').classList.toggle('hidden', peerManager.deafened);
+    document.getElementById('deafen-on-icon').classList.toggle('hidden', !peerManager.deafened);
+    document.getElementById('deafen-toggle').title = peerManager.deafened ? 'Undeafen' : 'Deafen';
+    peerManager.broadcastDeafenStatus();
 });
 
 const handleFocusChange = () => {
@@ -121,17 +126,66 @@ document.addEventListener('visibilitychange', handleFocusChange);
 const chatButton = document.getElementById('togglechat');
 chatButton.addEventListener('click', () => {
     const chatBox = document.getElementById('chat');
+    const handle = document.getElementById('chat-resize-handle');
     if (chatBox) {
         const isHidden = chatBox.classList.toggle('hidden');
+        if (handle) handle.style.display = isHidden ? 'none' : '';
         localStorage.setItem('chatHidden', isHidden ? '1' : '0');
     }
 });
 
 const chatBox = document.getElementById('chat');
+const chatHandle = document.getElementById('chat-resize-handle');
 if (localStorage.getItem('chatHidden') === '1') {
     chatBox.classList.add('hidden');
+    if (chatHandle) chatHandle.style.display = 'none';
 } else {
     chatBox.classList.remove('hidden');
+}
+
+// Resizable chat panel (width persists to localStorage)
+(function initChatResize() {
+    const handle = document.getElementById('chat-resize-handle');
+    const chat = document.getElementById('chat');
+    if (!handle || !chat) return;
+    const savedW = localStorage.getItem('chatWidth');
+    if (savedW) chat.style.width = savedW + 'px';
+    let startX, startW;
+    handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        startX = e.clientX;
+        startW = chat.offsetWidth;
+        handle.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        const onMove = (e) => {
+            const w = Math.max(240, Math.min(window.innerWidth * 0.5, startW + (e.clientX - startX)));
+            chat.style.width = w + 'px';
+        };
+        const onUp = () => {
+            handle.classList.remove('active');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            localStorage.setItem('chatWidth', chat.offsetWidth);
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    });
+})();
+
+// Members sidebar toggle
+const membersToggle = document.getElementById('toggle-members');
+const membersSidebar = document.getElementById('members-sidebar');
+if (membersToggle && membersSidebar) {
+    if (localStorage.getItem('membersHidden') === '1') {
+        membersSidebar.classList.add('collapsed');
+    }
+    membersToggle.addEventListener('click', () => {
+        const collapsed = membersSidebar.classList.toggle('collapsed');
+        localStorage.setItem('membersHidden', collapsed ? '1' : '0');
+    });
 }
 
 // --- Settings modal ---

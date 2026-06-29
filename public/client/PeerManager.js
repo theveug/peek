@@ -10,6 +10,7 @@ export class PeerManager {
         this.iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
         this.micStream = null;
         this.micEnabled = false;
+        this.deafened = false;
     }
 
     async handleSignal({ type, peerId, peers, from, payload, iceServers }) {
@@ -29,6 +30,10 @@ export class PeerManager {
                         this.initiateConnection(id);
                     }
                 });
+                setTimeout(() => {
+                    this.broadcastMicStatus();
+                    this.broadcastDeafenStatus();
+                }, 500);
                 break;
 
             case 'peer-joined':
@@ -36,6 +41,8 @@ export class PeerManager {
                     this.initiateConnection(peerId);
                     this.ui.addPeer(peerId);
                 }
+                this.broadcastMicStatus();
+                this.broadcastDeafenStatus();
                 break;
 
             case 'offer':
@@ -61,6 +68,10 @@ export class PeerManager {
 
             case 'mic-status':
                 this.ui.updateParticipantMic(from, payload.enabled);
+                break;
+
+            case 'deafen-status':
+                this.ui.updateParticipantDeafen(from, payload.deafened);
                 break;
         }
         // console.groupEnd();
@@ -179,6 +190,10 @@ export class PeerManager {
 
     broadcastMicStatus() {
         this.send('mic-status', null, { enabled: this.micEnabled });
+    }
+
+    broadcastDeafenStatus() {
+        this.send('deafen-status', null, { deafened: this.deafened || false });
     }
 
     stopSharing() {

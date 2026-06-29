@@ -155,24 +155,67 @@ export class UIController {
         const container = document.getElementById('participants');
         if (document.getElementById(`participant-${peerId}`)) return;
 
-        const el = document.createElement('div');
-        el.id = `participant-${peerId}`;
-        el.className = 'relative flex items-center justify-center w-10 h-10 rounded-full bg-neutral-800 border-2 border-neutral-600 text-white text-xs font-bold select-none';
-        el.title = peerId.substring(0, 8);
-        el.textContent = peerId.substring(0, 2).toUpperCase();
+        const card = document.createElement('div');
+        card.id = `participant-${peerId}`;
+        card.className = 'participant-card';
+
+        const avatarWrap = document.createElement('div');
+        avatarWrap.className = 'relative flex-shrink-0';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'flex items-center justify-center w-9 h-9 rounded-full bg-indigo-600/30 border-2 border-indigo-500/40 text-white text-xs font-bold select-none';
+        avatar.textContent = peerId.substring(0, 2).toUpperCase();
 
         const micDot = document.createElement('div');
-        micDot.className = 'participant-mic absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[8px]';
+        micDot.className = 'participant-mic absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center border-2 border-neutral-900';
         micDot.style.cssText = 'background:#ef4444; color:white;';
-        micDot.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-2.5 h-2.5"><path d="M7.22 3.22a.75.75 0 0 1 1.06 0L12 6.94l3.72-3.72a.75.75 0 1 1 1.06 1.06L13.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L12 9.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06L10.94 8 7.22 4.28a.75.75 0 0 1 0-1.06Z" /></svg>`;
+        micDot.innerHTML = this._micOffSvg();
 
-        el.appendChild(micDot);
-        container.appendChild(el);
+        avatarWrap.appendChild(avatar);
+        avatarWrap.appendChild(micDot);
+
+        const info = document.createElement('div');
+        info.className = 'flex flex-col min-w-0';
+
+        const name = document.createElement('span');
+        name.className = 'participant-name text-sm font-medium text-neutral-200 truncate';
+        name.textContent = peerId.substring(0, 8);
+
+        const status = document.createElement('div');
+        status.className = 'participant-status-icons flex items-center gap-1 mt-0.5';
+
+        const micLabel = document.createElement('span');
+        micLabel.className = 'participant-mic-label text-[10px] text-neutral-500';
+        micLabel.textContent = 'Muted';
+        status.appendChild(micLabel);
+
+        info.appendChild(name);
+        info.appendChild(status);
+
+        card.appendChild(avatarWrap);
+        card.appendChild(info);
+        container.appendChild(card);
+        this._updateMemberCount();
     }
 
     removeParticipant(peerId) {
         const el = document.getElementById(`participant-${peerId}`);
         if (el) el.remove();
+        this._updateMemberCount();
+    }
+
+    _updateMemberCount() {
+        const count = document.getElementById('participants')?.children.length || 0;
+        const el = document.getElementById('member-count');
+        if (el) el.textContent = count;
+    }
+
+    _micOnSvg() {
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-2.5 h-2.5"><path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 1 1-6 0V4Z" /><path d="M5.5 9.643a.75.75 0 0 1 .75.75v.357a3.75 3.75 0 0 0 7.5 0v-.357a.75.75 0 0 1 1.5 0v.357a5.25 5.25 0 0 1-4.5 5.196V17.5a.75.75 0 0 1-1.5 0v-1.554a5.25 5.25 0 0 1-4.5-5.196v-.357a.75.75 0 0 1 .75-.75Z" /></svg>`;
+    }
+
+    _micOffSvg() {
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-2.5 h-2.5"><path d="M7.22 3.22a.75.75 0 0 1 1.06 0L12 6.94l3.72-3.72a.75.75 0 1 1 1.06 1.06L13.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L12 9.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06L10.94 8 7.22 4.28a.75.75 0 0 1 0-1.06Z" /></svg>`;
     }
 
     updateParticipantMic(peerId, enabled) {
@@ -182,13 +225,47 @@ export class UIController {
             el = document.getElementById(`participant-${peerId}`);
         }
         const dot = el.querySelector('.participant-mic');
+        const label = el.querySelector('.participant-mic-label');
+        const avatar = el.querySelector('.flex-shrink-0 > div:first-child');
         if (enabled) {
             dot.style.background = '#22c55e';
-            dot.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-2.5 h-2.5"><path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 1 1-6 0V4Z" /><path d="M5.5 9.643a.75.75 0 0 1 .75.75v.357a3.75 3.75 0 0 0 7.5 0v-.357a.75.75 0 0 1 1.5 0v.357a5.25 5.25 0 0 1-4.5 5.196V17.5a.75.75 0 0 1-1.5 0v-1.554a5.25 5.25 0 0 1-4.5-5.196v-.357a.75.75 0 0 1 .75-.75Z" /></svg>`;
+            dot.innerHTML = this._micOnSvg();
+            if (label) label.textContent = 'Unmuted';
+            if (avatar) avatar.classList.add('status-talking');
         } else {
             dot.style.background = '#ef4444';
-            dot.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-2.5 h-2.5"><path d="M7.22 3.22a.75.75 0 0 1 1.06 0L12 6.94l3.72-3.72a.75.75 0 1 1 1.06 1.06L13.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L12 9.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06L10.94 8 7.22 4.28a.75.75 0 0 1 0-1.06Z" /></svg>`;
+            dot.innerHTML = this._micOffSvg();
+            if (label) label.textContent = 'Muted';
+            if (avatar) avatar.classList.remove('status-talking');
         }
+    }
+
+    updateParticipantDeafen(peerId, deafened) {
+        let el = document.getElementById(`participant-${peerId}`);
+        if (!el) return;
+        const status = el.querySelector('.participant-status-icons');
+        let deafIcon = el.querySelector('.participant-deafen-icon');
+        if (deafened) {
+            if (!deafIcon) {
+                deafIcon = document.createElement('span');
+                deafIcon.className = 'participant-deafen-icon';
+                deafIcon.title = 'Deafened';
+                deafIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3 text-red-400"><path d="M10.047 3.062a.75.75 0 0 1 .453.688v12.5a.75.75 0 0 1-1.264.546L5.203 13H2.667a.75.75 0 0 1-.7-.48A6.985 6.985 0 0 1 1.5 10c0-.622.082-1.225.234-1.798a.75.75 0 0 1 .467-.512L5.203 7l4.033-3.796a.75.75 0 0 1 .811-.142ZM13.78 7.22a.75.75 0 1 0-1.06 1.06L14.44 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 1 0 1.06-1.06L16.56 10l1.72-1.72a.75.75 0 1 0-1.06-1.06l-1.72 1.72-1.72-1.72Z" /></svg>`;
+                status.appendChild(deafIcon);
+            }
+        } else {
+            if (deafIcon) deafIcon.remove();
+        }
+    }
+
+    updateParticipantNickname(peerId, nickname) {
+        let el = document.getElementById(`participant-${peerId}`);
+        if (!el) {
+            this.addParticipant(peerId);
+            el = document.getElementById(`participant-${peerId}`);
+        }
+        const nameEl = el.querySelector('.participant-name');
+        if (nameEl && nickname) nameEl.textContent = nickname;
     }
 
     addAudio(peerId, track) {
@@ -249,7 +326,7 @@ export class UIController {
 
         const raw = marked.parse(text);
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        msgContainer.innerHTML = `<div class="p-2 hover:bg-neutral-950 text-sm"><div class="flex justify-between"><span class="text-blue-600">${sender}:</span><span class="text-neutral-700 text-xs">${timestamp}</span></div><div class="chat-markdown prose prose-invert">${raw}</div></div>`;
+        msgContainer.innerHTML = `<div class="px-4 py-2 hover:bg-white/2 text-sm transition-colors"><div class="flex justify-between items-baseline mb-0.5"><span class="font-medium text-indigo-400 text-xs">${sender}</span><span class="text-neutral-600 text-[10px]">${timestamp}</span></div><div class="chat-markdown prose prose-invert text-neutral-300">${raw}</div></div>`;
         chatLog.appendChild(msgContainer);
 
         while (chatLog.children.length > this.maxMessages) {

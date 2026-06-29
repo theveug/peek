@@ -6,23 +6,33 @@
         <title>Peek - Screen Share</title>
         <link rel="stylesheet" href="/assets/style.css" />
     </head>
-    <body class="bg-black">
-        <div class="flex flex-col h-screen max-h-screen overflow-hidden">
-            <div class="flex-grow flex h-full text-white">
+    <body class="dark">
+        <!-- Animated gradient background -->
+        <canvas id="gradient-canvas"></canvas>
+
+        <div class="flex flex-col h-screen max-h-screen overflow-hidden relative z-10">
+            <div class="flex-grow flex h-full text-foreground">
                 <div
-                    class="w-1/3 bg-neutral-900 flex flex-col h-full"
+                    class="chat-panel surface-glass flex flex-col h-full border-r border-separator"
                     id="chat">
+                    <div class="flex items-center px-4 py-3 border-b border-separator">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 text-muted mr-2">
+                            <path fill-rule="evenodd" d="M10 3c-4.31 0-8 3.033-8 7 0 2.024.978 3.825 2.499 5.085a3.478 3.478 0 0 1-.522 1.756.75.75 0 0 0 .584 1.143 5.976 5.976 0 0 0 3.243-1.053c.7.138 1.44.213 2.196.213 4.31 0 8-3.033 8-7s-3.69-7-8-7Z" clip-rule="evenodd" />
+                        </svg>
+                        <span class="text-sm font-medium text-muted">Chat</span>
+                    </div>
                     <div class="flex-1 overflow-auto" id="chat-log"></div>
-                    <div class="flex flex-col min-h-24">
-                        <div class="p-2" id="chat-input">
+                    <div class="flex flex-col border-t border-separator">
+                        <div class="p-3" id="chat-input">
                             <textarea
                                 id="message"
                                 rows="2"
                                 placeholder="Type a message..."
-                                class="w-full p-2 resize-none bg-neutral-800 rounded"></textarea>
+                                class="w-full p-3 resize-none surface-input rounded-lg text-sm placeholder-muted focus:outline-none focus:ring-1 focus:ring-indigo-500/50 transition-all"></textarea>
                         </div>
                     </div>
                 </div>
+                <div id="chat-resize-handle" class="chat-resize-handle"></div>
 
                 <div
                     class="flex-grow flex flex-col items-center justify-center relative overflow-hidden"
@@ -60,14 +70,13 @@
                             transform="translate(12, 12) scale(0)" />
                     </svg>
 
-                    <div id="participants" class="absolute bottom-16 left-1/2 transform -translate-x-1/2 flex gap-2 z-50"></div>
                     <div
                         id="controls"
-                        class="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-neutral-900 py-2 px-4 gap-4 rounded-full text-white flex z-50">
+                        class="absolute bottom-4 left-1/2 transform -translate-x-1/2 controls-glass py-2.5 px-5 gap-3 rounded-2xl text-foreground flex z-50 shadow-2xl">
                         <button
                             id="share-toggle"
                             title="Start sharing"
-                            class="rounded-full p-2 flex align-middle items-center justify-center hover:bg-white hover:text-black">
+                            class="rounded-full p-2 flex align-middle items-center justify-center hover:bg-white/10 transition-colors">
                             <svg id="share-play-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
                                 <path fill-rule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z" clip-rule="evenodd" />
                             </svg>
@@ -78,7 +87,7 @@
                         <button
                             id="mic-toggle"
                             title="Unmute Microphone"
-                            class="rounded-full p-2 flex align-middle items-center justify-center hover:bg-white hover:text-black">
+                            class="rounded-full p-2 flex align-middle items-center justify-center hover:bg-white/10 transition-colors">
                             <!-- Mic off (slashed) -->
                             <svg id="mic-off-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
                                 <path d="M1.5 1.5l21 21M10.34 3.66A3.75 3.75 0 0 1 15.75 6v3.09l-5.41-5.43ZM8.25 6.57V6a3.75 3.75 0 0 1 .19-1.18L4.6 1l-.85.85 3.48 3.48A5.96 5.96 0 0 0 6 9v3a6 6 0 0 0 9.35 4.97l1.42 1.42A7.48 7.48 0 0 1 12 20.25 7.5 7.5 0 0 1 4.5 12.75v-1.5a.75.75 0 0 1 1.5 0v1.5a6 6 0 0 0 2.25 4.68V6.57ZM12 17.25a3.75 3.75 0 0 1-3.75-3.75V9.82l7.13 7.13a3.73 3.73 0 0 1-3.38 2.3ZM18.75 11.25a.75.75 0 0 1 .75.75v.75a7.46 7.46 0 0 1-1.15 3.99l-1.1-1.1A5.96 5.96 0 0 0 18 12.75v-.75a.75.75 0 0 1 .75-.75ZM12 22.5a.75.75 0 0 1-.75-.75v-2.26a.75.75 0 0 1 1.5 0v2.26a.75.75 0 0 1-.75.75Z" />
@@ -92,7 +101,7 @@
                         <button
                             id="deafen-toggle"
                             title="Deafen"
-                            class="rounded-full p-2 flex align-middle items-center justify-center hover:bg-white hover:text-black">
+                            class="rounded-full p-2 flex align-middle items-center justify-center hover:bg-white/10 transition-colors">
                             <!-- Speaker on -->
                             <svg id="deafen-off-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
                                 <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM18.584 5.106a.75.75 0 0 1 1.06 0c3.808 3.807 3.808 9.98 0 13.788a.75.75 0 0 1-1.06-1.06 8.25 8.25 0 0 0 0-11.668.75.75 0 0 1 0-1.06Z" />
@@ -103,11 +112,12 @@
                                 <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM17.78 9.22a.75.75 0 1 0-1.06 1.06L18.44 12l-1.72 1.72a.75.75 0 1 0 1.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 1 0 1.06-1.06L20.56 12l1.72-1.72a.75.75 0 1 0-1.06-1.06l-1.72 1.72-1.72-1.72Z" />
                             </svg>
                         </button>
+                        <div class="w-px h-6 bg-white/10"></div>
                         <div class="flex items-center">
                             <button
                                 id="togglechat"
                                 title="Toggle Chat"
-                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white hover:text-black">
+                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white/10 transition-colors">
                                 <div
                                     id="new-message-indicator"
                                     class="w-3 h-3 bg-red-600 absolute -top-1 -right-1 rounded-full hidden"></div>
@@ -125,11 +135,23 @@
                                 </svg>
                             </button>
                         </div>
+                        <div class="flex items-center">
+                            <button
+                                id="toggle-members"
+                                title="Toggle Members"
+                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white/10 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                                    <path d="M8.25 6.75a3.75 3.75 0 1 1 7.5 0 3.75 3.75 0 0 1-7.5 0ZM15.75 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM2.25 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM6.31 15.117A6.745 6.745 0 0 1 12 12a6.745 6.745 0 0 1 6.709 7.498.75.75 0 0 1-.372.568A12.696 12.696 0 0 1 12 21.75c-2.305 0-4.47-.612-6.337-1.684a.75.75 0 0 1-.372-.568 6.787 6.787 0 0 1 1.019-4.38Z" />
+                                    <path d="M5.082 14.254a8.287 8.287 0 0 0-1.308 5.135 9.687 9.687 0 0 1-1.764-.44l-.115-.04a.563.563 0 0 1-.373-.487l-.01-.121a3.75 3.75 0 0 1 3.57-4.047ZM20.226 19.389a8.287 8.287 0 0 0-1.308-5.135 3.75 3.75 0 0 1 3.57 4.047l-.01.121a.563.563 0 0 1-.373.486l-.115.04c-.567.2-1.156.349-1.764.441Z" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="w-px h-6 bg-white/10"></div>
                         <div class="flex items-center" id="grid-toggle" style="display:none;">
                             <button
                                 id="grid-button"
                                 title="Toggle Grid View"
-                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white hover:text-black">
+                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white/10 transition-colors">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
                                     <path fill-rule="evenodd" d="M3 6a3 3 0 0 1 3-3h2.25a3 3 0 0 1 3 3v2.25a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6Zm9.75 0a3 3 0 0 1 3-3H18a3 3 0 0 1 3 3v2.25a3 3 0 0 1-3 3h-2.25a3 3 0 0 1-3-3V6ZM3 15.75a3 3 0 0 1 3-3h2.25a3 3 0 0 1 3 3V18a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-2.25Zm9.75 0a3 3 0 0 1 3-3H18a3 3 0 0 1 3 3V18a3 3 0 0 1-3 3h-2.25a3 3 0 0 1-3-3v-2.25Z" clip-rule="evenodd" />
                                 </svg>
@@ -138,7 +160,7 @@
                         <div class="flex items-center">
                             <button
                                 id="settings-button"
-                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white hover:text-black">
+                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white/10 transition-colors">
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
                                     viewBox="0 0 24 24"
@@ -154,7 +176,7 @@
                         <div class="flex items-center">
                             <button
                                 id="share-button"
-                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white hover:text-black">
+                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white/10 transition-colors">
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
                                     viewBox="0 0 24 24"
@@ -167,7 +189,31 @@
                                 </svg>
                             </button>
                         </div>
+                        <div class="flex items-center">
+                            <button
+                                id="theme-toggle"
+                                title="Toggle Light/Dark Mode"
+                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white/10 transition-colors">
+                                <!-- Sun icon (shown in dark mode) -->
+                                <svg id="theme-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                                    <path d="M12 2.25a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V3a.75.75 0 0 1 .75-.75ZM7.5 12a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM18.894 6.166a.75.75 0 0 0-1.06-1.06l-1.591 1.59a.75.75 0 1 0 1.06 1.061l1.591-1.59ZM21.75 12a.75.75 0 0 1-.75.75h-2.25a.75.75 0 0 1 0-1.5H21a.75.75 0 0 1 .75.75ZM17.834 18.894a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 1 0-1.061 1.06l1.59 1.591ZM12 18a.75.75 0 0 1 .75.75V21a.75.75 0 0 1-1.5 0v-2.25A.75.75 0 0 1 12 18ZM7.758 17.303a.75.75 0 0 0-1.061-1.06l-1.591 1.59a.75.75 0 0 0 1.06 1.061l1.591-1.59ZM6 12a.75.75 0 0 1-.75.75H3a.75.75 0 0 1 0-1.5h2.25A.75.75 0 0 1 6 12ZM6.697 7.757a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 0 0-1.061 1.06l1.59 1.591Z" />
+                                </svg>
+                                <!-- Moon icon (shown in light mode) -->
+                                <svg id="theme-moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6 hidden">
+                                    <path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 0 1 .162.819A8.97 8.97 0 0 0 9 6a9 9 0 0 0 9 9 8.97 8.97 0 0 0 3.463-.69.75.75 0 0 1 .981.98 10.503 10.503 0 0 1-9.694 6.46c-5.799 0-10.5-4.7-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 0 1 .818.162Z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
+                </div>
+
+                <!-- Right sidebar: Active participants (Discord-style) -->
+                <div class="members-panel surface-glass flex flex-col h-full border-l border-separator" id="members-sidebar">
+                    <div class="flex items-center justify-between px-4 py-3 border-b border-separator">
+                        <span class="text-xs font-semibold text-muted uppercase tracking-wider">Online</span>
+                        <span id="member-count" class="text-xs text-muted font-mono">0</span>
+                    </div>
+                    <div class="flex-1 overflow-auto px-2 py-2" id="participants"></div>
                 </div>
             </div>
         </div>
@@ -175,35 +221,35 @@
         <!-- Settings Modal -->
         <div id="settings-modal" class="fixed inset-0 z-100 hidden">
             <div class="absolute inset-0 bg-black/70" id="settings-backdrop"></div>
-            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-neutral-900 text-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 surface-elevated text-foreground rounded-xl p-6 w-full max-w-md shadow-2xl border border-separator">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-xl font-bold">Settings</h2>
-                    <button id="close-settings" class="text-neutral-400 hover:text-white text-2xl leading-none">&times;</button>
+                    <button id="close-settings" class="text-muted hover:text-white text-2xl leading-none">&times;</button>
                 </div>
                 <form id="settings-form" class="space-y-4">
                     <div>
-                        <label for="settings-nickname" class="block mb-1 text-sm text-neutral-400">Nickname</label>
-                        <input type="text" id="settings-nickname" class="w-full p-2 rounded bg-neutral-800 text-white" />
+                        <label for="settings-nickname" class="block mb-1 text-sm text-muted">Nickname</label>
+                        <input type="text" id="settings-nickname" class="w-full p-2 rounded surface-input" />
                     </div>
                     <div class="flex items-center gap-2">
                         <input type="checkbox" id="settings-mute" class="accent-indigo-500" />
                         <label for="settings-mute" class="text-sm">Mute Sounds</label>
                     </div>
                     <div>
-                        <label for="settings-volume" class="block mb-1 text-sm text-neutral-400">Notification Volume</label>
+                        <label for="settings-volume" class="block mb-1 text-sm text-muted">Notification Volume</label>
                         <input id="settings-volume" type="range" min="0" max="1" step="0.01" class="w-full" />
-                        <p id="settings-volume-value" class="text-xs text-neutral-500">30%</p>
+                        <p id="settings-volume-value" class="text-xs text-muted">30%</p>
                     </div>
                     <div>
-                        <label class="block mb-1 text-sm text-neutral-400">Stream Quality</label>
+                        <label class="block mb-1 text-sm text-muted">Stream Quality</label>
                         <div class="flex gap-3">
-                            <select id="settings-res" class="p-2 bg-neutral-800 rounded text-sm">
+                            <select id="settings-res" class="p-2 surface-input rounded text-sm">
                                 <option value="1280x720">720p</option>
                                 <option value="1920x1080">1080p</option>
                                 <option value="2560x1440">1440p</option>
                                 <option value="source">Source</option>
                             </select>
-                            <select id="settings-fps" class="p-2 bg-neutral-800 rounded text-sm">
+                            <select id="settings-fps" class="p-2 surface-input rounded text-sm">
                                 <option value="10">10 FPS</option>
                                 <option value="15">15 FPS</option>
                                 <option value="30">30 FPS</option>
@@ -212,12 +258,12 @@
                         </div>
                     </div>
                     <div>
-                        <label for="settings-max-messages" class="block mb-1 text-sm text-neutral-400">Max Chat Messages</label>
-                        <input type="number" id="settings-max-messages" class="w-24 p-2 bg-neutral-800 rounded text-sm" min="10" max="500" />
+                        <label for="settings-max-messages" class="block mb-1 text-sm text-muted">Max Chat Messages</label>
+                        <input type="number" id="settings-max-messages" class="w-24 p-2 surface-input rounded text-sm" min="10" max="500" />
                     </div>
                     <div class="flex gap-3 pt-2">
                         <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded text-sm">Save</button>
-                        <button type="button" id="cancel-settings" class="bg-neutral-700 hover:bg-neutral-600 px-4 py-2 rounded text-sm">Cancel</button>
+                        <button type="button" id="cancel-settings" class="surface-input hover:opacity-80 px-4 py-2 rounded text-sm">Cancel</button>
                     </div>
                 </form>
             </div>

@@ -100,7 +100,8 @@ export function setupWebSocket(wss, turnConfig) {
                 }
 
                 case 'stop-sharing':
-                case 'mic-status': {
+                case 'mic-status':
+                case 'deafen-status': {
                     const sessionId = manager.getSessionId(peerId);
                     const peers = manager.getPeersInSession(sessionId).filter(id => id !== peerId);
                     peers.forEach(pid => {
