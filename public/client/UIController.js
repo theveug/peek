@@ -198,7 +198,7 @@ export class UIController {
             video.autoplay = true;
             video.playsInline = true;
             video.srcObject = this.streams[peerId];
-            video.className = `w-full h-full ${isCam ? 'object-cover' : 'object-contain'}`;
+            video.className = 'w-full h-full object-contain';
 
             cell.appendChild(video);
 
