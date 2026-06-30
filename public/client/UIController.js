@@ -516,7 +516,6 @@ export class UIController {
         }
 
         playSound('streamUp');
-        this.showToast(`${this._peerNickname(peerId)} started sharing`, 'stream');
 
         if (!this.focusedPeerId || !this.streams[this.focusedPeerId]) {
             this.focusedPeerId = peerId;

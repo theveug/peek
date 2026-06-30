@@ -377,6 +377,10 @@ body:hover #controls {
   color: var(--color-muted);
 }
 
+.reply-preview.hidden {
+  display: none;
+}
+
 .reply-preview-sender {
   font-weight: 600;
   color: var(--chat-sender);

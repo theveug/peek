@@ -232,10 +232,8 @@ export class PeerManager {
     }
 
     broadcastNickname() {
-        const nickname = (localStorage.getItem('nickname') || '').trim();
-        if (nickname) {
-            this.send('nickname-update', null, { nickname });
-        }
+        const nickname = (localStorage.getItem('nickname') || 'Anonymous').trim();
+        this.send('nickname-update', null, { nickname });
     }
 
     setStatus(status) {
