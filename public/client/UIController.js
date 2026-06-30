@@ -131,6 +131,10 @@ export class UIController {
             this.applyTransform();
             view.style.cursor = '';
         });
+
+        view.addEventListener('click', () => {
+            if (this.zoom <= 1) this.setViewMode('grid');
+        });
     }
 
     clampPan() {
