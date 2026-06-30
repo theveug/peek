@@ -643,7 +643,6 @@ export class UIController {
         this._watchSentState.delete(peerId);
         const orderIdx = this._watchOrder.indexOf(peerId);
         if (orderIdx !== -1) this._watchOrder.splice(orderIdx, 1);
-        this.removeAudio(peerId);
 
         if (peerId === 'me' || peerId === 'me-cam') {
             const viewId = peerId === 'me' ? 'self-view' : 'self-cam-view';

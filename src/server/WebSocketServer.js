@@ -114,6 +114,7 @@ export function setupWebSocket(wss, turnConfig, manager) {
                     break;
                 }
 
+                case 'start-sharing':
                 case 'stop-sharing':
                 case 'webcam-start':
                 case 'webcam-stop':

@@ -18,18 +18,22 @@ export class PeerManager {
         this.camStream = null;
         this.camEnabled = false;
         this.peerCamStreamIds = {};
+        this.peerScreenStreamIds = {};
         this.senders = {};
     }
 
     // Adds every track of `stream` to `pc` and records the resulting RTCRtpSender
-    // under this.senders[peerId][kind] ('screen' | 'cam'), so a later watch/unwatch
-    // request from that peer can pause/resume this specific connection's sender
-    // without touching the other peer connections sharing the same local stream.
+    // under this.senders[peerId]['<kind>-<track.kind>'] (e.g. 'screen-video',
+    // 'screen-audio', 'cam-video'), so a later watch/unwatch request from that peer
+    // can pause/resume this specific connection's sender without touching the other
+    // peer connections sharing the same local stream. Keying by track kind too matters
+    // once a stream carries both video and audio (screen share + its audio) — without
+    // it the audio sender would silently overwrite the video sender's map entry.
     _addTrackedStream(pc, peerId, stream, kind) {
         stream.getTracks().forEach(track => {
             const sender = pc.addTrack(track, stream);
             if (!this.senders[peerId]) this.senders[peerId] = {};
-            this.senders[peerId][kind] = sender;
+            this.senders[peerId][`${kind}-${track.kind}`] = sender;
         });
     }
 
@@ -38,7 +42,7 @@ export class PeerManager {
     // replaceTrack(null) rather than transceiver renegotiation — it stops the encoder
     // (real bandwidth savings) without an SDP offer/answer round-trip.
     async setSenderPaused(peerId, kind, paused) {
-        const sender = this.senders[peerId]?.[kind];
+        const sender = this.senders[peerId]?.[`${kind}-video`];
         if (!sender) return;
         try {
             if (paused) {
@@ -115,8 +119,14 @@ export class PeerManager {
                 this.ui.removePeer(peerId);
                 break;
 
+            case 'start-sharing':
+                this.peerScreenStreamIds[from] = payload.streamId;
+                break;
+
             case 'stop-sharing':
+                delete this.peerScreenStreamIds[from];
                 this.removePeerStream(from);
+                this.ui.removeAudio(from + '-screen');
                 break;
 
             case 'webcam-start':
@@ -181,7 +191,7 @@ export class PeerManager {
 
             const constraints = {
                 video: videoConstraints,
-                audio: false,
+                audio: true,
                 cursor: 'always',
             };
 
@@ -190,11 +200,13 @@ export class PeerManager {
                 this.stream.getTracks().forEach(t => t.stop());
 
                 Object.entries(this.peers).forEach(([peerId, pc]) => {
-                    const sender = this.senders[peerId]?.screen;
-                    if (sender) {
-                        pc.removeTrack(sender);
-                        delete this.senders[peerId].screen;
-                    }
+                    ['screen-video', 'screen-audio'].forEach(key => {
+                        const sender = this.senders[peerId]?.[key];
+                        if (sender) {
+                            pc.removeTrack(sender);
+                            delete this.senders[peerId][key];
+                        }
+                    });
                 });
 
                 this.ui.removeStream('me');
@@ -209,6 +221,10 @@ export class PeerManager {
                 document.getElementById('share-play-icon')?.classList.remove('hidden');
                 document.getElementById('share-stop-icon')?.classList.add('hidden');
             };
+
+            // Signal peers about the stream ID before tracks arrive via WebRTC, so
+            // they can tell this stream's audio track apart from mic audio in ontrack.
+            this.send('start-sharing', null, { streamId: this.stream.id });
 
             // Add tracks to existing connections
             Object.entries(this.peers).forEach(async ([peerId, pc]) => {
@@ -376,7 +392,9 @@ export class PeerManager {
 
         pc.ontrack = (e) => {
             if (e.track.kind === 'audio') {
-                this.ui.addAudio(remotePeerId, e.track);
+                const screenStreamId = this.peerScreenStreamIds[remotePeerId];
+                const isScreenAudio = screenStreamId && e.streams[0]?.id === screenStreamId;
+                this.ui.addAudio(isScreenAudio ? remotePeerId + '-screen' : remotePeerId, e.track);
             } else {
                 const stream = e.streams[0] || new MediaStream([e.track]);
                 const camStreamId = this.peerCamStreamIds[remotePeerId];
@@ -567,11 +585,11 @@ export class PeerManager {
 
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-        if (this.stream && !this.senders[from]?.screen) {
+        if (this.stream && !this.senders[from]?.['screen-video']) {
             this._addTrackedStream(pc, from, this.stream, 'screen');
         }
 
-        if (this.camStream && !this.senders[from]?.cam) {
+        if (this.camStream && !this.senders[from]?.['cam-video']) {
             this._addTrackedStream(pc, from, this.camStream, 'cam');
         }
 
@@ -606,9 +624,11 @@ export class PeerManager {
         if (pc) pc.close();
         delete this.peers[peerId];
         delete this.peerCamStreamIds[peerId];
+        delete this.peerScreenStreamIds[peerId];
         delete this.senders[peerId];
         this.ui.removeStream(peerId);
         this.ui.removeStream(peerId + '-cam');
+        this.ui.removeAudio(peerId + '-screen');
     }
 
     removePeerStream(peerId) {
@@ -685,10 +705,10 @@ export class PeerManager {
         if (this.camStream) {
             this.camStream.getTracks().forEach(t => t.stop());
             Object.entries(this.peers).forEach(([peerId, pc]) => {
-                const sender = this.senders[peerId]?.cam;
+                const sender = this.senders[peerId]?.['cam-video'];
                 if (sender) {
                     pc.removeTrack(sender);
-                    delete this.senders[peerId].cam;
+                    delete this.senders[peerId]['cam-video'];
                 }
             });
             this.camStream = null;
