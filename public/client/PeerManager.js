@@ -197,6 +197,25 @@ export class PeerManager {
         await track.applyConstraints(constraints);
     }
 
+    async applyCamQualitySettings() {
+        if (!this.camStream) return;
+        const track = this.camStream.getVideoTracks()[0];
+        if (!track) return;
+
+        const resVal = localStorage.getItem('camRes') || '640x480';
+        const fpsVal = parseInt(localStorage.getItem('camFps') || '30', 10);
+
+        const constraints = {};
+        if (resVal !== 'source') {
+            const [width, height] = resVal.split('x').map(Number);
+            constraints.width = { max: width };
+            constraints.height = { max: height };
+        }
+        constraints.frameRate = fpsVal;
+
+        await track.applyConstraints(constraints);
+    }
+
     async toggleMic() {
         if (!this.micStream) {
             try {
@@ -576,7 +595,18 @@ export class PeerManager {
         }
 
         try {
-            this.camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            const resVal = localStorage.getItem('camRes') || '640x480';
+            const fpsVal = localStorage.getItem('camFps') || 30;
+
+            const videoConstraints = {};
+            if (resVal !== 'source') {
+                const [width, height] = resVal.split('x').map(Number);
+                videoConstraints.width = { max: width };
+                videoConstraints.height = { max: height };
+            }
+            videoConstraints.frameRate = parseInt(fpsVal, 10);
+
+            this.camStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
             this.camEnabled = true;
 
             this.camStream.getVideoTracks()[0].onended = () => {
