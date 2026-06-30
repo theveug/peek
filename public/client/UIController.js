@@ -709,6 +709,11 @@ export class UIController {
                 this.focusedPeerId = remoteStreams[0];
                 this.focusedVideo.srcObject = this.streams[remoteStreams[0]];
             }
+            // Focus view only ever renders one stream — anything else isn't visible
+            // anywhere, so pause it the same way an unwatched grid tile would be.
+            remoteStreams.forEach(id => {
+                if (id !== this.focusedPeerId) this._unwatchTile(id);
+            });
             this.focusedView.style.display = 'flex';
             this.gridView.style.display = 'none';
         }
