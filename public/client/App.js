@@ -14,6 +14,7 @@ const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
 const ui = new UIController();
 const peerManager = new PeerManager(null, ui);
 const debug = new DebugPanel(peerManager);
+ui.onWatchChange = (streamKey, watched) => peerManager.setWatched(streamKey, watched);
 
 let socket;
 let reconnectTimer;

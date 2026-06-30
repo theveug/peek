@@ -11,6 +11,10 @@ export class UIController {
         this.gridView = document.getElementById('grid-view');
         this.streams = {};
         this.watchedTiles = new Set();
+        this._watchOrder = [];
+        this._watchSentState = new Map();
+        this.maxWatchedTiles = 6;
+        this.onWatchChange = null;
         this.focusedPeerId = null;
         this.viewMode = 'grid'; // 'focus' or 'grid'
         this.zoom = 1;
@@ -168,6 +172,7 @@ export class UIController {
         const stream = this.streams[peerId];
         if (!stream) return;
 
+        this._watchTile(peerId);
         this.focusedPeerId = peerId;
         this.focusedVideo.srcObject = stream;
         this.zoom = 1;
@@ -175,6 +180,46 @@ export class UIController {
         this.panY = 0;
         this.applyTransform();
         this.setViewMode('focus');
+    }
+
+    // --- Watched-tile tracking (drives bandwidth-saving pause/resume signalling) ---
+
+    // Marks a stream as watched, evicting the least-recently-watched tile if over
+    // maxWatchedTiles. Returns the list of streamKeys evicted as a result, so callers
+    // (grid cell click handlers) can re-render those cells as placeholders.
+    _watchTile(streamKey) {
+        const evicted = [];
+        if (!this.watchedTiles.has(streamKey)) {
+            while (this._watchOrder.length >= this.maxWatchedTiles) {
+                const oldest = this._watchOrder.shift();
+                this._setWatched(oldest, false);
+                evicted.push(oldest);
+            }
+        } else {
+            const idx = this._watchOrder.indexOf(streamKey);
+            if (idx !== -1) this._watchOrder.splice(idx, 1);
+        }
+        this._watchOrder.push(streamKey);
+        this._setWatched(streamKey, true);
+
+        if (evicted.length > 0) {
+            const nicknames = evicted.map(key => {
+                const isCam = key.endsWith('-cam');
+                return this._peerNickname(isCam ? key.slice(0, -4) : key);
+            });
+            this.showToast(`Paused ${nicknames.join(', ')} to save bandwidth (max ${this.maxWatchedTiles} watching)`, 'info');
+        }
+
+        return evicted;
+    }
+
+    _setWatched(streamKey, watched) {
+        if (watched) this.watchedTiles.add(streamKey);
+        else this.watchedTiles.delete(streamKey);
+
+        if (this._watchSentState.get(streamKey) === watched) return;
+        this._watchSentState.set(streamKey, watched);
+        if (this.onWatchChange) this.onWatchChange(streamKey, watched);
     }
 
     // --- Stream grid ---
@@ -185,7 +230,13 @@ export class UIController {
         const count = remoteIds.length;
         if (count === 0) return;
 
-        if (count <= 1) this.watchedTiles.add(remoteIds[0]);
+        if (count <= 1) {
+            this._watchTile(remoteIds[0]);
+        } else {
+            remoteIds.forEach(id => {
+                if (!this.watchedTiles.has(id)) this._setWatched(id, false);
+            });
+        }
 
         const cols = count <= 1 ? 1 : 2;
         const rows = Math.ceil(count / cols);
@@ -238,8 +289,12 @@ export class UIController {
             cell.appendChild(label);
 
             cell.addEventListener('click', () => {
-                this.watchedTiles.add(peerId);
+                const evicted = this._watchTile(peerId);
                 cell.replaceWith(this._buildGridCell(peerId));
+                evicted.forEach(key => {
+                    const evictedCell = this.gridView.querySelector(`[data-peer-id="${key}"]`);
+                    if (evictedCell) evictedCell.replaceWith(this._buildGridCell(key));
+                });
             });
         }
 
@@ -552,6 +607,7 @@ export class UIController {
         playSound('streamUp');
 
         if (!this.focusedPeerId || !this.streams[this.focusedPeerId]) {
+            this._watchTile(peerId);
             this.focusedPeerId = peerId;
             this.focusedVideo.srcObject = stream;
         }
@@ -562,6 +618,9 @@ export class UIController {
     removeStream(peerId) {
         delete this.streams[peerId];
         this.watchedTiles.delete(peerId);
+        this._watchSentState.delete(peerId);
+        const orderIdx = this._watchOrder.indexOf(peerId);
+        if (orderIdx !== -1) this._watchOrder.splice(orderIdx, 1);
         this.removeAudio(peerId);
 
         if (peerId === 'me' || peerId === 'me-cam') {
@@ -584,6 +643,7 @@ export class UIController {
                 this.focusedVideo.srcObject = null;
                 const remaining = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam');
                 if (remaining.length > 0) {
+                    this._watchTile(remaining[0]);
                     this.focusedPeerId = remaining[0];
                     this.focusedVideo.srcObject = this.streams[remaining[0]];
                 }
@@ -623,6 +683,7 @@ export class UIController {
             this.buildGrid();
         } else {
             if (!this.focusedPeerId || !this.streams[this.focusedPeerId]) {
+                this._watchTile(remoteStreams[0]);
                 this.focusedPeerId = remoteStreams[0];
                 this.focusedVideo.srcObject = this.streams[remoteStreams[0]];
             }

@@ -18,6 +18,46 @@ export class PeerManager {
         this.camStream = null;
         this.camEnabled = false;
         this.peerCamStreamIds = {};
+        this.senders = {};
+    }
+
+    // Adds every track of `stream` to `pc` and records the resulting RTCRtpSender
+    // under this.senders[peerId][kind] ('screen' | 'cam'), so a later watch/unwatch
+    // request from that peer can pause/resume this specific connection's sender
+    // without touching the other peer connections sharing the same local stream.
+    _addTrackedStream(pc, peerId, stream, kind) {
+        stream.getTracks().forEach(track => {
+            const sender = pc.addTrack(track, stream);
+            if (!this.senders[peerId]) this.senders[peerId] = {};
+            this.senders[peerId][kind] = sender;
+        });
+    }
+
+    // Pauses or resumes the video we're sending to `peerId` for the given kind, in
+    // response to that peer reporting they've stopped/started watching it. Uses
+    // replaceTrack(null) rather than transceiver renegotiation — it stops the encoder
+    // (real bandwidth savings) without an SDP offer/answer round-trip.
+    async setSenderPaused(peerId, kind, paused) {
+        const sender = this.senders[peerId]?.[kind];
+        if (!sender) return;
+        try {
+            if (paused) {
+                await sender.replaceTrack(null);
+            } else {
+                const liveStream = kind === 'cam' ? this.camStream : this.stream;
+                await sender.replaceTrack(liveStream?.getVideoTracks()[0] || null);
+            }
+        } catch (err) {
+            console.warn(`Failed to ${paused ? 'pause' : 'resume'} ${kind} sender for ${peerId}:`, err);
+        }
+    }
+
+    // Called by UIController when the local user starts/stops watching a remote
+    // stream (streamKey is peerId for screen share, peerId-cam for webcam).
+    setWatched(streamKey, watched) {
+        const isCam = streamKey.endsWith('-cam');
+        const peerId = isCam ? streamKey.slice(0, -4) : streamKey;
+        this.send(watched ? 'watch-stream' : 'unwatch-stream', peerId, { kind: isCam ? 'cam' : 'screen' });
     }
 
     async handleSignal({ type, peerId, peers, from, payload, iceServers }) {
@@ -88,6 +128,14 @@ export class PeerManager {
                 this.ui.removeStream(from + '-cam');
                 break;
 
+            case 'watch-stream':
+                this.setSenderPaused(from, payload.kind, false);
+                break;
+
+            case 'unwatch-stream':
+                this.setSenderPaused(from, payload.kind, true);
+                break;
+
             case 'mic-status':
                 this.ui.updateParticipantMic(from, payload.enabled);
                 break;
@@ -139,15 +187,14 @@ export class PeerManager {
 
             // Clean up previous screen share stream if active
             if (this.stream) {
-                const oldTracks = this.stream.getTracks();
-                oldTracks.forEach(t => t.stop());
+                this.stream.getTracks().forEach(t => t.stop());
 
-                Object.values(this.peers).forEach(pc => {
-                    pc.getSenders().forEach(sender => {
-                        if (sender.track && oldTracks.includes(sender.track)) {
-                            pc.removeTrack(sender);
-                        }
-                    });
+                Object.entries(this.peers).forEach(([peerId, pc]) => {
+                    const sender = this.senders[peerId]?.screen;
+                    if (sender) {
+                        pc.removeTrack(sender);
+                        delete this.senders[peerId].screen;
+                    }
                 });
 
                 this.ui.removeStream('me');
@@ -165,7 +212,7 @@ export class PeerManager {
 
             // Add tracks to existing connections
             Object.entries(this.peers).forEach(async ([peerId, pc]) => {
-                this.stream.getTracks().forEach(track => pc.addTrack(track, this.stream));
+                this._addTrackedStream(pc, peerId, this.stream, 'screen');
 
                 // Now explicitly create and send offer
                 const offer = await pc.createOffer();
@@ -489,13 +536,13 @@ export class PeerManager {
         const pc = this.createPeerConnection(peerId);
 
         if (this.stream) {
-            this.stream.getTracks().forEach(track => pc.addTrack(track, this.stream));
+            this._addTrackedStream(pc, peerId, this.stream, 'screen');
         } else {
             pc.addTransceiver('video', { direction: 'recvonly' });
         }
 
         if (this.camStream) {
-            this.camStream.getTracks().forEach(track => pc.addTrack(track, this.camStream));
+            this._addTrackedStream(pc, peerId, this.camStream, 'cam');
         }
 
         if (this.micStream) {
@@ -520,19 +567,12 @@ export class PeerManager {
 
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-        if (this.stream) {
-            const hasVideoSender = pc.getSenders().some(s => s.track && s.track.kind === 'video');
-            if (!hasVideoSender) {
-                this.stream.getTracks().forEach(track => pc.addTrack(track, this.stream));
-            }
+        if (this.stream && !this.senders[from]?.screen) {
+            this._addTrackedStream(pc, from, this.stream, 'screen');
         }
 
-        if (this.camStream) {
-            const camTrackIds = new Set(this.camStream.getTracks().map(t => t.id));
-            const hasCamSender = pc.getSenders().some(s => s.track && camTrackIds.has(s.track.id));
-            if (!hasCamSender) {
-                this.camStream.getTracks().forEach(track => pc.addTrack(track, this.camStream));
-            }
+        if (this.camStream && !this.senders[from]?.cam) {
+            this._addTrackedStream(pc, from, this.camStream, 'cam');
         }
 
         if (this.micStream) {
@@ -566,6 +606,7 @@ export class PeerManager {
         if (pc) pc.close();
         delete this.peers[peerId];
         delete this.peerCamStreamIds[peerId];
+        delete this.senders[peerId];
         this.ui.removeStream(peerId);
         this.ui.removeStream(peerId + '-cam');
     }
@@ -621,7 +662,7 @@ export class PeerManager {
             this.ui.addStream('me-cam', this.camStream);
 
             for (const [peerId, pc] of Object.entries(this.peers)) {
-                this.camStream.getTracks().forEach(track => pc.addTrack(track, this.camStream));
+                this._addTrackedStream(pc, peerId, this.camStream, 'cam');
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 this.send('offer', peerId, offer);
@@ -642,14 +683,13 @@ export class PeerManager {
 
     stopCam() {
         if (this.camStream) {
-            const camTracks = this.camStream.getTracks();
-            camTracks.forEach(t => t.stop());
-            Object.values(this.peers).forEach(pc => {
-                pc.getSenders().forEach(sender => {
-                    if (sender.track && camTracks.includes(sender.track)) {
-                        pc.removeTrack(sender);
-                    }
-                });
+            this.camStream.getTracks().forEach(t => t.stop());
+            Object.entries(this.peers).forEach(([peerId, pc]) => {
+                const sender = this.senders[peerId]?.cam;
+                if (sender) {
+                    pc.removeTrack(sender);
+                    delete this.senders[peerId].cam;
+                }
             });
             this.camStream = null;
         }

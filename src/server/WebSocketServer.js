@@ -78,7 +78,9 @@ export function setupWebSocket(wss, turnConfig, manager) {
 
                 case 'offer':
                 case 'answer':
-                case 'ice-candidate': {
+                case 'ice-candidate':
+                case 'watch-stream':
+                case 'unwatch-stream': {
                     const target = manager.getPeerSocket(to);
                     if (target) {
                         target.send(JSON.stringify({ type, from: peerId, payload }));
