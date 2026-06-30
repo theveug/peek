@@ -1,7 +1,9 @@
 // --- server.js ---
 import 'dotenv/config';
 import express from 'express';
-import { createServer } from 'http';
+import { createServer as createHttpServer } from 'http';
+import { createServer as createHttpsServer } from 'https';
+import { readFileSync, existsSync } from 'fs';
 import { WebSocketServer } from 'ws';
 import { setupWebSocket } from './src/server/WebSocketServer.js';
 import { SessionManager } from './src/server/SessionManager.js';
@@ -13,7 +15,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const server = createServer(app);
+
+const certKey = './certs/localhost-key.pem';
+const certFile = './certs/localhost.pem';
+const useHttps = existsSync(certKey) && existsSync(certFile);
+
+const server = useHttps
+    ? createHttpsServer({ key: readFileSync(certKey), cert: readFileSync(certFile) }, app)
+    : createHttpServer(app);
 const wss = new WebSocketServer({ server });
 
 const manager = new SessionManager();
@@ -100,5 +109,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server listening at http://localhost:${PORT}`);
+    const proto = useHttps ? 'https' : 'http';
+    console.log(`Server listening at ${proto}://localhost:${PORT}`);
+    if (!useHttps) console.log('  → Add certs/localhost.pem + certs/localhost-key.pem for HTTPS (see README)');
 });

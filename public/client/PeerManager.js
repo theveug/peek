@@ -572,6 +572,11 @@ export class PeerManager {
             this.stopCam();
             return false;
         }
+        if (!navigator.mediaDevices?.getUserMedia) {
+            this.ui.showToast('Camera requires a secure connection (HTTPS)', 'info');
+            return false;
+        }
+
         try {
             this.camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
             this.camEnabled = true;
@@ -596,9 +601,13 @@ export class PeerManager {
 
             return true;
         } catch (err) {
-            console.warn('Camera access denied:', err);
+            console.warn('Camera error:', err);
             this.camStream = null;
             this.camEnabled = false;
+            const msg = err.name === 'NotAllowedError' ? 'Camera permission denied'
+                : err.name === 'NotFoundError' ? 'No camera found on this device'
+                : 'Could not access camera';
+            this.ui.showToast(msg, 'info');
             return false;
         }
     }

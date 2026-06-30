@@ -30,6 +30,9 @@ Icon?
 # Env or secrets (if any later)
 .env
 
+# Local HTTPS certs — generate with mkcert (see README)
+certs/
+
 # Claude Code — local only, not for repo
 CLAUDE.md
 .claude/
