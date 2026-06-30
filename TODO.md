@@ -13,8 +13,7 @@ See **Design principles** in `CLAUDE.md` before adding new items — weigh new f
 
 ## Bandwidth (priority — mesh topology means every viewer multiplies upload cost)
 
-- [ ] **Click-to-watch grid tiles** — Phase 1: show a placeholder/avatar instead of live video by default; clicking attaches the stream to render it. Cheap, saves decode/render CPU (mainly helps mobile).
-- [ ] **Real transceiver pausing** — Phase 2: when a tile isn't being watched, set that peer connection's transceiver direction to `inactive` and renegotiate, so the sender actually stops transmitting on that connection. This is the real bandwidth fix — Phase 1 alone does not reduce network usage, since the sender keeps transmitting regardless of whether the receiver renders it. Matters for both mobile data users and TURN relay billing.
+- [ ] **Real transceiver pausing** — Phase 2: when a tile isn't being watched, set that peer connection's transceiver direction to `inactive` and renegotiate, so the sender actually stops transmitting on that connection. This is the real bandwidth fix — Phase 1 alone does not reduce network usage, since the sender keeps transmitting regardless of whether the receiver renders it. Matters for both mobile data users and TURN relay billing. Hook point: `this.watchedTiles` (Set of peerIds) in `UIController.js` — add/remove happens in `_buildGridCell()`'s click handler and `removeStream()`; Phase 2 should trigger transceiver renegotiation at the same add/remove points instead of (or alongside) attaching `srcObject`.
 
 ## Screen share audio
 
@@ -57,3 +56,4 @@ See **Design principles** in `CLAUDE.md` before adding new items — weigh new f
 - [x] Camera error toasts (permission denied, no device, insecure context)
 - [x] Fixed emoji reaction picker unclickable on the first chat message (popped up above the message, clipped by chat-log scroll bounds when there's no room above)
 - [x] Fixed shared images having no click/download link (only the non-image file-card had a download anchor)
+- [x] Click-to-watch grid tiles (Phase 1) — grid tiles beyond the 1st (2+ remote streams) show an avatar/"Click to watch" placeholder instead of live video; clicking attaches the stream. Single-remote-stream rooms auto-watch (no extra click for the common 1:1 case). Saves decode/render CPU only — see Phase 2 below for the actual bandwidth fix.

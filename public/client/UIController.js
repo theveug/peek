@@ -10,6 +10,7 @@ export class UIController {
         this.focusedVideo = document.getElementById('focused-video');
         this.gridView = document.getElementById('grid-view');
         this.streams = {};
+        this.watchedTiles = new Set();
         this.focusedPeerId = null;
         this.viewMode = 'grid'; // 'focus' or 'grid'
         this.zoom = 1;
@@ -184,36 +185,65 @@ export class UIController {
         const count = remoteIds.length;
         if (count === 0) return;
 
+        if (count <= 1) this.watchedTiles.add(remoteIds[0]);
+
         const cols = count <= 1 ? 1 : 2;
         const rows = Math.ceil(count / cols);
         this.gridView.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
         this.gridView.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
 
         remoteIds.forEach(peerId => {
-            const isCam = peerId.endsWith('-cam');
-            const actualPeerId = isCam ? peerId.slice(0, -4) : peerId;
+            this.gridView.appendChild(this._buildGridCell(peerId));
+        });
+    }
 
-            const cell = document.createElement('div');
-            cell.className = 'relative overflow-hidden cursor-pointer bg-black flex items-center justify-center';
-            cell.dataset.peerId = peerId;
+    _buildGridCell(peerId) {
+        const isCam = peerId.endsWith('-cam');
+        const actualPeerId = isCam ? peerId.slice(0, -4) : peerId;
+        const nickname = this._peerNickname(actualPeerId);
 
+        const cell = document.createElement('div');
+        cell.className = 'relative overflow-hidden cursor-pointer bg-black flex items-center justify-center';
+        cell.dataset.peerId = peerId;
+
+        const label = document.createElement('div');
+        label.className = 'absolute bottom-2 left-2 text-xs text-white/80 bg-black/40 px-2 py-0.5 rounded-full pointer-events-none';
+        label.textContent = nickname + (isCam ? ' · Cam' : '');
+
+        if (this.watchedTiles.has(peerId)) {
             const video = document.createElement('video');
             video.muted = true;
             video.autoplay = true;
             video.playsInline = true;
             video.srcObject = this.streams[peerId];
             video.className = 'w-full h-full object-contain';
-
             cell.appendChild(video);
+            cell.appendChild(label);
+            cell.addEventListener('click', () => this.focusStream(peerId));
+        } else {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'flex flex-col items-center gap-2 pointer-events-none';
 
-            const label = document.createElement('div');
-            label.className = 'absolute bottom-2 left-2 text-xs text-white/80 bg-black/40 px-2 py-0.5 rounded-full pointer-events-none';
-            label.textContent = this._peerNickname(actualPeerId) + (isCam ? ' · Cam' : '');
+            const avatar = document.createElement('div');
+            avatar.className = 'w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-lg font-medium text-white/80';
+            avatar.textContent = (nickname || '?').charAt(0).toUpperCase();
+
+            const hint = document.createElement('div');
+            hint.className = 'text-xs text-white/50';
+            hint.textContent = 'Click to watch';
+
+            placeholder.appendChild(avatar);
+            placeholder.appendChild(hint);
+            cell.appendChild(placeholder);
             cell.appendChild(label);
 
-            cell.addEventListener('click', () => this.focusStream(peerId));
-            this.gridView.appendChild(cell);
-        });
+            cell.addEventListener('click', () => {
+                this.watchedTiles.add(peerId);
+                cell.replaceWith(this._buildGridCell(peerId));
+            });
+        }
+
+        return cell;
     }
 
     // --- Peers ---
@@ -531,6 +561,7 @@ export class UIController {
 
     removeStream(peerId) {
         delete this.streams[peerId];
+        this.watchedTiles.delete(peerId);
         this.removeAudio(peerId);
 
         if (peerId === 'me' || peerId === 'me-cam') {
