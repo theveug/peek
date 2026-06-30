@@ -60,6 +60,11 @@ export function setupWebSocket(wss, turnConfig, manager) {
                         return;
                     }
 
+                    if (manager.isFull(sessionId)) {
+                        ws.send(JSON.stringify({ type: 'join-error', reason: 'room-full' }));
+                        return;
+                    }
+
                     manager.addPeer(sessionId, peerId, ws);
                     const peers = manager.getPeersInSession(sessionId).filter(p => p !== peerId);
                     const meta = manager.getSessionMeta(sessionId);

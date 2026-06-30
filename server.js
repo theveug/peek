@@ -63,10 +63,10 @@ app.get('/', (req, res) => {
 
 // API: Create room
 app.post('/api/create-room', (req, res) => {
-    const { name, password } = req.body || {};
+    const { name, password, maxPeers } = req.body || {};
     const code = generateUniqueShortCode();
     const cleanName = name ? name.replace(/[<>]/g, '').trim().substring(0, 50) : null;
-    manager.createSession(code, { name: cleanName || null, password: password || null });
+    manager.createSession(code, { name: cleanName || null, password: password || null, maxPeers });
     Debug.log(`Room created: ${code}${cleanName ? ` (${cleanName})` : ''}${password ? ' [password]' : ''}`);
     res.json({ code });
 });
@@ -85,6 +85,10 @@ app.post('/api/validate-room', (req, res) => {
     }
     if (meta.hasPassword && !manager.validatePassword(code, password)) {
         res.json({ valid: false, needsPassword: true, name: meta.name, wrongPassword: true });
+        return;
+    }
+    if (manager.isFull(code)) {
+        res.json({ valid: false, needsPassword: false, full: true, name: meta.name });
         return;
     }
     res.json({ valid: true, needsPassword: false, name: meta.name });

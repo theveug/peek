@@ -1,4 +1,15 @@
 // --- public/client/PeerManager.js ---
+const RES_RANK = { '640x360': 0, '640x480': 1, '1280x720': 2, '1920x1080': 3, '2560x1440': 4, source: 5 };
+
+// Caps the effective stream quality as the room fills past the safe mesh size (6).
+// Never raises quality above what the user picked in settings, only lowers it.
+const QUALITY_TIERS = [
+    { max: 6, cap: null },
+    { max: 8, cap: { screenRes: '1920x1080', screenFps: 30, camRes: '1280x720', camFps: 24 } },
+    { max: 10, cap: { screenRes: '1280x720', screenFps: 24, camRes: '640x480', camFps: 15 } },
+    { max: 12, cap: { screenRes: '1280x720', screenFps: 15, camRes: '640x360', camFps: 15 } },
+];
+
 export class PeerManager {
     constructor(socket, ui) {
         this.socket = socket;
@@ -18,6 +29,7 @@ export class PeerManager {
         this.camStream = null;
         this.camEnabled = false;
         this.peerCamStreamIds = {};
+        this._lastQualityTierKey = null;
         this.peerScreenStreamIds = {};
         this.senders = {};
     }
@@ -100,6 +112,9 @@ export class PeerManager {
                 this.broadcastNickname();
                 this.broadcastStatus();
                 this.broadcastCamStreamId();
+                this.applyQualitySettings();
+                this.applyCamQualitySettings();
+                this._announceQualityTierChange();
                 break;
 
             case 'offer':
@@ -117,6 +132,9 @@ export class PeerManager {
             case 'peer-left':
                 this.removePeer(peerId);
                 this.ui.removePeer(peerId);
+                this.applyQualitySettings();
+                this.applyCamQualitySettings();
+                this._announceQualityTierChange();
                 break;
 
             case 'start-sharing':
@@ -171,26 +189,8 @@ export class PeerManager {
 
     async startSharing() {
         try {
-            const resVal = localStorage.getItem('screenShareRes') || '1280x720';
-            const fpsVal = localStorage.getItem('screenShareFps') || 30;
-
-            // Parse resolution
-            let width, height;
-            if (resVal !== 'source') {
-                [width, height] = resVal.split('x').map(Number);
-            }
-
-            // Build constraint object dynamically
-            const videoConstraints = {};
-            if (width && height) {
-                videoConstraints.width = { max: width };
-                videoConstraints.height = { max: height };
-            }
-
-            videoConstraints.frameRate = parseInt(fpsVal, 10);
-
             const constraints = {
-                video: videoConstraints,
+                video: this._resolveQuality('screen'),
                 audio: true,
                 cursor: 'always',
             };
@@ -245,38 +245,71 @@ export class PeerManager {
         if (!this.stream) return;
         const track = this.stream.getVideoTracks()[0];
         if (!track) return;
-
-        const resVal = localStorage.getItem('screenShareRes') || '1280x720';
-        const fpsVal = parseInt(localStorage.getItem('screenShareFps') || '30', 10);
-
-        const constraints = {};
-        if (resVal !== 'source') {
-            const [width, height] = resVal.split('x').map(Number);
-            constraints.width = { max: width };
-            constraints.height = { max: height };
-        }
-        constraints.frameRate = fpsVal;
-
-        await track.applyConstraints(constraints);
+        await track.applyConstraints(this._resolveQuality('screen'));
     }
 
     async applyCamQualitySettings() {
         if (!this.camStream) return;
         const track = this.camStream.getVideoTracks()[0];
         if (!track) return;
+        await track.applyConstraints(this._resolveQuality('cam'));
+    }
 
-        const resVal = localStorage.getItem('camRes') || '640x480';
-        const fpsVal = parseInt(localStorage.getItem('camFps') || '30', 10);
+    // Returns the cap for the current room size, or null if the room is small
+    // enough (<=6) that the user's chosen settings apply unmodified.
+    _qualityTier() {
+        const peerCount = Object.keys(this.peers).length + 1;
+        const tier = QUALITY_TIERS.find(t => peerCount <= t.max);
+        return tier ? tier.cap : QUALITY_TIERS[QUALITY_TIERS.length - 1].cap;
+    }
+
+    _capResolution(userVal, capVal) {
+        if (!capVal) return userVal;
+        if (userVal === 'source') return capVal;
+        return (RES_RANK[userVal] ?? 99) <= (RES_RANK[capVal] ?? 99) ? userVal : capVal;
+    }
+
+    _capFps(userVal, capVal) {
+        return capVal ? Math.min(userVal, capVal) : userVal;
+    }
+
+    // Builds getUserMedia/applyConstraints-style video constraints for 'screen' or
+    // 'cam', honoring the user's saved settings but never exceeding the current
+    // room-size quality tier.
+    _resolveQuality(kind) {
+        const isCam = kind === 'cam';
+        const resVal = localStorage.getItem(isCam ? 'camRes' : 'screenShareRes') || (isCam ? '640x480' : '1280x720');
+        const fpsVal = parseInt(localStorage.getItem(isCam ? 'camFps' : 'screenShareFps') || '30', 10);
+
+        const tier = this._qualityTier();
+        const cappedRes = this._capResolution(resVal, tier ? (isCam ? tier.camRes : tier.screenRes) : null);
+        const cappedFps = this._capFps(fpsVal, tier ? (isCam ? tier.camFps : tier.screenFps) : null);
 
         const constraints = {};
-        if (resVal !== 'source') {
-            const [width, height] = resVal.split('x').map(Number);
+        if (cappedRes !== 'source') {
+            const [width, height] = cappedRes.split('x').map(Number);
             constraints.width = { max: width };
             constraints.height = { max: height };
         }
-        constraints.frameRate = fpsVal;
+        constraints.frameRate = cappedFps;
+        return constraints;
+    }
 
-        await track.applyConstraints(constraints);
+    // Toasts only on an actual tier transition (not on every join/leave), and only
+    // while there's an active screen/cam stream for the cap to matter to.
+    _announceQualityTierChange() {
+        const tier = this._qualityTier();
+        const key = tier ? JSON.stringify(tier) : null;
+        if (key === this._lastQualityTierKey) return;
+        const hadCap = !!this._lastQualityTierKey;
+        this._lastQualityTierKey = key;
+
+        if (!this.stream && !this.camStream) return;
+        if (tier) {
+            this.ui.showToast(`Lowered stream quality (room has ${Object.keys(this.peers).length + 1} participants)`, 'info');
+        } else if (hadCap) {
+            this.ui.showToast('Stream quality restored', 'info');
+        }
     }
 
     async toggleMic() {
@@ -656,18 +689,7 @@ export class PeerManager {
         }
 
         try {
-            const resVal = localStorage.getItem('camRes') || '640x480';
-            const fpsVal = localStorage.getItem('camFps') || 30;
-
-            const videoConstraints = {};
-            if (resVal !== 'source') {
-                const [width, height] = resVal.split('x').map(Number);
-                videoConstraints.width = { max: width };
-                videoConstraints.height = { max: height };
-            }
-            videoConstraints.frameRate = parseInt(fpsVal, 10);
-
-            this.camStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+            this.camStream = await navigator.mediaDevices.getUserMedia({ video: this._resolveQuality('cam'), audio: false });
             this.camEnabled = true;
 
             this.camStream.getVideoTracks()[0].onended = () => {

@@ -36,6 +36,10 @@ function connect() {
         if (msg.type === 'join-error') {
             clearTimeout(reconnectTimer);
             socket.close();
+            if (msg.reason === 'room-full') {
+                location.href = '/?full=1';
+                return;
+            }
             showPasswordPrompt();
             return;
         }
