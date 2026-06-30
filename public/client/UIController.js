@@ -8,6 +8,7 @@ export class UIController {
         this.videoContainer = document.getElementById('videos');
         this.focusedView = document.getElementById('focused-view');
         this.focusedVideo = document.getElementById('focused-video');
+        this.pipButton = document.getElementById('pip-button');
         this.gridView = document.getElementById('grid-view');
         this.streams = {};
         this.watchedTiles = new Set();
@@ -23,6 +24,7 @@ export class UIController {
         this.isPanning = false;
         this.chat = new ChatUI({ getNickname: (id) => this._peerNickname(id) });
         this.setupZoom();
+        this.setupPictureInPicture();
         this._createToastContainer();
     }
 
@@ -140,6 +142,33 @@ export class UIController {
         view.addEventListener('click', () => {
             if (this.zoom <= 1) this.setViewMode('grid');
         });
+    }
+
+    // --- Native picture-in-picture (focused view floats over other windows) ---
+
+    setupPictureInPicture() {
+        if (!this.pipButton) return;
+        if (!document.pictureInPictureEnabled || !this.focusedVideo.requestPictureInPicture) {
+            this.pipButton.style.display = 'none';
+            return;
+        }
+
+        this.pipButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.togglePictureInPicture();
+        });
+    }
+
+    async togglePictureInPicture() {
+        try {
+            if (document.pictureInPictureElement === this.focusedVideo) {
+                await document.exitPictureInPicture();
+            } else {
+                await this.focusedVideo.requestPictureInPicture();
+            }
+        } catch (err) {
+            this.showToast('Picture-in-picture is unavailable right now', 'info');
+        }
     }
 
     clampPan() {

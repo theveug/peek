@@ -13,6 +13,8 @@ See **Design principles** in `CLAUDE.md` before adding new items — weigh new f
 
 (none open right now — see Completed for the click-to-watch pause/resume pipeline, now covering both grid and focus view)
 
+- [ ] **Verify adaptive quality tier downgrade end-to-end** — the participant-cap/adaptive-quality work (see Completed) was verified for the cap/rejection path, but the 7+ participant quality-downgrade tiers in `PeerManager._resolveQuality()` weren't exercised live. Needs 7+ simultaneous tabs each starting a real screen/cam stream, reading `track.getSettings()` (or `getStats()`) to confirm resolution/fps actually drops at the 7-8/9-10/11-12 thresholds and restores when participants leave. Heavier to drive headlessly (no real display to capture in CI), so do it as a deliberate one-off check rather than routine verification.
+
 ## Screen share audio
 
 (done — see Completed)
@@ -28,7 +30,6 @@ See **Design principles** in `CLAUDE.md` before adding new items — weigh new f
 ## Polish
 
 - [ ] **Connection quality indicator** — signal strength icon per participant, computed from ICE stats (latency / packet loss).
-- [ ] **Picture-in-picture** — native browser PiP mode for the focused stream so it floats over other windows.
 - [ ] **Keyboard shortcuts panel** — `?` or `F1` overlay listing available shortcuts.
 
 ## Moderation
@@ -44,6 +45,7 @@ See **Design principles** in `CLAUDE.md` before adding new items — weigh new f
 
 ## Completed (recent)
 
+- [x] **Native browser picture-in-picture** — `#pip-button` overlay (top-right of `#focused-view`, mirrors the grid tiles' "Stop watching" button styling) calls `focusedVideo.requestPictureInPicture()`/`document.exitPictureInPicture()` via `UIController.togglePictureInPicture()`. Feature-detected at startup (`document.pictureInPictureEnabled`) — button hides entirely on unsupported browsers. Distinct from the existing self-view PiP overlay tiles (own webcam/screen mini-view in the corner) — this is the OS-level floating window that survives tab-switching. Verified via Playwright: clicking toggles `document.pictureInPictureElement` to the focused video and back.
 - [x] **Creator-configurable participant cap + adaptive quality** — room creator picks a max participant count (4/6/8/10/12, default 6) in the lobby, stored per-session in `SessionManager.js` (`maxPeers`, clamped 2-12). Enforced both at `/api/validate-room` (lobby join flow shows "Room is full.") and in `WebSocketServer.js`'s `join` handler (`manager.isFull()`, defense-in-depth for direct-URL joins/races) — client redirects to `/?full=1` on the WS-level rejection. Rooms above 6 participants get automatic quality downgrades: `PeerManager._resolveQuality()` caps the user's chosen resolution/fps tier-by-tier (7-8/9-10/11-12 participants) via the existing `track.applyConstraints()` path, recalculated live on every `peer-joined`/`peer-left` so quality restores automatically as people leave. Rooms left at the default 6 see no behavior change — tier is always uncapped below that threshold. Room ownership/moderator identity is still unbuilt (see Moderation section) — this only needed a per-session setting captured at creation, not creator authentication.
 - [x] Webcam support (toggle, grid tiles, PiP, stream-id discrimination from screen share)
 - [x] Local HTTPS via mkcert (conditional, falls back to HTTP if no certs present)
