@@ -492,6 +492,19 @@ export class UIController {
         micLabel.textContent = 'Muted';
         statusRow.appendChild(micLabel);
 
+        if (!isSelf) {
+            const sigSep = document.createElement('span');
+            sigSep.className = 'text-[10px] text-muted';
+            sigSep.textContent = '·';
+            statusRow.appendChild(sigSep);
+
+            const sigIcon = document.createElement('span');
+            sigIcon.className = 'participant-signal-icon inline-flex items-center';
+            sigIcon.title = 'Connection: Unknown';
+            sigIcon.innerHTML = this._signalBarsSvg('unknown');
+            statusRow.appendChild(sigIcon);
+        }
+
         info.appendChild(nameRow);
         info.appendChild(statusRow);
 
@@ -530,6 +543,28 @@ export class UIController {
             else if (status === 'dnd') label.classList.add('text-red-400');
             else label.classList.add('text-muted');
         }
+    }
+
+    _signalBarsSvg(tier) {
+        const dim = '#374151';
+        const c = {
+            excellent: ['#22c55e', '#22c55e', '#22c55e'],
+            good:      ['#84cc16', '#84cc16', dim],
+            fair:      ['#eab308', dim, dim],
+            poor:      ['#ef4444', dim, dim],
+            unknown:   [dim, dim, dim],
+        }[tier] || [dim, dim, dim];
+        return `<svg width="12" height="10" viewBox="0 0 12 10" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="6" width="3" height="4" rx="0.5" fill="${c[0]}"/><rect x="4.5" y="3" width="3" height="7" rx="0.5" fill="${c[1]}"/><rect x="9" y="0" width="3" height="10" rx="0.5" fill="${c[2]}"/></svg>`;
+    }
+
+    updateConnectionQuality(peerId, tier) {
+        const el = document.getElementById(`participant-${peerId}`);
+        if (!el) return;
+        const icon = el.querySelector('.participant-signal-icon');
+        if (!icon) return;
+        const labels = { excellent: 'Excellent', good: 'Good', fair: 'Fair', poor: 'Poor', unknown: 'Unknown' };
+        icon.title = `Connection: ${labels[tier] || 'Unknown'}`;
+        icon.innerHTML = this._signalBarsSvg(tier);
     }
 
     removeParticipant(peerId) {

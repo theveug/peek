@@ -36,7 +36,7 @@ See **Design principles** in `CLAUDE.md` before adding new items — weigh new f
 ## Polish
 
 - [ ] **Files tab** — a tab in the chat/sidebar panel listing every file shared during the current session (filename, sender, size, download link). Files are kept as raw Blobs in memory as they arrive so they remain available after the chat message scrolls or the object URL is revoked. A "Download all" button zips them client-side via JSZip and triggers a single bundle download — no server needed. Caveat: only files received during *your* time in the session are available (late joiners miss earlier files); everything disappears when the session ends, which is consistent with Peek's no-persistence design.
-- [ ] **Connection quality indicator** — signal strength icon per participant, computed from ICE stats (latency / packet loss).
+- [x] **Connection quality indicator** — signal strength icon per participant, computed from ICE stats (latency / packet loss).
 - [ ] **Keyboard shortcuts panel** — `?` or `F1` overlay listing available shortcuts.
 
 ## Moderation

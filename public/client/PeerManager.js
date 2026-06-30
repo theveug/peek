@@ -32,6 +32,7 @@ export class PeerManager {
         this._lastQualityTierKey = null;
         this.peerScreenStreamIds = {};
         this.senders = {};
+        this._statsInterval = null;
     }
 
     // Adds every track of `stream` to `pc` and records the resulting RTCRtpSender
@@ -312,6 +313,46 @@ export class PeerManager {
         }
     }
 
+    _connectionQualityFromStats(rtt, lossRate) {
+        if (rtt === null) return 'unknown';
+        const ms = rtt * 1000;
+        if (lossRate > 0.08 || ms >= 400) return 'poor';
+        if (ms >= 200) return 'fair';
+        if (ms >= 100) return 'good';
+        return 'excellent';
+    }
+
+    async _pollConnectionStats() {
+        for (const [peerId, pc] of Object.entries(this.peers)) {
+            try {
+                const stats = await pc.getStats();
+                let rtt = null;
+                let packetsLost = 0;
+                let packetsReceived = 0;
+                stats.forEach(r => {
+                    if (r.type === 'candidate-pair' && r.nominated) rtt = r.currentRoundTripTime ?? null;
+                    if (r.type === 'inbound-rtp') {
+                        packetsLost += r.packetsLost || 0;
+                        packetsReceived += r.packetsReceived || 0;
+                    }
+                });
+                const total = packetsReceived + packetsLost;
+                const lossRate = total > 0 ? packetsLost / total : 0;
+                this.ui.updateConnectionQuality(peerId, this._connectionQualityFromStats(rtt, lossRate));
+            } catch (_) {}
+        }
+    }
+
+    _startStatsPolling() {
+        if (this._statsInterval) return;
+        this._statsInterval = setInterval(() => this._pollConnectionStats(), 3000);
+    }
+
+    _stopStatsPolling() {
+        clearInterval(this._statsInterval);
+        this._statsInterval = null;
+    }
+
     async toggleMic() {
         if (!this.micStream) {
             try {
@@ -464,6 +505,7 @@ export class PeerManager {
             this._setupDataChannel(e.channel, remotePeerId);
         };
 
+        if (Object.keys(this.peers).length === 0) this._startStatsPolling();
         this.peers[remotePeerId] = pc;
         return pc;
     }
@@ -667,6 +709,7 @@ export class PeerManager {
         const pc = this.peers[peerId];
         if (pc) pc.close();
         delete this.peers[peerId];
+        if (Object.keys(this.peers).length === 0) this._stopStatsPolling();
         delete this.peerCamStreamIds[peerId];
         delete this.peerScreenStreamIds[peerId];
         delete this.senders[peerId];
