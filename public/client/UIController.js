@@ -16,6 +16,7 @@ export class UIController {
         this._watchSentState = new Map();
         this.maxWatchedTiles = 6;
         this.onWatchChange = null;
+        this.onPipExit = null;
         this.focusedPeerId = null;
         this.viewMode = 'grid'; // 'focus' or 'grid'
         this.zoom = 1;
@@ -156,6 +157,12 @@ export class UIController {
         this.pipButton.addEventListener('click', (e) => {
             e.stopPropagation();
             this.togglePictureInPicture();
+        });
+
+        // Closing the floating PiP window (its own close button, not our toggle)
+        // while the tab is still hidden should resume the tab-hidden video pause.
+        this.focusedVideo.addEventListener('leavepictureinpicture', () => {
+            if (this.onPipExit) this.onPipExit();
         });
     }
 

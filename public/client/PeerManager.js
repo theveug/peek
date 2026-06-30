@@ -380,8 +380,19 @@ export class PeerManager {
         }
     }
 
+    // A peer's video stays enabled if its stream is the one currently floating
+    // in native picture-in-picture — tab-hidden doesn't mean unwatched there.
+    _isPeerInPictureInPicture(peerId) {
+        if (document.pictureInPictureElement !== this.ui.focusedVideo) return false;
+        const focusedPeerId = this.ui.focusedPeerId;
+        if (!focusedPeerId) return false;
+        const basePeerId = focusedPeerId.endsWith('-cam') ? focusedPeerId.slice(0, -4) : focusedPeerId;
+        return basePeerId === peerId;
+    }
+
     _pauseIncomingVideo() {
-        Object.values(this.peers).forEach(pc => {
+        Object.entries(this.peers).forEach(([peerId, pc]) => {
+            if (this._isPeerInPictureInPicture(peerId)) return;
             pc.getReceivers().forEach(r => {
                 if (r.track && r.track.kind === 'video') {
                     r.track.enabled = false;

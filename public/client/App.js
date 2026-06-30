@@ -15,6 +15,7 @@ const ui = new UIController();
 const peerManager = new PeerManager(null, ui);
 const debug = new DebugPanel(peerManager);
 ui.onWatchChange = (streamKey, watched) => peerManager.setWatched(streamKey, watched);
+ui.onPipExit = () => peerManager.handleTabVisibility(document.hidden);
 
 let socket;
 let reconnectTimer;
