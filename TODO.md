@@ -55,3 +55,5 @@ See **Design principles** in `CLAUDE.md` before adding new items — weigh new f
 - [x] Fixed nickname broadcast not defaulting to "Anonymous"
 - [x] Click-to-grid from focused view when not zoomed in
 - [x] Camera error toasts (permission denied, no device, insecure context)
+- [x] Fixed emoji reaction picker unclickable on the first chat message (popped up above the message, clipped by chat-log scroll bounds when there's no room above)
+- [x] Fixed shared images having no click/download link (only the non-image file-card had a download anchor)

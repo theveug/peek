@@ -89,6 +89,10 @@ export class ChatUI {
             document.querySelectorAll('.emoji-picker').forEach(p => p.remove());
             const picker = document.createElement('div');
             picker.className = 'emoji-picker';
+            const chatLog = document.getElementById('chat-log');
+            if (chatLog && msgEl.getBoundingClientRect().top - chatLog.getBoundingClientRect().top < 40) {
+                picker.classList.add('emoji-picker-below');
+            }
             this._emojiSet.forEach(emoji => {
                 const eb = document.createElement('button');
                 eb.textContent = emoji;
@@ -185,7 +189,7 @@ export class ChatUI {
 
         let fileContent;
         if (isImage) {
-            fileContent = `<div class="chat-image-preview"><img src="${blobUrl}" alt="${fileName}" /></div>`;
+            fileContent = `<div class="chat-image-preview"><a href="${blobUrl}" target="_blank" rel="noopener"><img src="${blobUrl}" alt="${fileName}" /></a><a href="${blobUrl}" download="${fileName}" class="file-card-download chat-image-download" title="Download">&#x2B73;</a></div>`;
         } else {
             fileContent = `<div class="file-card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-muted"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" /></svg><div class="file-card-info"><span class="file-card-name">${fileName}</span><span class="file-card-size">${sizeStr}</span></div><a href="${blobUrl}" download="${fileName}" class="file-card-download" title="Download">&#x2B73;</a></div>`;
         }
