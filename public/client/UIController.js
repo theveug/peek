@@ -222,6 +222,15 @@ export class UIController {
         if (this.onWatchChange) this.onWatchChange(streamKey, watched);
     }
 
+    // Explicit user-initiated "stop watching" (the grid tile's stop button). Unlike
+    // eviction this also drops the LRU bookkeeping entry, since the slot is freed
+    // intentionally rather than reassigned to a newer tile.
+    _unwatchTile(streamKey) {
+        const idx = this._watchOrder.indexOf(streamKey);
+        if (idx !== -1) this._watchOrder.splice(idx, 1);
+        this._setWatched(streamKey, false);
+    }
+
     // --- Stream grid ---
 
     buildGrid() {
@@ -270,6 +279,19 @@ export class UIController {
             video.className = 'w-full h-full object-contain';
             cell.appendChild(video);
             cell.appendChild(label);
+
+            const stopBtn = document.createElement('button');
+            stopBtn.type = 'button';
+            stopBtn.title = 'Stop watching';
+            stopBtn.className = 'absolute top-2 right-2 text-xs text-white/80 bg-black/40 hover:bg-black/60 px-2 py-0.5 rounded-full transition-colors';
+            stopBtn.textContent = 'Stop watching';
+            stopBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._unwatchTile(peerId);
+                cell.replaceWith(this._buildGridCell(peerId));
+            });
+            cell.appendChild(stopBtn);
+
             cell.addEventListener('click', () => this.focusStream(peerId));
         } else {
             const placeholder = document.createElement('div');
