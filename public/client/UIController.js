@@ -331,17 +331,29 @@ export class UIController {
             cell.addEventListener('click', () => this.focusStream(peerId));
         } else {
             const placeholder = document.createElement('div');
-            placeholder.className = 'flex flex-col items-center gap-2 pointer-events-none';
+            placeholder.className = 'flex flex-col items-center gap-1.5 pointer-events-none px-2 text-center';
 
             const avatar = document.createElement('div');
-            avatar.className = 'w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-lg font-medium text-white/80';
-            avatar.textContent = (nickname || '?').charAt(0).toUpperCase();
+            avatar.className = 'w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white/80';
+            avatar.innerHTML = isCam
+                ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6"><path d="M3.25 4A2.25 2.25 0 0 0 1 6.25v7.5A2.25 2.25 0 0 0 3.25 16h6.5A2.25 2.25 0 0 0 12 13.75v-1.638l3.058 1.892c.745.461 1.71-.074 1.71-.95V7.446c0-.876-.965-1.41-1.71-.95L12 8.388V6.25A2.25 2.25 0 0 0 9.75 4h-6.5Z" /></svg>'
+                : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6"><path fill-rule="evenodd" d="M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.105a3.501 3.501 0 0 0 1.1 1.677A.75.75 0 0 1 13.26 18H6.74a.75.75 0 0 1-.484-1.323A3.501 3.501 0 0 0 7.355 15H4.25A2.25 2.25 0 0 1 2 12.75v-8.5Zm1.5 0a.75.75 0 0 1 .75-.75h11.5a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.75.75H4.25a.75.75 0 0 1-.75-.75v-7.5Z" clip-rule="evenodd" /></svg>';
+
+            const nameLine = document.createElement('div');
+            nameLine.className = 'text-sm font-medium text-white/90 truncate max-w-[10rem]';
+            nameLine.textContent = nickname;
+
+            const typeLine = document.createElement('div');
+            typeLine.className = 'text-xs text-white/50';
+            typeLine.textContent = isCam ? 'Webcam' : 'Screen share';
 
             const hint = document.createElement('div');
-            hint.className = 'text-xs text-white/50';
+            hint.className = 'text-xs text-white/40 mt-1';
             hint.textContent = 'Click to watch';
 
             placeholder.appendChild(avatar);
+            placeholder.appendChild(nameLine);
+            placeholder.appendChild(typeLine);
             placeholder.appendChild(hint);
             cell.appendChild(placeholder);
             cell.appendChild(label);
