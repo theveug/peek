@@ -112,8 +112,12 @@ app.get('/:code', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
+const APP_NAME = process.env.APP_NAME || 'Peek';
+const APP_VERSION = process.env.APP_VERSION || '0.0.0';
+
 server.listen(PORT, () => {
     const proto = useHttps ? 'https' : 'http';
+    console.log(`${APP_NAME} v${APP_VERSION}`);
     console.log(`Server listening at ${proto}://localhost:${PORT}`);
     if (!useHttps) console.log('  → Add certs/localhost.pem + certs/localhost-key.pem for HTTPS (see README)');
 });
