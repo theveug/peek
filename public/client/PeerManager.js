@@ -536,7 +536,7 @@ export class PeerManager {
                 const url = URL.createObjectURL(blob);
                 const nickname = this.ui._peerNickname(peerId);
                 this.ui.removeFileProgress(msg.fileId);
-                this.ui.addFileMessage(nickname, msg.fileId, t.fileName, t.fileSize, t.fileType, url);
+                this.ui.addFileMessage(nickname, msg.fileId, t.fileName, t.fileSize, t.fileType, url, blob);
                 delete this.incomingTransfers[msg.fileId];
             }
         } else {
@@ -633,7 +633,7 @@ export class PeerManager {
         this.ui.removeFileProgress(fileId);
         const blob = new Blob([file], { type: file.type });
         const url = URL.createObjectURL(blob);
-        this.ui.addFileMessage('Me', fileId, file.name, file.size, file.type, url);
+        this.ui.addFileMessage('Me', fileId, file.name, file.size, file.type, url, blob);
     }
 
     initiateConnection(peerId) {

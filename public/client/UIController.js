@@ -24,16 +24,116 @@ export class UIController {
         this.panY = 0;
         this.isPanning = false;
         this.chat = new ChatUI({ getNickname: (id) => this._peerNickname(id) });
+        this._sharedFiles = [];
         this.setupZoom();
         this.setupPictureInPicture();
         this._createToastContainer();
+        this._initFilesTab();
+    }
+
+    // --- Files tab ---
+
+    _initFilesTab() {
+        document.getElementById('tab-chat').addEventListener('click', () => this._switchTab('chat'));
+        document.getElementById('tab-files').addEventListener('click', () => this._switchTab('files'));
+        document.getElementById('files-download-all').addEventListener('click', () => this._downloadAllFiles());
+    }
+
+    _switchTab(tab) {
+        const toChat = tab === 'chat';
+        document.getElementById('chat-tab-content').classList.toggle('hidden', !toChat);
+        document.getElementById('files-tab-content').classList.toggle('hidden', toChat);
+        const chatBtn = document.getElementById('tab-chat');
+        const filesBtn = document.getElementById('tab-files');
+        chatBtn.classList.toggle('border-indigo-500', toChat);
+        chatBtn.classList.toggle('text-foreground', toChat);
+        chatBtn.classList.toggle('border-transparent', !toChat);
+        chatBtn.classList.toggle('text-muted', !toChat);
+        filesBtn.classList.toggle('border-indigo-500', !toChat);
+        filesBtn.classList.toggle('text-foreground', !toChat);
+        filesBtn.classList.toggle('border-transparent', toChat);
+        filesBtn.classList.toggle('text-muted', toChat);
+    }
+
+    _addFileToTab(entry) {
+        this._sharedFiles.push(entry);
+        document.getElementById('files-empty-state').classList.add('hidden');
+        const badge = document.getElementById('files-tab-badge');
+        badge.textContent = this._sharedFiles.length;
+        badge.classList.remove('hidden');
+        badge.classList.add('flex');
+        if (this._sharedFiles.length >= 2) {
+            document.getElementById('files-download-wrap').classList.remove('hidden');
+        }
+        const isImage = /^image\//i.test(entry.fileType);
+        const fileIconSvg = isImage
+            ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M1 5.25A2.25 2.25 0 0 1 3.25 3h13.5A2.25 2.25 0 0 1 19 5.25v9.5A2.25 2.25 0 0 1 16.75 17H3.25A2.25 2.25 0 0 1 1 14.75v-9.5Zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 0 0 .75-.75v-2.69l-2.22-2.219a.75.75 0 0 0-1.06 0l-1.91 1.909-.48-.480a.75.75 0 0 0-1.06 0L4.5 14.06l-2-2ZM5 8.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z" clip-rule="evenodd" /></svg>`
+            : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" /></svg>`;
+
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-3 p-2.5 rounded-lg surface-input';
+        row.innerHTML = `
+            <div class="shrink-0 w-8 h-8 rounded flex items-center justify-center bg-white/5 text-muted">${fileIconSvg}</div>
+            <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium truncate">${entry.fileName}</div>
+                <div class="text-[10px] text-muted">${entry.sender} · ${this._formatFileSize(entry.fileSize)}</div>
+            </div>
+            <button class="shrink-0 p-1.5 rounded text-muted hover:text-foreground transition-colors" title="Download"></button>
+        `;
+        const dlBtn = row.querySelector('button');
+        dlBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"/><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/></svg>`;
+        dlBtn.addEventListener('click', () => {
+            const url = URL.createObjectURL(entry.blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = entry.fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+        document.getElementById('files-list').appendChild(row);
+    }
+
+    async _downloadAllFiles() {
+        if (!this._sharedFiles.length || typeof JSZip === 'undefined') return;
+        const zip = new JSZip();
+        const seen = {};
+        this._sharedFiles.forEach(f => {
+            let name = f.fileName;
+            if (seen[name] !== undefined) {
+                seen[name]++;
+                const dot = name.lastIndexOf('.');
+                name = dot > 0
+                    ? name.slice(0, dot) + ` (${seen[name]})` + name.slice(dot)
+                    : `${name} (${seen[name]})`;
+            } else {
+                seen[name] = 0;
+            }
+            zip.file(name, f.blob);
+        });
+        const content = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(content);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'peek-files.zip';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    _formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
     }
 
     // --- Chat proxies (keeps App.js / PeerManager call signatures unchanged) ---
 
     set _onReaction(fn) { this.chat._onReaction = fn; }
     addChatMessage(...a) { return this.chat.addChatMessage(...a); }
-    addFileMessage(...a) { return this.chat.addFileMessage(...a); }
+    addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, blob) {
+        this.chat.addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl);
+        if (blob) this._addFileToTab({ fileId, fileName, fileSize, fileType, blob, sender });
+    }
     updateFileProgress(...a) { return this.chat.updateFileProgress(...a); }
     removeFileProgress(...a) { return this.chat.removeFileProgress(...a); }
     addReaction(...a) { return this.chat.addReaction(...a); }
