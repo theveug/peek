@@ -538,6 +538,11 @@ export class PeerManager {
                 this.ui.removeFileProgress(msg.fileId);
                 this.ui.addFileMessage(nickname, msg.fileId, t.fileName, t.fileSize, t.fileType, url, blob);
                 delete this.incomingTransfers[msg.fileId];
+            } else if (msg.type === 'poll-create') {
+                const nickname = this.ui._peerNickname(peerId);
+                this.ui.addPollMessage(nickname, msg.pollId, msg.question, msg.options, this.peerId);
+            } else if (msg.type === 'poll-vote') {
+                this.ui.updatePollVote(msg.pollId, msg.optionIndex, msg.voterId);
             }
         } else {
             const keys = Object.keys(this.incomingTransfers);
@@ -634,6 +639,20 @@ export class PeerManager {
         const blob = new Blob([file], { type: file.type });
         const url = URL.createObjectURL(blob);
         this.ui.addFileMessage('Me', fileId, file.name, file.size, file.type, url, blob);
+    }
+
+    broadcastPollCreate(pollId, question, options) {
+        const msg = JSON.stringify({ type: 'poll-create', pollId, question, options });
+        for (const dc of Object.values(this.dataChannels)) {
+            if (dc.readyState === 'open') dc.send(msg);
+        }
+    }
+
+    broadcastPollVote(pollId, optionIndex) {
+        const msg = JSON.stringify({ type: 'poll-vote', pollId, optionIndex, voterId: this.peerId });
+        for (const dc of Object.values(this.dataChannels)) {
+            if (dc.readyState === 'open') dc.send(msg);
+        }
     }
 
     initiateConnection(peerId) {

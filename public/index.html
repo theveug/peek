@@ -44,6 +44,11 @@
                                     rows="2"
                                     placeholder="Type a message..."
                                     class="flex-1 p-3 resize-none surface-input rounded-lg text-sm placeholder-muted focus:outline-none focus:ring-1 focus:ring-indigo-500/50 transition-all"></textarea>
+                                <button id="poll-btn" title="Create Poll" class="p-2 rounded-lg text-muted hover:text-foreground transition-colors shrink-0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                                        <path d="M15.5 2A1.5 1.5 0 0 0 14 3.5v13a1.5 1.5 0 0 0 3 0v-13A1.5 1.5 0 0 0 15.5 2ZM10.5 6A1.5 1.5 0 0 0 9 7.5v9a1.5 1.5 0 0 0 3 0v-9A1.5 1.5 0 0 0 10.5 6ZM5.5 10A1.5 1.5 0 0 0 4 11.5v5a1.5 1.5 0 0 0 3 0v-5A1.5 1.5 0 0 0 5.5 10Z" />
+                                    </svg>
+                                </button>
                                 <button id="file-attach-btn" title="Share a file" class="p-2 rounded-lg text-muted hover:text-foreground transition-colors shrink-0">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
                                         <path fill-rule="evenodd" d="M15.621 4.379a3 3 0 0 0-4.242 0l-7 7a3 3 0 0 0 4.241 4.243h.001l.497-.5a.75.75 0 0 1 1.064 1.057l-.498.501-.002.002a4.5 4.5 0 0 1-6.364-6.364l7-7a4.5 4.5 0 0 1 6.368 6.36l-3.455 3.553A2.625 2.625 0 1 1 9.52 9.52l3.45-3.451a.75.75 0 1 1 1.061 1.06l-3.45 3.451a1.125 1.125 0 0 0 1.587 1.595l3.454-3.553a3 3 0 0 0 0-4.242Z" clip-rule="evenodd" />
@@ -395,6 +400,31 @@
                         <button type="button" id="cancel-settings" class="surface-input hover:opacity-80 px-4 py-2 rounded text-sm">Cancel</button>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <!-- Poll modal -->
+        <div id="poll-modal" class="fixed inset-0 z-100 hidden">
+            <div class="absolute inset-0 bg-black/70" id="poll-backdrop"></div>
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 surface-elevated text-foreground rounded-xl p-6 w-full max-w-sm shadow-2xl border border-separator">
+                <h2 class="text-lg font-bold mb-4">Create Poll</h2>
+                <div class="mb-4">
+                    <label class="block text-xs text-muted font-medium mb-1">Question</label>
+                    <input id="poll-question" type="text" placeholder="Ask a question…" class="w-full surface-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500/50" />
+                </div>
+                <div class="mb-4">
+                    <label class="block text-xs text-muted font-medium mb-2">Options</label>
+                    <div id="poll-options-list" class="flex flex-col gap-2">
+                        <input type="text" class="poll-option-input w-full surface-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500/50" placeholder="Option 1" />
+                        <input type="text" class="poll-option-input w-full surface-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500/50" placeholder="Option 2" />
+                    </div>
+                    <button id="poll-add-option" class="mt-2 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">+ Add option</button>
+                </div>
+                <p id="poll-validation" class="text-xs text-red-400 mb-3 hidden">Add a question and at least 2 options.</p>
+                <div class="flex gap-3 justify-end">
+                    <button id="poll-cancel" class="px-4 py-2 text-sm rounded-lg text-muted hover:text-foreground transition-colors">Cancel</button>
+                    <button id="poll-create-submit" class="px-4 py-2 text-sm rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors">Create Poll</button>
+                </div>
             </div>
         </div>
 

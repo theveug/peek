@@ -129,7 +129,10 @@ export class UIController {
     // --- Chat proxies (keeps App.js / PeerManager call signatures unchanged) ---
 
     set _onReaction(fn) { this.chat._onReaction = fn; }
+    set onPollVote(fn) { this.chat.onPollVote = fn; }
     addChatMessage(...a) { return this.chat.addChatMessage(...a); }
+    addPollMessage(...a) { return this.chat.addPollMessage(...a); }
+    updatePollVote(...a) { return this.chat.updatePollVote(...a); }
     addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, blob) {
         this.chat.addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl);
         if (blob) this._addFileToTab({ fileId, fileName, fileSize, fileType, blob, sender });

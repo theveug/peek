@@ -156,6 +156,68 @@ document.addEventListener('paste', (e) => {
     }
 });
 
+// Poll
+(function initPoll() {
+    const modal = document.getElementById('poll-modal');
+    const backdrop = document.getElementById('poll-backdrop');
+    const optionsList = document.getElementById('poll-options-list');
+    const questionInput = document.getElementById('poll-question');
+    const validation = document.getElementById('poll-validation');
+
+    function openModal() {
+        modal.classList.remove('hidden');
+        questionInput.focus();
+    }
+
+    function closeModal() {
+        modal.classList.add('hidden');
+        validation.classList.add('hidden');
+        questionInput.value = '';
+        optionsList.innerHTML = '';
+        [1, 2].forEach(n => {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'poll-option-input w-full surface-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500/50';
+            input.placeholder = `Option ${n}`;
+            optionsList.appendChild(input);
+        });
+    }
+
+    document.getElementById('poll-btn').addEventListener('click', openModal);
+    backdrop.addEventListener('click', closeModal);
+    document.getElementById('poll-cancel').addEventListener('click', closeModal);
+
+    document.getElementById('poll-add-option').addEventListener('click', () => {
+        const inputs = optionsList.querySelectorAll('.poll-option-input');
+        if (inputs.length >= 6) return;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'poll-option-input w-full surface-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500/50';
+        input.placeholder = `Option ${inputs.length + 1}`;
+        optionsList.appendChild(input);
+        input.focus();
+    });
+
+    document.getElementById('poll-create-submit').addEventListener('click', () => {
+        const question = questionInput.value.trim();
+        const options = [...optionsList.querySelectorAll('.poll-option-input')]
+            .map(i => i.value.trim()).filter(v => v.length > 0);
+        if (!question || options.length < 2) {
+            validation.classList.remove('hidden');
+            return;
+        }
+        const pollId = 'poll-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+        ui.addPollMessage('Me', pollId, question, options, peerManager.peerId);
+        peerManager.broadcastPollCreate(pollId, question, options);
+        closeModal();
+    });
+
+    ui.onPollVote = (pollId, optionIndex) => {
+        ui.updatePollVote(pollId, optionIndex, peerManager.peerId);
+        peerManager.broadcastPollVote(pollId, optionIndex);
+    };
+})();
+
 // Reaction callback
 ui._onReaction = (messageId, emoji) => {
     const nickname = (localStorage.getItem('nickname') || 'Anonymous').trim();

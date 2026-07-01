@@ -8,6 +8,8 @@ export class ChatUI {
         this._reactions = new Map();
         this._onReaction = null;
         this._replyTo = null;
+        this._polls = {};
+        this.onPollVote = null;
     }
 
     updateTypingIndicator(peerId, isTyping) {
@@ -146,6 +148,74 @@ export class ChatUI {
             });
             bar.appendChild(badge);
         });
+    }
+
+    // --- Polls ---
+
+    addPollMessage(sender, pollId, question, options, myPeerId) {
+        const chatLog = document.getElementById('chat-log');
+        const isSelf = sender === 'Me';
+        const initial = isSelf
+            ? (localStorage.getItem('nickname') || 'Me').charAt(0).toUpperCase()
+            : sender.charAt(0).toUpperCase();
+        const color = isSelf ? '#22c55e' : this._colorForName(sender);
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        this._polls[pollId] = {
+            question, options, myPeerId, myVote: null,
+            votes: Object.fromEntries(options.map((_, i) => [i, new Set()])),
+        };
+
+        const container = document.createElement('div');
+        container.dataset.pollId = pollId;
+        container.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-2"><span class="chat-avatar" style="background:${color}">${initial}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${sender}</span><span class="text-[10px] bg-indigo-600/20 text-indigo-400 px-1.5 py-0.5 rounded-full font-medium leading-none">Poll</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="ml-7"><div class="font-medium mb-3">${question}</div><div class="poll-options flex flex-col gap-2"></div><div class="poll-footer text-[10px] text-muted mt-2">0 votes</div></div></div>`;
+
+        this._renderPollOptions(container, pollId);
+        chatLog.appendChild(container);
+        while (chatLog.children.length > this.maxMessages) chatLog.removeChild(chatLog.firstChild);
+        requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' }));
+    }
+
+    updatePollVote(pollId, optionIndex, voterId) {
+        const poll = this._polls[pollId];
+        if (!poll) return;
+        for (const set of Object.values(poll.votes)) set.delete(voterId);
+        if (poll.votes[optionIndex]) poll.votes[optionIndex].add(voterId);
+        if (voterId === poll.myPeerId) poll.myVote = optionIndex;
+        const container = document.querySelector(`[data-poll-id="${pollId}"]`);
+        if (container) this._renderPollOptions(container, pollId);
+    }
+
+    _renderPollOptions(container, pollId) {
+        const poll = this._polls[pollId];
+        if (!poll) return;
+        const optionsEl = container.querySelector('.poll-options');
+        const footerEl = container.querySelector('.poll-footer');
+        if (!optionsEl) return;
+
+        const totalVotes = Object.values(poll.votes).reduce((s, set) => s + set.size, 0);
+        const hasVoted = poll.myVote !== null;
+
+        optionsEl.innerHTML = '';
+        poll.options.forEach((option, i) => {
+            const count = poll.votes[i]?.size || 0;
+            const pct = totalVotes > 0 ? count / totalVotes : 0;
+            const isMyVote = poll.myVote === i;
+
+            const btn = document.createElement('button');
+            btn.className = `poll-option relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-left w-full overflow-hidden border transition-colors ${isMyVote ? 'border-indigo-500/70' : 'border-white/10'} ${hasVoted ? 'cursor-default' : 'hover:border-indigo-500/40'}`;
+            btn.disabled = hasVoted;
+            btn.innerHTML = `<div class="absolute inset-0 bg-indigo-600/20 origin-left transition-transform duration-500" style="transform:scaleX(${pct})"></div><span class="relative z-10 flex-1">${option}${isMyVote ? ' <span class="text-indigo-400">✓</span>' : ''}</span><span class="relative z-10 text-[10px] text-muted">${count} ${count === 1 ? 'vote' : 'votes'}</span>`;
+
+            if (!hasVoted) {
+                btn.addEventListener('click', () => {
+                    if (this.onPollVote) this.onPollVote(pollId, i);
+                });
+            }
+            optionsEl.appendChild(btn);
+        });
+
+        if (footerEl) footerEl.textContent = `${totalVotes} ${totalVotes === 1 ? 'vote' : 'votes'}`;
     }
 
     _formatFileSize(bytes) {
