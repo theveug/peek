@@ -44,24 +44,14 @@ function connect() {
             showPasswordPrompt();
             return;
         }
-        if (msg.type === 'chat') {
-            if (msg.from !== peerManager.peerId) {
-                const displayName = msg.nickname || msg.from;
-                ui.addChatMessage(displayName, msg.text, msg.messageId, msg.replyTo || null);
-                ui.updateTypingIndicator(msg.from, false);
+        if (msg.type === 'init' && msg.roomName) {
+            const header = document.getElementById('room-header');
+            if (header) {
+                header.textContent = msg.roomName;
+                header.classList.remove('hidden');
             }
-        } else if (msg.type === 'reaction') {
-            ui.addReaction(msg.payload.messageId, msg.payload.emoji, msg.payload.nickname, msg.from);
-        } else {
-            if (msg.type === 'init' && msg.roomName) {
-                const header = document.getElementById('room-header');
-                if (header) {
-                    header.textContent = msg.roomName;
-                    header.classList.remove('hidden');
-                }
-            }
-            peerManager.handleSignal(msg);
         }
+        peerManager.handleSignal(msg);
     };
 
     socket.onclose = () => {
@@ -221,7 +211,7 @@ document.addEventListener('paste', (e) => {
 // Reaction callback
 ui._onReaction = (messageId, emoji) => {
     const nickname = (localStorage.getItem('nickname') || 'Anonymous').trim();
-    socket.send(JSON.stringify({ type: 'reaction', payload: { messageId, emoji, nickname } }));
+    peerManager.broadcastReaction(messageId, emoji, nickname);
     ui.addReaction(messageId, emoji, nickname, peerManager.peerId);
 };
 
@@ -244,7 +234,7 @@ let isTyping = false;
 function sendTypingStatus(typing) {
     if (typing === isTyping) return;
     isTyping = typing;
-    peerManager.send('typing', null, { isTyping: typing });
+    peerManager.broadcastTyping(typing);
 }
 
 input.addEventListener('input', () => {
@@ -268,9 +258,7 @@ function sendMessage() {
     if (text) {
         const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
         const reply = ui.getReplyTo();
-        const chatMsg = { type: 'chat', text, nickname, messageId };
-        if (reply) chatMsg.replyTo = { messageId: reply.messageId, sender: reply.sender, text: reply.text };
-        socket.send(JSON.stringify(chatMsg));
+        peerManager.broadcastChat(text, nickname, messageId, reply || null);
         ui.addChatMessage('Me', text, messageId, reply);
         ui.clearReply();
         input.value = '';

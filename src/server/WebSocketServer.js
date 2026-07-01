@@ -93,32 +93,6 @@ export function setupWebSocket(wss, turnConfig, manager) {
                     break;
                 }
 
-                case 'chat': {
-                    const sessionId = manager.getSessionId(peerId);
-                    const peers = manager.getPeersInSession(sessionId);
-                    const nickname = msg.nickname.replace(/[^a-zA-Z0-9-_]/g,'') || 'Anonymous';
-
-                    peers.forEach(pid => {
-                        const socket = manager.getPeerSocket(pid);
-                        if (socket) {
-                            socket.send(JSON.stringify({ type: 'chat', from: peerId, text, nickname, messageId, replyTo: msg.replyTo || null }));
-                        }
-                    });
-                    break;
-                }
-
-                case 'reaction': {
-                    const sessionId = manager.getSessionId(peerId);
-                    const peers = manager.getPeersInSession(sessionId).filter(id => id !== peerId);
-                    peers.forEach(pid => {
-                        const socket = manager.getPeerSocket(pid);
-                        if (socket) {
-                            socket.send(JSON.stringify({ type: 'reaction', from: peerId, payload }));
-                        }
-                    });
-                    break;
-                }
-
                 case 'start-sharing':
                 case 'stop-sharing':
                 case 'webcam-start':
@@ -126,8 +100,7 @@ export function setupWebSocket(wss, turnConfig, manager) {
                 case 'mic-status':
                 case 'deafen-status':
                 case 'nickname-update':
-                case 'status-update':
-                case 'typing': {
+                case 'status-update': {
                     const sessionId = manager.getSessionId(peerId);
                     const peers = manager.getPeersInSession(sessionId).filter(id => id !== peerId);
                     peers.forEach(pid => {

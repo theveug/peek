@@ -543,6 +543,13 @@ export class PeerManager {
                 this.ui.addPollMessage(nickname, msg.pollId, msg.question, msg.options, this.peerId);
             } else if (msg.type === 'poll-vote') {
                 this.ui.updatePollVote(msg.pollId, msg.optionIndex, msg.voterId);
+            } else if (msg.type === 'chat') {
+                this.ui.addChatMessage(this.ui._peerNickname(peerId), msg.text, msg.messageId, msg.replyTo || null);
+                this.ui.updateTypingIndicator(peerId, false);
+            } else if (msg.type === 'reaction') {
+                this.ui.addReaction(msg.messageId, msg.emoji, msg.nickname, peerId);
+            } else if (msg.type === 'typing') {
+                this.ui.updateTypingIndicator(peerId, msg.isTyping);
             }
         } else {
             const keys = Object.keys(this.incomingTransfers);
@@ -639,6 +646,27 @@ export class PeerManager {
         const blob = new Blob([file], { type: file.type });
         const url = URL.createObjectURL(blob);
         this.ui.addFileMessage('Me', fileId, file.name, file.size, file.type, url, blob);
+    }
+
+    broadcastChat(text, nickname, messageId, replyTo) {
+        const msg = JSON.stringify({ type: 'chat', text, nickname, messageId, replyTo: replyTo || null });
+        for (const dc of Object.values(this.dataChannels)) {
+            if (dc.readyState === 'open') dc.send(msg);
+        }
+    }
+
+    broadcastReaction(messageId, emoji, nickname) {
+        const msg = JSON.stringify({ type: 'reaction', messageId, emoji, nickname });
+        for (const dc of Object.values(this.dataChannels)) {
+            if (dc.readyState === 'open') dc.send(msg);
+        }
+    }
+
+    broadcastTyping(isTyping) {
+        const msg = JSON.stringify({ type: 'typing', isTyping });
+        for (const dc of Object.values(this.dataChannels)) {
+            if (dc.readyState === 'open') dc.send(msg);
+        }
     }
 
     broadcastPollCreate(pollId, question, options) {
