@@ -135,7 +135,7 @@ if (chatPanel && dropOverlay) {
         e.stopPropagation();
         dropOverlay.classList.remove('active');
         if (e.dataTransfer.files.length) {
-            [...e.dataTransfer.files].forEach(f => peerManager.sendFileToAll(f));
+            (async () => { for (const f of e.dataTransfer.files) await peerManager.sendFileToAll(f); })();
         }
     });
 }
@@ -143,15 +143,16 @@ if (chatPanel && dropOverlay) {
 if (fileAttachBtn && fileInput) {
     fileAttachBtn.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', () => {
-        [...fileInput.files].forEach(f => peerManager.sendFileToAll(f));
+        const files = [...fileInput.files];
         fileInput.value = '';
+        (async () => { for (const f of files) await peerManager.sendFileToAll(f); })();
     });
 }
 
 document.addEventListener('paste', (e) => {
     if (document.activeElement?.id === 'message' && e.clipboardData.files.length) {
         e.preventDefault();
-        [...e.clipboardData.files].forEach(f => peerManager.sendFileToAll(f));
+        (async () => { for (const f of e.clipboardData.files) await peerManager.sendFileToAll(f); })();
     }
 });
 
