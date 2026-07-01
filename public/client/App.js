@@ -382,6 +382,12 @@ if (membersToggle && membersSidebar) {
         } else {
             const collapsed = membersSidebar.classList.toggle('collapsed');
             if (membersHandle) membersHandle.style.display = collapsed ? 'none' : '';
+            if (collapsed) {
+                membersSidebar.style.width = '';
+            } else {
+                const savedW = localStorage.getItem('membersWidth');
+                if (savedW) membersSidebar.style.width = savedW + 'px';
+            }
             localStorage.setItem('membersHidden', collapsed ? '1' : '0');
         }
     });

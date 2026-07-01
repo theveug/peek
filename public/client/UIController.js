@@ -379,7 +379,8 @@ export class UIController {
             this._watchTile(remoteIds[0]);
         } else {
             remoteIds.forEach(id => {
-                if (!this.watchedTiles.has(id)) this._setWatched(id, false);
+                if (this._watchOrder.includes(id)) this._setWatched(id, true);
+                else if (!this.watchedTiles.has(id)) this._setWatched(id, false);
             });
         }
 
@@ -892,9 +893,11 @@ export class UIController {
                 this.focusedVideo.srcObject = this.streams[remoteStreams[0]];
             }
             // Focus view only ever renders one stream — anything else isn't visible
-            // anywhere, so pause it the same way an unwatched grid tile would be.
+            // anywhere, so pause it without dropping the _watchOrder entry (unlike
+            // _unwatchTile which does both). This preserves which tiles should resume
+            // when the user returns to grid view.
             remoteStreams.forEach(id => {
-                if (id !== this.focusedPeerId) this._unwatchTile(id);
+                if (id !== this.focusedPeerId) this._setWatched(id, false);
             });
             this.focusedView.style.display = 'flex';
             this.gridView.style.display = 'none';
