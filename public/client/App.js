@@ -297,6 +297,10 @@ document.getElementById('grid-button').addEventListener('click', () => {
     ui.toggleViewMode();
 });
 
+document.getElementById('leave-room-button').addEventListener('click', () => {
+    window.location.href = '/';
+});
+
 document.getElementById('mic-toggle').addEventListener('click', async () => {
     const enabled = await peerManager.toggleMic();
     updateMicUI(enabled);

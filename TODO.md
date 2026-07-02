@@ -38,6 +38,7 @@ See **Design principles** in `CLAUDE.md` before adding new items — weigh new f
 
 - [x] **Files tab** — a tab in the chat/sidebar panel listing every file shared during the current session (filename, sender, size, download link). Files are kept as raw Blobs in memory as they arrive so they remain available after the chat message scrolls or the object URL is revoked. A "Download all" button zips them client-side via JSZip and triggers a single bundle download — no server needed. Caveat: only files received during *your* time in the session are available (late joiners miss earlier files); everything disappears when the session ends, which is consistent with Peek's no-persistence design.
 - [x] **Connection quality indicator** — signal strength icon per participant, computed from ICE stats (latency / packet loss).
+- [x] **Leave Room button** — there was no way back to the lobby short of manually editing the URL. Added a red "Leave Room" button (`#leave-room-button`, `index.html`) to the control bar, wired in `App.js` to `window.location.href = '/'`. No explicit WS-close cleanup needed — navigating away closes the socket naturally, and `WebSocketServer.js`'s existing `ws.on('close', ...)` handler already calls `manager.removePeer()` and broadcasts `peer-left`. Verified live: click closes the session and lands back on the lobby with no console errors.
 - [ ] **Keyboard shortcuts panel** — `?` or `F1` overlay listing available shortcuts.
 
 ## Moderation
