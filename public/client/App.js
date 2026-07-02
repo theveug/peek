@@ -19,6 +19,7 @@ ui.onPipExit = () => peerManager.handleTabVisibility(document.hidden);
 
 let socket;
 let reconnectTimer;
+let leavingRoom = false;
 let roomPassword = sessionStorage.getItem('roomPassword') || null;
 
 function connect() {
@@ -56,6 +57,7 @@ function connect() {
 
     socket.onclose = () => {
         clearTimeout(reconnectTimer);
+        if (leavingRoom) return;
         reconnectTimer = setTimeout(connect, 2000);
     };
 }
@@ -298,6 +300,9 @@ document.getElementById('grid-button').addEventListener('click', () => {
 });
 
 document.getElementById('leave-room-button').addEventListener('click', () => {
+    leavingRoom = true;
+    clearTimeout(reconnectTimer);
+    socket?.close();
     window.location.href = '/';
 });
 
