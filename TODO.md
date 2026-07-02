@@ -21,7 +21,7 @@ See **Design principles** in `CLAUDE.md` before adding new items — weigh new f
 
 ## Desktop / Electron
 
-- [ ] **Electron wrapper** — Browser tabs can't capture keyboard events when unfocused, so push-to-talk/push-to-mute only work while the tab is active. Wrap the existing web app in Electron to get `globalShortcut` for system-wide hotkeys, plus tray icon support. Minimal changes needed — same frontend, thin native shell.
+- [ ] **Electron wrapper (own repo)** — Browser tabs can't capture keyboard events when unfocused, so push-to-talk/push-to-mute only work while the tab is active. A generic desktop shell (not tied to one hosted Peek instance) would get `globalShortcut` for system-wide hotkeys, tray icon, and would eliminate Chrome's bulky in-tab "sharing" banner via `desktopCapturer` instead of `getDisplayMedia`. Since Peek is self-hostable per-domain (TURN config is per-deployment via `.env`), the shell just navigates to whatever room URL it's given — `https://john.com/room234`, `https://other.com/room234`, or a LAN address — same as a browser tab; it never bundles or duplicates any frontend code, so it needs its own repo (separate build/release/codesigning pipeline) with zero risk of drifting out of sync with this repo's frontend. LAN/offline-from-internet use isn't extra work — falls out for free from self-hosting + WebRTC ICE finding local candidates without STUN/TURN.
 
 ## Collaboration
 
