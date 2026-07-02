@@ -678,6 +678,17 @@ export class UIController {
         this._updateMemberCount();
     }
 
+    // Called on a fresh 'init' (first join, or a reconnect after the socket dropped).
+    // Every peerId — including our own — is freshly assigned per connection, so any
+    // cards left over from before the drop are now orphaned and must be cleared first,
+    // or they double up alongside the newly (re)assigned ones.
+    clearAllParticipants() {
+        const container = document.getElementById('participants');
+        if (container) container.innerHTML = '';
+        this.selfPeerId = null;
+        this._updateMemberCount();
+    }
+
     _updateMemberCount() {
         const count = document.getElementById('participants')?.children.length || 0;
         const el = document.getElementById('member-count');

@@ -83,8 +83,12 @@ export class PeerManager {
 
         switch (type) {
             case 'init':
-                // Clean up stale connections from a previous session
+                // Clean up stale connections/UI from a previous session (e.g. a server
+                // restart or network blip triggered App.js's auto-reconnect). Every
+                // peerId, including our own, is reassigned per connection, so old
+                // participant cards are now orphaned and must be cleared explicitly.
                 Object.keys(this.peers).forEach(id => this.removePeer(id));
+                this.ui.clearAllParticipants();
 
                 this.peerId = peerId;
                 if (iceServers) this.iceServers = iceServers;
