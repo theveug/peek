@@ -1,5 +1,6 @@
 import { playSound } from './SoundPlayer.js';
 import { ChatUI } from './ChatUI.js';
+import { escapeHtml } from './escapeHtml.js';
 
 export class UIController {
     constructor() {
@@ -75,8 +76,8 @@ export class UIController {
         row.innerHTML = `
             <div class="shrink-0 w-8 h-8 rounded flex items-center justify-center bg-white/5 text-muted">${fileIconSvg}</div>
             <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium truncate">${entry.fileName}</div>
-                <div class="text-[10px] text-muted">${entry.sender} · ${this._formatFileSize(entry.fileSize)}</div>
+                <div class="text-sm font-medium truncate">${escapeHtml(entry.fileName)}</div>
+                <div class="text-[10px] text-muted">${escapeHtml(entry.sender)} · ${this._formatFileSize(entry.fileSize)}</div>
             </div>
             <button class="shrink-0 p-1.5 rounded text-muted hover:text-foreground transition-colors" title="Download"></button>
         `;
@@ -174,7 +175,7 @@ export class UIController {
 
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
-        toast.innerHTML = `<span class="toast-icon">${icons[type] || icons.info}</span><span class="toast-text">${message}</span>`;
+        toast.innerHTML = `<span class="toast-icon">${icons[type] || icons.info}</span><span class="toast-text">${escapeHtml(message)}</span>`;
         container.appendChild(toast);
 
         while (container.children.length > 5) {

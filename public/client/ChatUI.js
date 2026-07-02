@@ -1,4 +1,5 @@
 import { playSound } from './SoundPlayer.js';
+import { escapeHtml } from './escapeHtml.js';
 
 export class ChatUI {
     constructor({ getNickname }) {
@@ -29,7 +30,7 @@ export class ChatUI {
             el.classList.add('hidden');
             return;
         }
-        const names = [...this._typingPeers].map(id => this._getNickname(id));
+        const names = [...this._typingPeers].map(id => escapeHtml(this._getNickname(id)));
         let text;
         if (count === 1) text = `${names[0]} is typing`;
         else if (count === 2) text = `${names[0]} and ${names[1]} are typing`;
@@ -42,8 +43,8 @@ export class ChatUI {
         this._replyTo = { messageId, sender, text };
         const preview = document.getElementById('reply-preview');
         if (!preview) return;
-        const truncated = text.length > 80 ? text.substring(0, 80) + '...' : text;
-        preview.innerHTML = `<div class="reply-preview-content"><span class="reply-preview-sender">${sender}</span> <span class="reply-preview-text">${truncated}</span></div><button class="reply-preview-close">&times;</button>`;
+        const truncated = escapeHtml(text.length > 80 ? text.substring(0, 80) + '...' : text);
+        preview.innerHTML = `<div class="reply-preview-content"><span class="reply-preview-sender">${escapeHtml(sender)}</span> <span class="reply-preview-text">${truncated}</span></div><button class="reply-preview-close">&times;</button>`;
         preview.classList.remove('hidden');
         preview.querySelector('.reply-preview-close').addEventListener('click', () => this.clearReply());
         document.getElementById('message')?.focus();
@@ -168,7 +169,7 @@ export class ChatUI {
 
         const container = document.createElement('div');
         container.dataset.pollId = pollId;
-        container.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-2"><span class="chat-avatar" style="background:${color}">${initial}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${sender}</span><span class="text-[10px] bg-indigo-600/20 text-indigo-400 px-1.5 py-0.5 rounded-full font-medium leading-none">Poll</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="ml-7"><div class="font-medium mb-3">${question}</div><div class="poll-options flex flex-col gap-2"></div><div class="poll-footer text-[10px] text-muted mt-2">0 votes</div></div></div>`;
+        container.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-2"><span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="text-[10px] bg-indigo-600/20 text-indigo-400 px-1.5 py-0.5 rounded-full font-medium leading-none">Poll</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="ml-7"><div class="font-medium mb-3">${escapeHtml(question)}</div><div class="poll-options flex flex-col gap-2"></div><div class="poll-footer text-[10px] text-muted mt-2">0 votes</div></div></div>`;
 
         this._renderPollOptions(container, pollId);
         chatLog.appendChild(container);
@@ -205,7 +206,7 @@ export class ChatUI {
             const btn = document.createElement('button');
             btn.className = `poll-option relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-left w-full overflow-hidden border transition-colors ${isMyVote ? 'border-indigo-500/70' : 'border-white/10'} ${hasVoted ? 'cursor-default' : 'hover:border-indigo-500/40'}`;
             btn.disabled = hasVoted;
-            btn.innerHTML = `<div class="absolute inset-0 bg-indigo-600/20 origin-left transition-transform duration-500" style="transform:scaleX(${pct})"></div><span class="relative z-10 flex-1">${option}${isMyVote ? ' <span class="text-indigo-400">✓</span>' : ''}</span><span class="relative z-10 text-[10px] text-muted">${count} ${count === 1 ? 'vote' : 'votes'}</span>`;
+            btn.innerHTML = `<div class="absolute inset-0 bg-indigo-600/20 origin-left transition-transform duration-500" style="transform:scaleX(${pct})"></div><span class="relative z-10 flex-1">${escapeHtml(option)}${isMyVote ? ' <span class="text-indigo-400">✓</span>' : ''}</span><span class="relative z-10 text-[10px] text-muted">${count} ${count === 1 ? 'vote' : 'votes'}</span>`;
 
             if (!hasVoted) {
                 btn.addEventListener('click', () => {
@@ -232,7 +233,7 @@ export class ChatUI {
             el.id = `file-progress-${fileId}`;
             el.className = 'file-progress';
             const label = direction === 'upload' ? 'Sending' : 'Receiving';
-            el.innerHTML = `<span class="file-progress-label">${label}: ${fileName}</span><div class="file-progress-track"><div class="file-progress-fill"></div></div>`;
+            el.innerHTML = `<span class="file-progress-label">${label}: ${escapeHtml(fileName)}</span><div class="file-progress-track"><div class="file-progress-fill"></div></div>`;
             const chatLog = document.getElementById('chat-log');
             chatLog.appendChild(el);
             requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight }));
@@ -257,14 +258,15 @@ export class ChatUI {
         const sizeStr = this._formatFileSize(fileSize);
         const isImage = /^image\//i.test(fileType);
 
+        const safeFileName = escapeHtml(fileName);
         let fileContent;
         if (isImage) {
-            fileContent = `<div class="chat-image-preview"><a href="${blobUrl}" target="_blank" rel="noopener"><img src="${blobUrl}" alt="${fileName}" /></a><a href="${blobUrl}" download="${fileName}" class="file-card-download chat-image-download" title="Download">&#x2B73;</a></div>`;
+            fileContent = `<div class="chat-image-preview"><a href="${blobUrl}" target="_blank" rel="noopener"><img src="${blobUrl}" alt="${safeFileName}" /></a><a href="${blobUrl}" download="${safeFileName}" class="file-card-download chat-image-download" title="Download">&#x2B73;</a></div>`;
         } else {
-            fileContent = `<div class="file-card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-muted"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" /></svg><div class="file-card-info"><span class="file-card-name">${fileName}</span><span class="file-card-size">${sizeStr}</span></div><a href="${blobUrl}" download="${fileName}" class="file-card-download" title="Download">&#x2B73;</a></div>`;
+            fileContent = `<div class="file-card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-muted"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" /></svg><div class="file-card-info"><span class="file-card-name">${safeFileName}</span><span class="file-card-size">${sizeStr}</span></div><a href="${blobUrl}" download="${safeFileName}" class="file-card-download" title="Download">&#x2B73;</a></div>`;
         }
 
-        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${initial}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${sender}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="ml-7">${fileContent}</div></div>`;
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="ml-7">${fileContent}</div></div>`;
         chatLog.appendChild(msgContainer);
 
         while (chatLog.children.length > this.maxMessages) {
@@ -338,7 +340,7 @@ export class ChatUI {
         if (!messageId) messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
         msgContainer.dataset.messageId = messageId;
 
-        const raw = marked.parse(text);
+        const raw = DOMPurify.sanitize(marked.parse(text));
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const isSelf = sender === 'Me';
         const initial = isSelf ? (localStorage.getItem('nickname') || 'Me').charAt(0).toUpperCase() : sender.charAt(0).toUpperCase();
@@ -347,11 +349,11 @@ export class ChatUI {
         let replyHtml = '';
         if (replyData && replyData.sender && replyData.text) {
             const rColor = replyData.sender === 'Me' ? '#22c55e' : this._colorForName(replyData.sender);
-            const rText = replyData.text.length > 80 ? replyData.text.substring(0, 80) + '...' : replyData.text;
-            replyHtml = `<div class="chat-reply-quote ml-7" data-reply-to="${replyData.messageId || ''}"><span class="chat-reply-sender" style="color:${rColor}">${replyData.sender}</span> ${rText}</div>`;
+            const rText = escapeHtml(replyData.text.length > 80 ? replyData.text.substring(0, 80) + '...' : replyData.text);
+            replyHtml = `<div class="chat-reply-quote ml-7" data-reply-to="${escapeHtml(replyData.messageId || '')}"><span class="chat-reply-sender" style="color:${rColor}">${escapeHtml(replyData.sender)}</span> ${rText}</div>`;
         }
 
-        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${initial}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${sender}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}<div class="chat-markdown chat-body prose ml-7">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}<div class="chat-markdown chat-body prose ml-7">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
 
         const replyQuote = msgContainer.querySelector('.chat-reply-quote');
         if (replyQuote) {
