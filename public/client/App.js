@@ -42,6 +42,10 @@ function connect() {
                 location.href = '/?full=1';
                 return;
             }
+            if (msg.reason === 'invalid-room') {
+                location.href = '/';
+                return;
+            }
             showPasswordPrompt();
             return;
         }

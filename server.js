@@ -4,6 +4,7 @@ import express from 'express';
 import { createServer as createHttpServer } from 'http';
 import { createServer as createHttpsServer } from 'https';
 import { readFileSync, existsSync } from 'fs';
+import { randomInt } from 'crypto';
 import { WebSocketServer } from 'ws';
 import { setupWebSocket } from './src/server/WebSocketServer.js';
 import { SessionManager } from './src/server/SessionManager.js';
@@ -45,11 +46,29 @@ function generateUniqueShortCode(length = 5) {
     do {
         result = '';
         for (let i = 0; i < length; i++) {
-            result += characters.charAt(Math.floor(Math.random() * characters.length));
+            result += characters.charAt(randomInt(characters.length));
         }
     } while (manager.hasSession(result));
     return result;
 }
+
+// Minimal per-IP fixed-window rate limiter — in-memory only, nothing persisted.
+function rateLimit(windowMs, max) {
+    const hits = new Map();
+    setInterval(() => hits.clear(), windowMs).unref();
+    return (req, res, next) => {
+        const count = (hits.get(req.ip) || 0) + 1;
+        hits.set(req.ip, count);
+        if (count > max) {
+            res.status(429).json({ error: 'Too many requests' });
+            return;
+        }
+        next();
+    };
+}
+
+// Sessions created via /api/create-room that nobody ever joins would otherwise live forever.
+setInterval(() => manager.sweepEmptySessions(10 * 60_000), 60_000).unref();
 
 app.use(express.json());
 app.use('/assets', express.static(path.join(__dirname, 'public/assets')));
@@ -62,7 +81,7 @@ app.get('/', (req, res) => {
 });
 
 // API: Create room
-app.post('/api/create-room', (req, res) => {
+app.post('/api/create-room', rateLimit(60_000, 10), (req, res) => {
     const { name, password, maxPeers } = req.body || {};
     const code = generateUniqueShortCode();
     const cleanName = name ? name.replace(/[<>]/g, '').trim().substring(0, 50) : null;
@@ -72,7 +91,7 @@ app.post('/api/create-room', (req, res) => {
 });
 
 // API: Validate room (check if it exists / needs password)
-app.post('/api/validate-room', (req, res) => {
+app.post('/api/validate-room', rateLimit(60_000, 30), (req, res) => {
     const { code, password } = req.body || {};
     const meta = manager.getSessionMeta(code);
     if (!meta) {

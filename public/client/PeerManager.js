@@ -522,15 +522,25 @@ export class PeerManager {
 
     _handleDataChannelMessage(peerId, data) {
         if (typeof data === 'string') {
-            const msg = JSON.parse(data);
+            let msg;
+            try {
+                msg = JSON.parse(data);
+            } catch {
+                return; // malformed message from a peer — drop, don't throw
+            }
             if (msg.type === 'file-start') {
                 if (!this._isFileAllowed(msg.fileName)) {
                     this.ui.showToast(`Blocked incoming file: ${msg.fileName}`, 'leave');
                     return;
                 }
+                const fileSize = Number(msg.fileSize);
+                if (!Number.isFinite(fileSize) || fileSize < 0 || fileSize > this._maxFileSize) {
+                    this.ui.showToast(`Blocked incoming file: ${msg.fileName} (too large)`, 'leave');
+                    return;
+                }
                 this.incomingTransfers[msg.fileId] = {
-                    fileName: msg.fileName, fileSize: msg.fileSize, fileType: msg.fileType,
-                    totalChunks: msg.totalChunks, chunks: [], received: 0, from: peerId,
+                    fileName: msg.fileName, fileSize, fileType: this._safeMimeType(msg.fileName),
+                    totalChunks: msg.totalChunks, chunks: [], received: 0, receivedBytes: 0, from: peerId,
                 };
                 this.ui.updateFileProgress(msg.fileId, 0, 'download', msg.fileName);
             } else if (msg.type === 'file-end') {
@@ -560,6 +570,15 @@ export class PeerManager {
             const activeId = keys.find(id => this.incomingTransfers[id].from === peerId);
             if (!activeId) return;
             const t = this.incomingTransfers[activeId];
+            // Enforce the declared size on the receive side — the sender's own size check
+            // is honor-system, a modified client can stream unbounded chunks.
+            t.receivedBytes += data.byteLength ?? data.size ?? 0;
+            if (t.receivedBytes > t.fileSize + 65536) {
+                delete this.incomingTransfers[activeId];
+                this.ui.removeFileProgress(activeId);
+                this.ui.showToast(`Blocked incoming file: ${t.fileName} (exceeded declared size)`, 'leave');
+                return;
+            }
             t.chunks.push(data);
             t.received++;
             const progress = t.totalChunks > 0 ? t.received / t.totalChunks : 0;
@@ -590,14 +609,29 @@ export class PeerManager {
         return this._allowedExtensions.has(ext);
     }
 
+    _maxFileSize = 500 * 1024 * 1024;
+
+    _rasterMimeByExt = {
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+        webp: 'image/webp', bmp: 'image/bmp', avif: 'image/avif', ico: 'image/x-icon',
+    };
+
+    // The peer-supplied MIME type is untrusted: a blob typed image/svg+xml (or text/html)
+    // opened via its blob: URL runs scripts in THIS origin. Derive the type from the
+    // extension instead — raster images keep a previewable MIME, everything else
+    // (including svg) becomes an opaque binary that only gets download links.
+    _safeMimeType(fileName) {
+        const ext = (fileName || '').split('.').pop().toLowerCase();
+        return this._rasterMimeByExt[ext] || 'application/octet-stream';
+    }
+
     async sendFileToAll(file) {
         if (!this._isFileAllowed(file.name)) {
             this.ui.showToast(`Blocked: .${file.name.split('.').pop()} files are not allowed`, 'leave');
             return;
         }
 
-        const MAX_SIZE = 500 * 1024 * 1024;
-        if (file.size > MAX_SIZE) {
+        if (file.size > this._maxFileSize) {
             this.ui.showToast(`File too large (max 500 MB)`, 'leave');
             return;
         }
@@ -647,9 +681,10 @@ export class PeerManager {
         }
 
         this.ui.removeFileProgress(fileId);
-        const blob = new Blob([file], { type: file.type });
+        const safeType = this._safeMimeType(file.name);
+        const blob = new Blob([file], { type: safeType });
         const url = URL.createObjectURL(blob);
-        this.ui.addFileMessage('Me', fileId, file.name, file.size, file.type, url, blob);
+        this.ui.addFileMessage('Me', fileId, file.name, file.size, safeType, url, blob);
     }
 
     broadcastChat(text, nickname, messageId, replyTo) {

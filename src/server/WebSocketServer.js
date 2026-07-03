@@ -41,6 +41,7 @@ export function setupWebSocket(wss, turnConfig, manager) {
         ws.on('pong', () => { ws.isAlive = true; });
 
         const peerId = uuidv4();
+        let failedJoins = 0;
 
         ws.on('message', (data) => {
             let msg;
@@ -55,8 +56,16 @@ export function setupWebSocket(wss, turnConfig, manager) {
 
             switch (type) {
                 case 'join': {
+                    // Same format the /:code route enforces — without this, a raw WS client
+                    // can lazily create unbounded sessions keyed by arbitrary strings.
+                    if (typeof sessionId !== 'string' || !/^[A-Za-z0-9]{5}$/.test(sessionId)) {
+                        ws.send(JSON.stringify({ type: 'join-error', reason: 'invalid-room' }));
+                        return;
+                    }
+
                     if (!manager.validatePassword(sessionId, msg.password || null)) {
                         ws.send(JSON.stringify({ type: 'join-error', reason: 'invalid-password' }));
+                        if (++failedJoins >= 5) ws.close();
                         return;
                     }
 
@@ -65,7 +74,20 @@ export function setupWebSocket(wss, turnConfig, manager) {
                         return;
                     }
 
-                    manager.addPeer(sessionId, peerId, ws);
+                    // A second join on the same connection would leave a ghost entry in the
+                    // first session's peer set (removePeer on close only cleans the current one).
+                    const prevSessionId = manager.getSessionId(peerId);
+                    if (prevSessionId) {
+                        manager.removePeer(peerId);
+                        manager.getPeersInSession(prevSessionId).forEach(pid => {
+                            const socket = manager.getPeerSocket(pid);
+                            if (socket) {
+                                socket.send(JSON.stringify({ type: 'peer-left', peerId }));
+                            }
+                        });
+                    }
+
+                    manager.addPeer(sessionId, peerId, ws, { password: msg.password || null });
                     const peers = manager.getPeersInSession(sessionId).filter(p => p !== peerId);
                     const meta = manager.getSessionMeta(sessionId);
 
