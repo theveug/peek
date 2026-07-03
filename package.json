@@ -11,7 +11,8 @@
     "build:css": "tailwindcss -i ./public/assets/tailwind.css -o ./public/assets/style.css --minify",
     "tailwind": "tailwindcss -i ./public/assets/tailwind.css -o ./public/assets/style.css --watch",
     "test:ui": "node tests/ui-smoke.mjs",
-    "test:version-banner": "node tests/version-banner.mjs"
+    "test:version-banner": "node tests/version-banner.mjs",
+    "test:file-consent": "node tests/file-consent.mjs"
   },
   "author": "",
   "license": "ISC",

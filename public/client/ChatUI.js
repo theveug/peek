@@ -306,6 +306,26 @@ export class ChatUI {
         return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
     }
 
+    showFileOffer(sender, fileId, fileName, fileSize, onAccept, onDecline) {
+        const chatLog = document.getElementById('chat-log');
+        const el = document.createElement('div');
+        el.id = `file-offer-${fileId}`;
+        el.className = 'file-offer';
+        const sizeStr = this._formatFileSize(fileSize);
+        el.innerHTML = `<div class="file-offer-info"><span class="file-offer-sender">${escapeHtml(sender)}</span> wants to send <span class="file-offer-name">${escapeHtml(fileName)}</span> <span class="file-offer-size">(${sizeStr})</span></div><div class="file-offer-actions"><button type="button" class="file-offer-accept">Accept</button><button type="button" class="file-offer-decline">Decline</button></div>`;
+        chatLog.appendChild(el);
+        requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' }));
+
+        el.querySelector('.file-offer-accept').addEventListener('click', () => {
+            el.remove();
+            onAccept();
+        });
+        el.querySelector('.file-offer-decline').addEventListener('click', () => {
+            el.remove();
+            onDecline();
+        });
+    }
+
     updateFileProgress(fileId, progress, direction, fileName) {
         let el = document.getElementById(`file-progress-${fileId}`);
         if (!el) {

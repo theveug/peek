@@ -363,6 +363,69 @@ body:hover #controls {
   background: var(--card-hover);
 }
 
+.file-offer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  margin: 0.25rem 1rem;
+  border-radius: 0.5rem;
+  background: var(--surface-input);
+  border: 1px solid var(--color-separator);
+  font-size: 0.8125rem;
+}
+
+.file-offer-info {
+  min-width: 0;
+  color: var(--color-muted);
+}
+
+.file-offer-sender {
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.file-offer-name {
+  font-weight: 500;
+  color: var(--color-foreground);
+}
+
+.file-offer-actions {
+  display: flex;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+
+.file-offer-accept,
+.file-offer-decline {
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+}
+
+.file-offer-accept {
+  background: oklch(51.1% 0.262 276.966);
+  color: white;
+}
+
+.file-offer-accept:hover {
+  background: oklch(58.5% 0.233 277.117);
+}
+
+.file-offer-decline {
+  background: transparent;
+  color: var(--color-muted);
+  border: 1px solid var(--color-separator);
+}
+
+.file-offer-decline:hover {
+  color: var(--color-foreground);
+}
+
 /* ===== Reply ===== */
 .reply-preview {
   display: flex;

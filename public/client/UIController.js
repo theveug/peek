@@ -138,6 +138,7 @@ export class UIController {
         this.chat.addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl);
         if (blob) this._addFileToTab({ fileId, fileName, fileSize, fileType, blob, sender });
     }
+    showFileOffer(...a) { return this.chat.showFileOffer(...a); }
     updateFileProgress(...a) { return this.chat.updateFileProgress(...a); }
     removeFileProgress(...a) { return this.chat.removeFileProgress(...a); }
     addReaction(...a) { return this.chat.addReaction(...a); }

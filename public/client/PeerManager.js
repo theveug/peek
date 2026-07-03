@@ -26,6 +26,8 @@ export class PeerManager {
         this._manualStatus = null;
         this.dataChannels = {};
         this.incomingTransfers = {};
+        this._offeredFiles = {};
+        this._pendingFileOffers = {};
         this.camStream = null;
         this.camEnabled = false;
         this.peerCamStreamIds = {};
@@ -532,21 +534,44 @@ export class PeerManager {
             } catch {
                 return; // malformed message from a peer — drop, don't throw
             }
-            if (msg.type === 'file-start') {
+            if (msg.type === 'file-offer') {
+                const fileSize = Number(msg.fileSize);
                 if (!this._isFileAllowed(msg.fileName)) {
                     this.ui.showToast(`Blocked incoming file: ${msg.fileName}`, 'leave');
+                    this._respondToOffer(peerId, msg.fileId, false);
                     return;
                 }
-                const fileSize = Number(msg.fileSize);
                 if (!Number.isFinite(fileSize) || fileSize < 0 || fileSize > this._maxFileSize) {
                     this.ui.showToast(`Blocked incoming file: ${msg.fileName} (too large)`, 'leave');
+                    this._respondToOffer(peerId, msg.fileId, false);
                     return;
                 }
+
+                this._offeredFiles[msg.fileId] = {
+                    fileName: msg.fileName, fileSize, fileType: this._safeMimeType(msg.fileName), from: peerId,
+                };
+
+                if (this._autoAcceptFiles()) {
+                    this._respondToOffer(peerId, msg.fileId, true);
+                } else {
+                    const nickname = this.ui._peerNickname(peerId);
+                    this.ui.showFileOffer(nickname, msg.fileId, msg.fileName, fileSize,
+                        () => this._respondToOffer(peerId, msg.fileId, true),
+                        () => this._respondToOffer(peerId, msg.fileId, false));
+                }
+            } else if (msg.type === 'file-accept' || msg.type === 'file-decline') {
+                const key = `${msg.fileId}:${peerId}`;
+                this._pendingFileOffers[key]?.(msg.type === 'file-accept');
+                delete this._pendingFileOffers[key];
+            } else if (msg.type === 'file-start') {
+                const offer = this._offeredFiles[msg.fileId];
+                if (!offer) return; // we never offered-accepted this fileId — ignore
+                delete this._offeredFiles[msg.fileId];
                 this.incomingTransfers[msg.fileId] = {
-                    fileName: msg.fileName, fileSize, fileType: this._safeMimeType(msg.fileName),
+                    fileName: offer.fileName, fileSize: offer.fileSize, fileType: offer.fileType,
                     totalChunks: msg.totalChunks, chunks: [], received: 0, receivedBytes: 0, from: peerId,
                 };
-                this.ui.updateFileProgress(msg.fileId, 0, 'download', msg.fileName);
+                this.ui.updateFileProgress(msg.fileId, 0, 'download', offer.fileName);
             } else if (msg.type === 'file-end') {
                 const t = this.incomingTransfers[msg.fileId];
                 if (!t) return;
@@ -629,6 +654,36 @@ export class PeerManager {
         return this._rasterMimeByExt[ext] || 'application/octet-stream';
     }
 
+    // Receiver decides per-file whether to accept (unless they've turned on
+    // "auto-accept files" for a room they trust) — see `settings-auto-accept-files`.
+    _autoAcceptFiles() {
+        return localStorage.getItem('autoAcceptFiles') === '1';
+    }
+
+    _respondToOffer(peerId, fileId, accepted) {
+        if (!accepted) delete this._offeredFiles[fileId];
+        const dc = this.dataChannels[peerId];
+        if (!dc || dc.readyState !== 'open') return;
+        dc.send(JSON.stringify({ type: accepted ? 'file-accept' : 'file-decline', fileId }));
+    }
+
+    // Waits (with a timeout, so a peer who never answers — or leaves — doesn't
+    // hang the transfer forever) for each peer's file-accept/file-decline before
+    // sending a single byte, so a declined file never wastes bandwidth.
+    _awaitOfferResponse(peerId, fileId, timeoutMs = 60_000) {
+        const key = `${fileId}:${peerId}`;
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => {
+                delete this._pendingFileOffers[key];
+                resolve(false);
+            }, timeoutMs);
+            this._pendingFileOffers[key] = (accepted) => {
+                clearTimeout(timer);
+                resolve(accepted);
+            };
+        });
+    }
+
     async sendFileToAll(file) {
         if (!this._isFileAllowed(file.name)) {
             this.ui.showToast(`Blocked: .${file.name.split('.').pop()} files are not allowed`, 'leave');
@@ -641,28 +696,39 @@ export class PeerManager {
         }
 
         const fileId = 'file-' + Date.now() + '-' + Math.random().toString(36).substr(2, 8);
+        const peerIds = Object.keys(this.dataChannels).filter(pid => this.dataChannels[pid]?.readyState === 'open');
+        if (peerIds.length === 0) return;
+
+        const offer = { type: 'file-offer', fileId, fileName: file.name, fileSize: file.size, fileType: file.type };
+        const responses = await Promise.all(peerIds.map(pid => {
+            const awaited = this._awaitOfferResponse(pid, fileId);
+            this.dataChannels[pid].send(JSON.stringify(offer));
+            return awaited;
+        }));
+        const acceptedPeerIds = peerIds.filter((_, i) => responses[i]);
+
+        // Local echo happens regardless of whether anyone accepted.
+        const safeType = this._safeMimeType(file.name);
+        const blob = new Blob([file], { type: safeType });
+        const url = URL.createObjectURL(blob);
+        this.ui.addFileMessage('Me', fileId, file.name, file.size, safeType, url, blob);
+
+        if (acceptedPeerIds.length === 0) return;
+
         const CHUNK_SIZE = 16384;
         const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
-        const meta = { type: 'file-start', fileId, fileName: file.name, fileSize: file.size, fileType: file.type, totalChunks };
-
-        const peerIds = Object.keys(this.dataChannels);
-        if (peerIds.length === 0) return;
+        for (const pid of acceptedPeerIds) {
+            this.dataChannels[pid]?.send(JSON.stringify({ type: 'file-start', fileId, totalChunks }));
+        }
 
         this.ui.updateFileProgress(fileId, 0, 'upload', file.name);
 
-        for (const pid of peerIds) {
-            const dc = this.dataChannels[pid];
-            if (!dc || dc.readyState !== 'open') continue;
-            dc.send(JSON.stringify(meta));
-        }
-
         for (let i = 0; i < totalChunks; i++) {
             const start = i * CHUNK_SIZE;
-            const slice = file.slice(start, start + CHUNK_SIZE);
-            const buffer = await slice.arrayBuffer();
+            const buffer = await file.slice(start, start + CHUNK_SIZE).arrayBuffer();
 
-            for (const pid of peerIds) {
+            for (const pid of acceptedPeerIds) {
                 const dc = this.dataChannels[pid];
                 if (!dc || dc.readyState !== 'open') continue;
 
@@ -678,17 +744,11 @@ export class PeerManager {
             this.ui.updateFileProgress(fileId, (i + 1) / totalChunks, 'upload', file.name);
         }
 
-        for (const pid of peerIds) {
-            const dc = this.dataChannels[pid];
-            if (!dc || dc.readyState !== 'open') continue;
-            dc.send(JSON.stringify({ type: 'file-end', fileId }));
+        for (const pid of acceptedPeerIds) {
+            this.dataChannels[pid]?.send(JSON.stringify({ type: 'file-end', fileId }));
         }
 
         this.ui.removeFileProgress(fileId);
-        const safeType = this._safeMimeType(file.name);
-        const blob = new Blob([file], { type: safeType });
-        const url = URL.createObjectURL(blob);
-        this.ui.addFileMessage('Me', fileId, file.name, file.size, safeType, url, blob);
     }
 
     broadcastChat(text, nickname, messageId, replyTo) {

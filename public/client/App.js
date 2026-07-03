@@ -546,6 +546,7 @@ const settingsForm = document.getElementById('settings-form');
 function openSettings() {
     document.getElementById('settings-nickname').value = localStorage.getItem('nickname') || '';
     document.getElementById('settings-mute').checked = localStorage.getItem('muteSounds') === '1';
+    document.getElementById('settings-auto-accept-files').checked = localStorage.getItem('autoAcceptFiles') === '1';
     document.getElementById('settings-res').value = localStorage.getItem('screenShareRes') || '1280x720';
     document.getElementById('settings-fps').value = localStorage.getItem('screenShareFps') || '30';
     document.getElementById('settings-cam-res').value = localStorage.getItem('camRes') || '640x480';
@@ -571,6 +572,7 @@ settingsForm.addEventListener('submit', (e) => {
     e.preventDefault();
     localStorage.setItem('nickname', document.getElementById('settings-nickname').value.trim());
     localStorage.setItem('muteSounds', document.getElementById('settings-mute').checked ? '1' : '0');
+    localStorage.setItem('autoAcceptFiles', document.getElementById('settings-auto-accept-files').checked ? '1' : '0');
     localStorage.setItem('screenShareRes', document.getElementById('settings-res').value);
     localStorage.setItem('screenShareFps', document.getElementById('settings-fps').value);
     localStorage.setItem('camRes', document.getElementById('settings-cam-res').value);
