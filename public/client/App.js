@@ -274,9 +274,8 @@ function sendMessage() {
 }
 
 function updateShareButton() {
-    document.getElementById('share-play-icon').classList.toggle('hidden', peerManager.isSharing);
-    document.getElementById('share-stop-icon').classList.toggle('hidden', !peerManager.isSharing);
-    document.getElementById('share-toggle').title = peerManager.isSharing ? 'Stop sharing' : 'Start sharing';
+    document.getElementById('stop-share-button').classList.toggle('hidden', !peerManager.isSharing);
+    document.getElementById('share-toggle').title = peerManager.isSharing ? 'Share a different window' : 'Share screen';
 }
 
 function updateCamUI(enabled) {
@@ -291,11 +290,12 @@ document.getElementById('cam-toggle').addEventListener('click', async () => {
 });
 
 document.getElementById('share-toggle').onclick = async () => {
-    if (peerManager.isSharing) {
-        peerManager.stopSharing();
-    } else {
-        await peerManager.startSharing();
-    }
+    await peerManager.startSharing();
+    updateShareButton();
+};
+
+document.getElementById('stop-share-button').onclick = () => {
+    peerManager.stopSharing();
     updateShareButton();
 };
 

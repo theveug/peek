@@ -689,6 +689,54 @@ body.light .members-resize-handle.active {
   background: oklch(58.5% 0.233 277.117);
 }
 
+/* ===== Panel toggle tabs ===== */
+.panel-tab {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 20px;
+  height: 56px;
+  flex-shrink: 0;
+  z-index: 65;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.panel-tab:hover {
+  color: var(--color-foreground);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+body.light .panel-tab:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.chat-tab {
+  margin-left: -10px;
+  border-radius: 0 10px 10px 0;
+  border-left: none !important;
+}
+
+/* Chat panel gone (hidden) — the tab has nothing left to overlap, so don't
+   pull it partway off-screen. */
+#chat.hidden ~ .chat-tab {
+  margin-left: 0;
+}
+
+.members-tab {
+  margin-right: -10px;
+  border-radius: 10px 0 0 10px;
+  border-right: none !important;
+}
+
+/* Members panel gone (collapsed) — same reasoning, mirrored; .members-tab
+   precedes #members-sidebar in the DOM so :has() is needed to look ahead. */
+.members-tab:has(~ #members-sidebar.collapsed) {
+  margin-right: 0;
+}
+
 /* ===== Participant card ===== */
 .participant-card {
   display: flex;
@@ -851,6 +899,12 @@ body,
   .chat-resize-handle,
   .members-resize-handle {
     display: none !important;
+  }
+
+  /* Larger touch target for panel tabs on mobile */
+  .panel-tab {
+    width: 26px;
+    height: 64px;
   }
 
   /* Chat panel as left drawer overlay */

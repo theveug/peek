@@ -9,7 +9,8 @@
     "serve": "nodemon server.js",
     "start": "node server.js",
     "build:css": "tailwindcss -i ./public/assets/tailwind.css -o ./public/assets/style.css --minify",
-    "tailwind": "tailwindcss -i ./public/assets/tailwind.css -o ./public/assets/style.css --watch"
+    "tailwind": "tailwindcss -i ./public/assets/tailwind.css -o ./public/assets/style.css --watch",
+    "test:ui": "node tests/ui-smoke.mjs"
   },
   "author": "",
   "license": "ISC",
@@ -26,6 +27,7 @@
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.1.2",
     "nodemon": "^3.1.9",
+    "playwright": "^1.61.1",
     "postcss": "^8.5.3",
     "tailwindcss": "^4.1.4"
   }

@@ -200,7 +200,11 @@ export class PeerManager {
                 cursor: 'always',
             };
 
-            // Clean up previous screen share stream if active
+            // Request the new source first — if the user cancels the picker while
+            // switching windows, the currently-active share must keep running untouched.
+            const newStream = await navigator.mediaDevices.getDisplayMedia(constraints);
+
+            // Now tear down the previous screen share stream, if any (switching source)
             if (this.stream) {
                 this.stream.getTracks().forEach(t => t.stop());
 
@@ -217,14 +221,14 @@ export class PeerManager {
                 this.ui.removeStream('me');
             }
 
-            this.stream = await navigator.mediaDevices.getDisplayMedia(constraints);
+            this.stream = newStream;
             this.ui.addStream('me', this.stream);
             this.isSharing = true;
 
             this.stream.getVideoTracks()[0].onended = () => {
                 this.stopSharing();
-                document.getElementById('share-play-icon')?.classList.remove('hidden');
-                document.getElementById('share-stop-icon')?.classList.add('hidden');
+                document.getElementById('stop-share-button')?.classList.add('hidden');
+                document.getElementById('share-toggle').title = 'Share screen';
             };
 
             // Signal peers about the stream ID before tracks arrive via WebRTC, so
