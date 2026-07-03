@@ -60,6 +60,77 @@ export class ChatUI {
         return this._replyTo;
     }
 
+    // --- Pending attachments (staged files awaiting an optional caption + Send,
+    // rather than uploading the instant they're dropped/pasted/picked) ---
+
+    _pendingFiles = [];
+
+    addPendingFiles(files) {
+        for (const file of files) this._pendingFiles.push(file);
+        this._renderPendingFiles();
+        document.getElementById('message')?.focus();
+    }
+
+    getPendingFiles() {
+        return this._pendingFiles;
+    }
+
+    clearPendingFiles() {
+        this._pendingFiles = [];
+        this._renderPendingFiles();
+    }
+
+    _removePendingFile(index) {
+        this._pendingFiles.splice(index, 1);
+        this._renderPendingFiles();
+    }
+
+    _renderPendingFiles() {
+        const preview = document.getElementById('attachment-preview');
+        if (!preview) return;
+
+        if (this._pendingFiles.length === 0) {
+            preview.classList.add('hidden');
+            preview.innerHTML = '';
+            return;
+        }
+
+        preview.innerHTML = '';
+        this._pendingFiles.forEach((file, index) => {
+            const chip = document.createElement('div');
+            chip.className = 'attachment-chip';
+
+            if (/^image\//i.test(file.type)) {
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.alt = file.name;
+                img.onload = () => URL.revokeObjectURL(img.src);
+                chip.appendChild(img);
+            } else {
+                const icon = document.createElement('span');
+                icon.className = 'attachment-chip-icon';
+                icon.textContent = '\u{1F4CE}';
+                chip.appendChild(icon);
+            }
+
+            const name = document.createElement('span');
+            name.className = 'attachment-chip-name';
+            name.textContent = file.name;
+            chip.appendChild(name);
+
+            const remove = document.createElement('button');
+            remove.className = 'attachment-chip-remove';
+            remove.type = 'button';
+            remove.title = 'Remove';
+            remove.textContent = '×';
+            remove.addEventListener('click', () => this._removePendingFile(index));
+            chip.appendChild(remove);
+
+            preview.appendChild(chip);
+        });
+        preview.classList.remove('hidden');
+    }
+
     _emojiSet = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
     _setupEmojiPicker(msgEl, messageId) {
@@ -219,6 +290,15 @@ export class ChatUI {
         if (footerEl) footerEl.textContent = `${totalVotes} ${totalVotes === 1 ? 'vote' : 'votes'}`;
     }
 
+    // True when the chat panel isn't actually on screen for the local user —
+    // either collapsed via its tab (desktop) or the mobile drawer is closed.
+    _isChatViewClosed() {
+        const chatPanel = document.getElementById('chat');
+        if (!chatPanel) return false;
+        if (window.innerWidth < 768) return !chatPanel.classList.contains('mobile-open');
+        return chatPanel.classList.contains('hidden');
+    }
+
     _formatFileSize(bytes) {
         if (bytes < 1024) return bytes + ' B';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -275,7 +355,7 @@ export class ChatUI {
 
         requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' }));
 
-        if (!document.hasFocus() && !isSelf) {
+        if (!isSelf && (!document.hasFocus() || this._isChatViewClosed())) {
             const indicator = document.getElementById('new-message-indicator');
             if (indicator) indicator.classList.remove('hidden');
             playSound('newMessage');
@@ -401,10 +481,8 @@ export class ChatUI {
         const newMessageIndicator = document.getElementById('new-message-indicator');
         const tabFocused = document.hasFocus();
         const isFromOther = sender !== 'Me';
-        const chatPanel = document.getElementById('chat');
-        const chatHiddenOnMobile = chatPanel && window.innerWidth < 768 && !chatPanel.classList.contains('mobile-open');
 
-        if (isFromOther && (!tabFocused || chatHiddenOnMobile)) {
+        if (isFromOther && (!tabFocused || this._isChatViewClosed())) {
             newMessageIndicator.classList.remove('hidden');
             playSound('newMessage');
         } else {

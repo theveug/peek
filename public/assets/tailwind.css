@@ -402,6 +402,62 @@ body:hover #controls {
   color: var(--color-foreground);
 }
 
+/* ===== Pending attachments (staged files awaiting a caption + Send) ===== */
+.attachment-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  margin: 0 0.75rem;
+}
+
+.attachment-preview.hidden {
+  display: none;
+}
+
+.attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 160px;
+  padding: 0.25rem 0.375rem;
+  background: var(--surface-input);
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.attachment-chip img {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: cover;
+  border-radius: 0.25rem;
+  flex-shrink: 0;
+}
+
+.attachment-chip-icon {
+  flex-shrink: 0;
+}
+
+.attachment-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-chip-remove {
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--color-muted);
+  cursor: pointer;
+  padding: 0 0.125rem;
+}
+
+.attachment-chip-remove:hover {
+  color: var(--color-foreground);
+}
+
 .chat-reply-quote {
   border-left: 2px solid var(--chat-sender);
   padding: 0.125rem 0.5rem;

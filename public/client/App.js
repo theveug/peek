@@ -131,7 +131,7 @@ if (chatPanel && dropOverlay) {
         e.stopPropagation();
         dropOverlay.classList.remove('active');
         if (e.dataTransfer.files.length) {
-            (async () => { for (const f of e.dataTransfer.files) await peerManager.sendFileToAll(f); })();
+            ui.addPendingFiles([...e.dataTransfer.files]);
         }
     });
 }
@@ -141,14 +141,14 @@ if (fileAttachBtn && fileInput) {
     fileInput.addEventListener('change', () => {
         const files = [...fileInput.files];
         fileInput.value = '';
-        (async () => { for (const f of files) await peerManager.sendFileToAll(f); })();
+        ui.addPendingFiles(files);
     });
 }
 
 document.addEventListener('paste', (e) => {
     if (document.activeElement?.id === 'message' && e.clipboardData.files.length) {
         e.preventDefault();
-        (async () => { for (const f of e.clipboardData.files) await peerManager.sendFileToAll(f); })();
+        ui.addPendingFiles([...e.clipboardData.files]);
     }
 });
 
@@ -260,6 +260,7 @@ input.addEventListener('keydown', (e) => {
 function sendMessage() {
     const text = input.value.trim();
     const nickname = (localStorage.getItem('nickname') || 'Anonymous').trim();
+    const pendingFiles = ui.getPendingFiles();
 
     if (text) {
         const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
@@ -269,6 +270,12 @@ function sendMessage() {
         ui.clearReply();
         input.value = '';
     }
+
+    if (pendingFiles.length) {
+        ui.clearPendingFiles();
+        (async () => { for (const f of pendingFiles) await peerManager.sendFileToAll(f); })();
+    }
+
     clearTimeout(typingTimer);
     sendTypingStatus(false);
 }
@@ -380,6 +387,10 @@ chatButton.addEventListener('click', () => {
         const isHidden = chatBox.classList.toggle('hidden');
         if (handle) handle.style.display = isHidden ? 'none' : '';
         localStorage.setItem('chatHidden', isHidden ? '1' : '0');
+        if (!isHidden) {
+            const indicator = document.getElementById('new-message-indicator');
+            if (indicator) indicator.classList.add('hidden');
+        }
     }
 });
 

@@ -144,6 +144,9 @@ export class UIController {
     setReplyTo(...a) { return this.chat.setReplyTo(...a); }
     clearReply() { return this.chat.clearReply(); }
     getReplyTo() { return this.chat.getReplyTo(); }
+    addPendingFiles(...a) { return this.chat.addPendingFiles(...a); }
+    getPendingFiles() { return this.chat.getPendingFiles(); }
+    clearPendingFiles() { return this.chat.clearPendingFiles(); }
     updateTypingIndicator(...a) { return this.chat.updateTypingIndicator(...a); }
 
     // --- Toast ---
