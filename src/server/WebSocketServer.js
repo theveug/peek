@@ -23,7 +23,7 @@ function generateIceServers(turnConfig) {
     return servers;
 }
 
-export function setupWebSocket(wss, turnConfig, manager) {
+export function setupWebSocket(wss, turnConfig, manager, buildId) {
     const PING_INTERVAL = 30_000;
 
     const pingTimer = setInterval(() => {
@@ -92,7 +92,7 @@ export function setupWebSocket(wss, turnConfig, manager) {
                     const meta = manager.getSessionMeta(sessionId);
 
                     const iceServers = generateIceServers(turnConfig);
-                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null }));
+                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, buildId }));
 
                     peers.forEach(pid => {
                         const socket = manager.getPeerSocket(pid);

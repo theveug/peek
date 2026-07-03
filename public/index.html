@@ -302,8 +302,18 @@
         <!-- Mobile backdrop for panel overlays -->
         <div id="mobile-backdrop" class="mobile-backdrop"></div>
 
-        <!-- Room name header (shown when room has a name) -->
-        <div id="room-header" class="fixed top-3 left-1/2 -translate-x-1/2 z-50 surface-glass border border-separator rounded-full px-4 py-1.5 text-xs font-medium text-muted hidden"></div>
+        <!-- Top-center stack: room name header + update banner, so they never overlap -->
+        <div class="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2">
+            <!-- Room name header (shown when room has a name) -->
+            <div id="room-header" class="surface-glass border border-separator rounded-full px-4 py-1.5 text-xs font-medium text-muted hidden"></div>
+
+            <!-- Update available banner (server build changed since we connected) -->
+            <div id="update-banner" class="update-banner hidden">
+                <span>A new version is available</span>
+                <button id="update-refresh-btn" type="button">Refresh</button>
+                <button id="update-dismiss-btn" type="button" title="Dismiss">&times;</button>
+            </div>
+        </div>
 
         <!-- Password Modal (for direct links to password-protected rooms) -->
         <div id="password-modal" class="fixed inset-0 z-100 hidden">

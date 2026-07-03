@@ -22,6 +22,27 @@ let reconnectTimer;
 let leavingRoom = false;
 let roomPassword = sessionStorage.getItem('roomPassword') || null;
 
+// Server sends a fresh buildId (regenerated every process start) in every 'init'
+// message. If it changes between our first connect and a later reconnect, the
+// server was redeployed/restarted while we were open — nudge the user to refresh.
+let knownBuildId = null;
+
+function checkBuildId(buildId) {
+    if (!buildId) return;
+    if (knownBuildId === null) {
+        knownBuildId = buildId;
+        return;
+    }
+    if (buildId !== knownBuildId) {
+        showUpdateBanner();
+    }
+}
+
+function showUpdateBanner() {
+    const banner = document.getElementById('update-banner');
+    if (banner) banner.classList.remove('hidden');
+}
+
 function connect() {
     socket = new WebSocket(`${protocol}://${location.host}`);
     peerManager.socket = socket;
@@ -49,11 +70,14 @@ function connect() {
             showPasswordPrompt();
             return;
         }
-        if (msg.type === 'init' && msg.roomName) {
-            const header = document.getElementById('room-header');
-            if (header) {
-                header.textContent = msg.roomName;
-                header.classList.remove('hidden');
+        if (msg.type === 'init') {
+            checkBuildId(msg.buildId);
+            if (msg.roomName) {
+                const header = document.getElementById('room-header');
+                if (header) {
+                    header.textContent = msg.roomName;
+                    header.classList.remove('hidden');
+                }
             }
         }
         peerManager.handleSignal(msg);
@@ -98,6 +122,13 @@ function showPasswordPrompt() {
 }
 
 connect();
+
+// Update banner — refresh applies the new build; dismiss just hides it for this tab
+const updateBanner = document.getElementById('update-banner');
+if (updateBanner) {
+    document.getElementById('update-refresh-btn')?.addEventListener('click', () => location.reload());
+    document.getElementById('update-dismiss-btn')?.addEventListener('click', () => updateBanner.classList.add('hidden'));
+}
 
 // File sharing — drag & drop, paste, button
 const chatPanel = document.getElementById('chat');

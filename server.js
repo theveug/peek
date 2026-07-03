@@ -38,7 +38,13 @@ if (turnConfig) {
     Debug.log('No TURN server configured — STUN only');
 }
 
-setupWebSocket(wss, turnConfig, manager);
+// Identifies this running process to connected clients so they can tell when
+// they're talking to a stale client build after a deploy/restart. Generated
+// fresh every process start — no manual version bump required to "just know".
+const APP_VERSION = process.env.APP_VERSION || '0.0.0';
+const BUILD_ID = `${APP_VERSION}-${Date.now()}`;
+
+setupWebSocket(wss, turnConfig, manager, BUILD_ID);
 
 function generateUniqueShortCode(length = 5) {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -132,7 +138,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
 const APP_NAME = process.env.APP_NAME || 'Peek';
-const APP_VERSION = process.env.APP_VERSION || '0.0.0';
 
 server.listen(PORT, () => {
     const proto = useHttps ? 'https' : 'http';

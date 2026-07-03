@@ -10,7 +10,8 @@
     "start": "node server.js",
     "build:css": "tailwindcss -i ./public/assets/tailwind.css -o ./public/assets/style.css --minify",
     "tailwind": "tailwindcss -i ./public/assets/tailwind.css -o ./public/assets/style.css --watch",
-    "test:ui": "node tests/ui-smoke.mjs"
+    "test:ui": "node tests/ui-smoke.mjs",
+    "test:version-banner": "node tests/version-banner.mjs"
   },
   "author": "",
   "license": "ISC",
