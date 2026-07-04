@@ -18,6 +18,8 @@ export class UIController {
         this.maxWatchedTiles = 6;
         this.onWatchChange = null;
         this.onPipExit = null;
+        this.onModeratorAction = null; // set by App.js — (action, peerId)
+        this.moderatorPeerId = null;
         this.focusedPeerId = null;
         this.autoFocusPaused = false;
         this.viewMode = 'grid'; // 'focus' or 'grid'
@@ -626,8 +628,15 @@ export class UIController {
         statusDot.style.background = this._statusColors.online;
         statusDot.title = 'Online';
 
+        const crownBadge = document.createElement('span');
+        crownBadge.className = 'participant-crown material-symbols-rounded';
+        crownBadge.title = 'Room moderator';
+        crownBadge.textContent = 'workspace_premium';
+        crownBadge.style.display = peerId === this.moderatorPeerId ? '' : 'none';
+
         avatarWrap.appendChild(avatar);
         avatarWrap.appendChild(statusDot);
+        avatarWrap.appendChild(crownBadge);
 
         const info = document.createElement('div');
         info.className = 'flex flex-col min-w-0 flex-1';
@@ -673,12 +682,74 @@ export class UIController {
         card.appendChild(info);
         card.appendChild(rightCol);
 
+        if (!isSelf) {
+            const modMenu = this._buildModeratorMenu(peerId);
+            const iAmModerator = !!this.selfPeerId && this.selfPeerId === this.moderatorPeerId;
+            modMenu.style.display = iAmModerator ? 'flex' : 'none';
+            card.appendChild(modMenu);
+        }
+
         if (isSelf) {
             container.prepend(card);
         } else {
             container.appendChild(card);
         }
         this._updateMemberCount();
+    }
+
+    // Kebab button + tiny popover for moderator-only actions on another peer's card.
+    // Hidden by default — updateModeratorStatus() reveals it only on the moderator's
+    // own client. Enforcement is server-side regardless (see WebSocketServer.js); this
+    // is just the UI entry point.
+    _buildModeratorMenu(peerId) {
+        const wrap = document.createElement('div');
+        wrap.className = 'participant-mod-menu relative flex-shrink-0';
+        wrap.style.display = 'none';
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'participant-mod-btn';
+        btn.title = 'Moderator actions';
+        btn.innerHTML = '<span class="material-symbols-rounded">more_vert</span>';
+
+        const menu = document.createElement('div');
+        menu.className = 'participant-mod-popover hidden';
+
+        const stopBtn = document.createElement('button');
+        stopBtn.type = 'button';
+        stopBtn.textContent = 'Stop their stream';
+        stopBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            menu.classList.add('hidden');
+            this.onModeratorAction?.('stop-stream', peerId);
+        });
+
+        const kickBtn = document.createElement('button');
+        kickBtn.type = 'button';
+        kickBtn.className = 'participant-mod-kick';
+        kickBtn.textContent = 'Kick from room';
+        kickBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            menu.classList.add('hidden');
+            this.onModeratorAction?.('kick', peerId);
+        });
+
+        menu.appendChild(stopBtn);
+        menu.appendChild(kickBtn);
+
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.participant-mod-popover').forEach(p => { if (p !== menu) p.classList.add('hidden'); });
+            menu.classList.toggle('hidden');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!wrap.contains(e.target)) menu.classList.add('hidden');
+        });
+
+        wrap.appendChild(btn);
+        wrap.appendChild(menu);
+        return wrap;
     }
 
     updateParticipantStatus(peerId, status) {
@@ -773,6 +844,25 @@ export class UIController {
         if (codeEl) codeEl.textContent = code;
 
         this._updateMemberCount();
+    }
+
+    // Refreshes every participant card's crown badge + kebab-menu visibility when
+    // moderator status changes (initial join, a claim, or a reconnect-reclaim).
+    updateModeratorStatus(moderatorPeerId) {
+        this.moderatorPeerId = moderatorPeerId;
+        const iAmModerator = !!this.selfPeerId && this.selfPeerId === moderatorPeerId;
+
+        document.querySelectorAll('#participants .participant-card').forEach(card => {
+            const peerId = card.id.replace('participant-', '');
+            const crown = card.querySelector('.participant-crown');
+            if (crown) crown.style.display = peerId === moderatorPeerId ? '' : 'none';
+
+            const modMenu = card.querySelector('.participant-mod-menu');
+            if (modMenu) {
+                const showMenu = iAmModerator && peerId !== this.selfPeerId;
+                modMenu.style.display = showMenu ? 'flex' : 'none';
+            }
+        });
     }
 
     updateMeshLatency(ms) {

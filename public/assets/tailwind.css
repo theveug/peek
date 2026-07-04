@@ -1199,6 +1199,84 @@ body.light .panel-tab:hover {
   min-width: 14px;
 }
 
+/* ===== Room moderator (stop-stream / kick) ===== */
+.participant-crown {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--amber);
+  background: var(--bg2);
+  border-radius: 50%;
+  padding: 1px;
+}
+
+.participant-mod-menu {
+  align-items: center;
+}
+
+.participant-mod-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--t3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.participant-mod-btn:hover {
+  background: var(--bg4);
+  color: var(--t1);
+}
+
+.participant-mod-btn .material-symbols-rounded {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.participant-mod-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  z-index: 70;
+  min-width: 150px;
+}
+
+.participant-mod-popover.hidden {
+  display: none;
+}
+
+.participant-mod-popover button {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--t1);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.participant-mod-popover button:hover {
+  background: var(--bg4);
+}
+
+.participant-mod-kick {
+  color: var(--red) !important;
+}
+
 .sidebar-trust-card {
   flex-shrink: 0;
   margin: 10px 12px;

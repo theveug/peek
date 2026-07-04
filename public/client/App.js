@@ -18,6 +18,10 @@ const peerManager = new PeerManager(null, ui);
 const debug = new DebugPanel(peerManager);
 ui.onWatchChange = (streamKey, watched) => peerManager.setWatched(streamKey, watched);
 ui.onPipExit = () => peerManager.handleTabVisibility(document.hidden);
+ui.onModeratorAction = (action, peerId) => {
+    if (action === 'stop-stream') peerManager.requestStopStream(peerId);
+    else if (action === 'kick') peerManager.kickPeer(peerId);
+};
 peerManager.onActiveSpeakerChange = (peerId) => ui.autoFocusTo(peerId);
 peerManager.onSpeakingChange = (peerId, speaking) => ui.setSpeaking(peerId, speaking);
 
@@ -25,6 +29,7 @@ let socket;
 let reconnectTimer;
 let leavingRoom = false;
 let roomPassword = sessionStorage.getItem('roomPassword') || null;
+const creatorToken = sessionStorage.getItem('creatorToken') || null;
 
 // Server sends a fresh buildId (regenerated every process start) in every 'init'
 // message. If it changes between our first connect and a later reconnect, the
@@ -55,6 +60,7 @@ function connect() {
     socket.onopen = () => {
         const joinMsg = { type: 'join', sessionId };
         if (roomPassword) joinMsg.password = roomPassword;
+        if (creatorToken) joinMsg.creatorToken = creatorToken;
         socket.send(JSON.stringify(joinMsg));
     };
 
@@ -72,6 +78,13 @@ function connect() {
                 return;
             }
             showPasswordPrompt();
+            return;
+        }
+        if (msg.type === 'kicked') {
+            leavingRoom = true;
+            clearTimeout(reconnectTimer);
+            socket.close();
+            location.href = '/?kicked=1';
             return;
         }
         if (msg.type === 'init') {
@@ -334,6 +347,11 @@ document.getElementById('cam-toggle').addEventListener('click', async () => {
     const enabled = await peerManager.toggleCam();
     updateCamUI(enabled);
 });
+
+peerManager.onForceStopped = () => {
+    updateShareButton();
+    updateCamUI(false);
+};
 
 document.getElementById('share-toggle').onclick = async () => {
     await peerManager.startSharing();

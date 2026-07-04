@@ -89,15 +89,22 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
 
                     manager.addPeer(sessionId, peerId, ws, { password: msg.password || null });
                     const peers = manager.getPeersInSession(sessionId).filter(p => p !== peerId);
+
+                    // A claim can flip moderatorPeerId, so this must run before reading
+                    // getSessionMeta() below for the init payload to reflect it.
+                    const claimedModerator = msg.creatorToken ? manager.claimModerator(sessionId, peerId, msg.creatorToken) : false;
                     const meta = manager.getSessionMeta(sessionId);
 
                     const iceServers = generateIceServers(turnConfig);
-                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, buildId }));
+                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, moderatorPeerId: meta?.moderatorPeerId || null, buildId }));
 
                     peers.forEach(pid => {
                         const socket = manager.getPeerSocket(pid);
                         if (socket) {
                             socket.send(JSON.stringify({ type: 'peer-joined', peerId }));
+                            if (claimedModerator) {
+                                socket.send(JSON.stringify({ type: 'moderator-update', moderatorPeerId: peerId }));
+                            }
                         }
                     });
                     break;
@@ -131,6 +138,31 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
                             socket.send(JSON.stringify({ type, from: peerId, payload }));
                         }
                     });
+                    break;
+                }
+
+                // Moderator-only actions — enforcement lives entirely here, not in the
+                // client UI (which just hides these controls from non-moderators). A
+                // sender who never claimed moderator status via a valid creatorToken is
+                // silently ignored.
+                case 'force-stop-stream': {
+                    const sessionId = manager.getSessionId(peerId);
+                    if (!manager.isModerator(sessionId, peerId)) break;
+                    const target = manager.getPeerSocket(to);
+                    if (target) {
+                        target.send(JSON.stringify({ type: 'force-stop-stream', from: peerId }));
+                    }
+                    break;
+                }
+
+                case 'kick': {
+                    const sessionId = manager.getSessionId(peerId);
+                    if (!manager.isModerator(sessionId, peerId)) break;
+                    const target = manager.getPeerSocket(to);
+                    if (target) {
+                        target.send(JSON.stringify({ type: 'kicked' }));
+                        target.close();
+                    }
                     break;
                 }
             }

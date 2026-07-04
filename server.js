@@ -4,7 +4,7 @@ import express from 'express';
 import { createServer as createHttpServer } from 'http';
 import { createServer as createHttpsServer } from 'https';
 import { readFileSync, existsSync } from 'fs';
-import { randomInt } from 'crypto';
+import { randomInt, randomBytes } from 'crypto';
 import { WebSocketServer } from 'ws';
 import { setupWebSocket } from './src/server/WebSocketServer.js';
 import { SessionManager } from './src/server/SessionManager.js';
@@ -91,9 +91,10 @@ app.post('/api/create-room', rateLimit(60_000, 10), (req, res) => {
     const { name, password, maxPeers } = req.body || {};
     const code = generateUniqueShortCode();
     const cleanName = name ? name.replace(/[<>]/g, '').trim().substring(0, 50) : null;
-    manager.createSession(code, { name: cleanName || null, password: password || null, maxPeers });
+    const creatorToken = randomBytes(16).toString('hex');
+    manager.createSession(code, { name: cleanName || null, password: password || null, maxPeers, creatorToken });
     Debug.log(`Room created: ${code}${cleanName ? ` (${cleanName})` : ''}${password ? ' [password]' : ''}`);
-    res.json({ code });
+    res.json({ code, creatorToken });
 });
 
 // API: Validate room (check if it exists / needs password)

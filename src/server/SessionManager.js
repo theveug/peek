@@ -5,22 +5,37 @@ export class SessionManager {
         this.peerMap = new Map();  // peerId -> { sessionId, socket }
     }
 
-    createSession(sessionId, { name = null, password = null, maxPeers = 6 } = {}) {
+    createSession(sessionId, { name = null, password = null, maxPeers = 6, creatorToken = null } = {}) {
         if (!this.sessions.has(sessionId)) {
             const clampedMaxPeers = Math.min(12, Math.max(2, parseInt(maxPeers, 10) || 6));
-            this.sessions.set(sessionId, { peers: new Set(), name, password, maxPeers: clampedMaxPeers, createdAt: Date.now() });
+            this.sessions.set(sessionId, { peers: new Set(), name, password, maxPeers: clampedMaxPeers, createdAt: Date.now(), creatorToken, moderatorPeerId: null });
         }
     }
 
     // `password` only applies when the join lazily recreates a dead session — a saved
     // password-protected room recreated this way keeps its protection instead of
-    // silently coming back passwordless.
+    // silently coming back passwordless. Lazily recreated rooms have no creatorToken
+    // (nobody went through /api/create-room for this instance), so they start with
+    // no moderator — same spirit as losing the room name in this path.
     addPeer(sessionId, peerId, socket, { password = null } = {}) {
         if (!this.sessions.has(sessionId)) {
-            this.sessions.set(sessionId, { peers: new Set(), name: null, password, maxPeers: 6, createdAt: Date.now() });
+            this.sessions.set(sessionId, { peers: new Set(), name: null, password, maxPeers: 6, createdAt: Date.now(), creatorToken: null, moderatorPeerId: null });
         }
         this.sessions.get(sessionId).peers.add(peerId);
         this.peerMap.set(peerId, { sessionId, socket });
+    }
+
+    // A peer presenting the token minted at room creation claims (or reclaims, after a
+    // reconnect issues them a new peerId) moderator status for that session.
+    claimModerator(sessionId, peerId, token) {
+        const s = this.sessions.get(sessionId);
+        if (!s || !s.creatorToken || !token || s.creatorToken !== token) return false;
+        s.moderatorPeerId = peerId;
+        return true;
+    }
+
+    isModerator(sessionId, peerId) {
+        return this.sessions.get(sessionId)?.moderatorPeerId === peerId;
     }
 
     // Created-but-never-joined sessions have no peers, so removePeer() never deletes them.
@@ -61,7 +76,7 @@ export class SessionManager {
     getSessionMeta(sessionId) {
         const s = this.sessions.get(sessionId);
         if (!s) return null;
-        return { name: s.name, hasPassword: !!s.password, peerCount: s.peers.size, maxPeers: s.maxPeers ?? 6 };
+        return { name: s.name, hasPassword: !!s.password, peerCount: s.peers.size, maxPeers: s.maxPeers ?? 6, moderatorPeerId: s.moderatorPeerId ?? null };
     }
 
     validatePassword(sessionId, password) {

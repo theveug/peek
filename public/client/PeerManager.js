@@ -17,6 +17,8 @@ export class PeerManager {
         this.peers = {};
         this.stream = null;
         this.peerId = null;
+        this.moderatorPeerId = null;
+        this.onForceStopped = null; // set by App.js — keeps share/cam button icons in sync
         this.isSharing = false;
         this.iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
         this.micStream = null;
@@ -92,7 +94,7 @@ export class PeerManager {
         this.send(watched ? 'watch-stream' : 'unwatch-stream', peerId, { kind: isCam ? 'cam' : 'screen' });
     }
 
-    async handleSignal({ type, peerId, peers, from, payload, iceServers }) {
+    async handleSignal({ type, peerId, peers, from, payload, iceServers, moderatorPeerId }) {
         // console.groupCollapsed(`PeerManager.handleSignal(${type})`);
         // console.log('[SIGNAL]', type, { peerId, peers, from, payload });
 
@@ -114,12 +116,29 @@ export class PeerManager {
                         this.initiateConnection(id);
                     }
                 });
+                this.moderatorPeerId = moderatorPeerId || null;
+                this.ui.updateModeratorStatus(this.moderatorPeerId);
                 setTimeout(() => {
                     this.broadcastMicStatus();
                     this.broadcastDeafenStatus();
                     this.broadcastNickname();
                     this.broadcastStatus();
                 }, 500);
+                break;
+
+            case 'moderator-update':
+                this.moderatorPeerId = moderatorPeerId || null;
+                this.ui.updateModeratorStatus(this.moderatorPeerId);
+                break;
+
+            case 'force-stop-stream':
+                if (this.isSharing) this.stopSharing();
+                if (this.camStream) this.stopCam();
+                this.ui.showToast('The room moderator stopped your stream to save bandwidth', 'info');
+                // Button icon state (share/cam toggles) is owned by App.js's click
+                // handlers, not by stopSharing()/stopCam() themselves — this callback
+                // lets it stay in sync when the stop is triggered remotely instead.
+                this.onForceStopped?.();
                 break;
 
             case 'peer-joined':
@@ -1136,6 +1155,20 @@ export class PeerManager {
         if (this.camStream) {
             this.send('webcam-start', null, { streamId: this.camStream.id });
         }
+    }
+
+    isModeratorMe() {
+        return !!this.peerId && this.moderatorPeerId === this.peerId;
+    }
+
+    // Both moderator-only actions are enforced server-side (WebSocketServer.js checks
+    // SessionManager.isModerator before acting) — these just send the request.
+    requestStopStream(targetPeerId) {
+        this.send('force-stop-stream', targetPeerId, {});
+    }
+
+    kickPeer(targetPeerId) {
+        this.send('kick', targetPeerId, {});
     }
 
     send(type, to, payload) {
