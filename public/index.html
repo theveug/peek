@@ -12,6 +12,154 @@
         <canvas id="gradient-canvas"></canvas>
 
         <div class="flex flex-col h-screen max-h-screen overflow-hidden relative z-10">
+            <div class="topbar">
+                <div class="topbar-left">
+                    <div class="topbar-brand">
+                        <span class="topbar-brand-icon"><span class="material-symbols-rounded">screen_share</span></span>
+                        <span class="topbar-brand-name">Peek</span>
+                    </div>
+                    <div class="topbar-divider"></div>
+                    <div class="topbar-pill">
+                        <span class="topbar-live-dot"></span>
+                        <span id="topbar-room-name">Room</span>
+                        <span id="topbar-room-lock" class="material-symbols-rounded" style="display:none;" title="Password protected">lock</span>
+                        <span class="topbar-pill-divider"></span>
+                        <span id="topbar-room-code" class="font-mono-app"></span>
+                    </div>
+                </div>
+                <div class="topbar-right">
+                    <div class="topbar-pill topbar-peer-pill font-mono-app">
+                        <span class="topbar-live-dot"></span>
+                        <span id="topbar-peer-count">1</span>/<span id="topbar-peer-cap">6</span>
+                        <span id="topbar-latency-wrap" class="topbar-latency-wrap hidden">
+                            <span class="topbar-pill-divider"></span>
+                            <span id="topbar-latency"></span>ms · mesh
+                        </span>
+                    </div>
+                    <div class="flex items-center relative">
+                        <button id="invite-button" class="topbar-invite-btn" title="Invite">
+                            <span class="material-symbols-rounded">link</span>
+                            <span class="topbar-invite-label">Invite</span>
+                        </button>
+
+                        <div id="invite-popover" class="quick-settings-popover topbar-popover hidden">
+                            <div class="quick-settings-header" id="invite-popover-title">Invite to this room</div>
+                            <p class="settings-section-subcopy" style="margin:0 0 16px;font-size:12.5px;">Links open in any modern browser — no install, no account. A password is only asked for if the room has one.</p>
+                            <div class="settings-field">
+                                <div class="settings-label">Room code</div>
+                                <div class="topbar-invite-field">
+                                    <input type="text" id="invite-code-field" class="settings-text-input font-mono-app" style="max-width:none;letter-spacing:0.08em;" readonly />
+                                    <button type="button" id="invite-copy-code" class="lobby-btn-secondary" style="width:auto;padding:9px 14px;">Copy</button>
+                                </div>
+                            </div>
+                            <div class="settings-field" style="margin-bottom:0;">
+                                <div class="settings-label">Direct link</div>
+                                <div class="topbar-invite-field">
+                                    <input type="text" id="invite-link-field" class="settings-text-input font-mono-app" style="max-width:none;" readonly />
+                                    <button type="button" id="invite-copy-link" class="lobby-btn-primary" style="width:auto;padding:9px 14px;">Copy</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center relative">
+                        <button
+                            id="quick-settings-button"
+                            title="Room settings"
+                            class="topbar-icon-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                                <path fill-rule="evenodd" d="M3 5.25a.75.75 0 0 1 .75-.75h6.75a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 5.25Zm0 6.75a.75.75 0 0 1 .75-.75h11.25a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 6.75a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd" />
+                                <circle cx="13.5" cy="5.25" r="2.25" />
+                                <circle cx="18" cy="12" r="2.25" />
+                                <circle cx="10.5" cy="18.75" r="2.25" />
+                            </svg>
+                        </button>
+
+                        <div id="quick-settings-popover" class="quick-settings-popover topbar-popover hidden">
+                            <div class="quick-settings-header">Room settings</div>
+
+                            <div class="settings-field">
+                                <div class="settings-label">Status</div>
+                                <div class="quick-status-dropdown">
+                                    <button type="button" id="quick-status-trigger" class="quick-status-trigger">
+                                        <span class="quick-status-dot" id="quick-status-dot"></span>
+                                        <span id="quick-status-label">Online</span>
+                                        <span class="material-symbols-rounded quick-status-caret">expand_more</span>
+                                    </button>
+                                    <div id="quick-status-menu" class="quick-status-menu hidden">
+                                        <button type="button" data-status="online" class="quick-status-option"><span class="quick-status-dot online"></span>Online</button>
+                                        <button type="button" data-status="away" class="quick-status-option"><span class="quick-status-dot away"></span>Away</button>
+                                        <button type="button" data-status="dnd" class="quick-status-option"><span class="quick-status-dot dnd"></span>Do Not Disturb</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Auto-accept files in this room</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="quick-auto-accept-files" /><span class="settings-switch-track"></span></label>
+                            </div>
+
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Follow active speaker</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="quick-follow-speaker" /><span class="settings-switch-track"></span></label>
+                            </div>
+
+                            <div class="settings-field">
+                                <div class="settings-label">Screen share quality</div>
+                                <div class="settings-segmented" id="quick-screen-res-picker">
+                                    <button type="button" data-value="1280x720">720p</button>
+                                    <button type="button" data-value="1920x1080">1080p</button>
+                                    <button type="button" data-value="2560x1440">1440p</button>
+                                    <button type="button" data-value="source">Source</button>
+                                </div>
+                            </div>
+
+                            <div class="settings-field" style="margin-bottom:8px;">
+                                <div class="settings-label">Webcam quality</div>
+                                <div class="settings-segmented" id="quick-cam-res-picker">
+                                    <button type="button" data-value="640x360">360p</button>
+                                    <button type="button" data-value="640x480">480p</button>
+                                    <button type="button" data-value="1280x720">720p</button>
+                                    <button type="button" data-value="source">Source</button>
+                                </div>
+                            </div>
+
+                            <button type="button" id="quick-settings-more" class="quick-settings-more">
+                                All settings
+                                <span class="material-symbols-rounded">arrow_forward</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button
+                        id="settings-button"
+                        class="topbar-icon-btn">
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            class="size-6">
+                            <path
+                                fill-rule="evenodd"
+                                d="M11.828 2.25c-.916 0-1.699.663-1.85 1.567l-.091.549a.798.798 0 0 1-.517.608 7.45 7.45 0 0 0-.478.198.798.798 0 0 1-.796-.064l-.453-.324a1.875 1.875 0 0 0-2.416.2l-.243.243a1.875 1.875 0 0 0-.2 2.416l.324.453a.798.798 0 0 1 .064.796 7.448 7.448 0 0 0-.198.478.798.798 0 0 1-.608.517l-.55.092a1.875 1.875 0 0 0-1.566 1.849v.344c0 .916.663 1.699 1.567 1.85l.549.091c.281.047.508.25.608.517.06.162.127.321.198.478a.798.798 0 0 1-.064.796l-.324.453a1.875 1.875 0 0 0 .2 2.416l.243.243c.648.648 1.67.733 2.416.2l.453-.324a.798.798 0 0 1 .796-.064c.157.071.316.137.478.198.267.1.47.327.517.608l.092.55c.15.903.932 1.566 1.849 1.566h.344c.916 0 1.699-.663 1.85-1.567l.091-.549a.798.798 0 0 1 .517-.608 7.52 7.52 0 0 0 .478-.198.798.798 0 0 1 .796.064l.453.324a1.875 1.875 0 0 0 2.416-.2l.243-.243c.648-.648.733-1.67.2-2.416l-.324-.453a.798.798 0 0 1-.064-.796c.071-.157.137-.316.198-.478.1-.267.327-.47.608-.517l.55-.091a1.875 1.875 0 0 0 1.566-1.85v-.344c0-.916-.663-1.699-1.567-1.85l-.549-.091a.798.798 0 0 1-.608-.517 7.507 7.507 0 0 0-.198-.478.798.798 0 0 1 .064-.796l.324-.453a1.875 1.875 0 0 0-.2-2.416l-.243-.243a1.875 1.875 0 0 0-2.416-.2l-.453.324a.798.798 0 0 1-.796.064 7.462 7.462 0 0 0-.478-.198.798.798 0 0 1-.517-.608l-.091-.55a1.875 1.875 0 0 0-1.85-1.566h-.344ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </button>
+
+                    <div class="topbar-divider"></div>
+
+                    <div class="topbar-identity" id="topbar-identity">
+                        <span class="topbar-identity-avatar" id="topbar-identity-avatar">Y</span>
+                        <span class="topbar-identity-name" id="topbar-identity-name">You</span>
+                        <span class="topbar-identity-status" id="topbar-identity-status"></span>
+                    </div>
+                </div>
+            </div>
+
             <div class="flex-grow flex h-full text-foreground">
                 <div
                     class="chat-panel surface-glass flex flex-col h-full border-r border-separator relative"
@@ -217,110 +365,6 @@
                                 </svg>
                             </button>
                         </div>
-                        <div class="flex items-center relative">
-                            <button
-                                id="quick-settings-button"
-                                title="Room settings"
-                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white/10 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
-                                    <path fill-rule="evenodd" d="M3 5.25a.75.75 0 0 1 .75-.75h6.75a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 5.25Zm0 6.75a.75.75 0 0 1 .75-.75h11.25a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 6.75a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd" />
-                                    <circle cx="13.5" cy="5.25" r="2.25" />
-                                    <circle cx="18" cy="12" r="2.25" />
-                                    <circle cx="10.5" cy="18.75" r="2.25" />
-                                </svg>
-                            </button>
-
-                            <div id="quick-settings-popover" class="quick-settings-popover hidden">
-                                <div class="quick-settings-header">Room settings</div>
-
-                                <div class="settings-field">
-                                    <div class="settings-label">Status</div>
-                                    <div class="quick-status-dropdown">
-                                        <button type="button" id="quick-status-trigger" class="quick-status-trigger">
-                                            <span class="quick-status-dot" id="quick-status-dot"></span>
-                                            <span id="quick-status-label">Online</span>
-                                            <span class="material-symbols-rounded quick-status-caret">expand_more</span>
-                                        </button>
-                                        <div id="quick-status-menu" class="quick-status-menu hidden">
-                                            <button type="button" data-status="online" class="quick-status-option"><span class="quick-status-dot online"></span>Online</button>
-                                            <button type="button" data-status="away" class="quick-status-option"><span class="quick-status-dot away"></span>Away</button>
-                                            <button type="button" data-status="dnd" class="quick-status-option"><span class="quick-status-dot dnd"></span>Do Not Disturb</button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="settings-toggle-row">
-                                    <div>
-                                        <div class="settings-toggle-row-title">Auto-accept files in this room</div>
-                                    </div>
-                                    <label class="settings-switch"><input type="checkbox" id="quick-auto-accept-files" /><span class="settings-switch-track"></span></label>
-                                </div>
-
-                                <div class="settings-toggle-row">
-                                    <div>
-                                        <div class="settings-toggle-row-title">Follow active speaker</div>
-                                    </div>
-                                    <label class="settings-switch"><input type="checkbox" id="quick-follow-speaker" /><span class="settings-switch-track"></span></label>
-                                </div>
-
-                                <div class="settings-field">
-                                    <div class="settings-label">Screen share quality</div>
-                                    <div class="settings-segmented" id="quick-screen-res-picker">
-                                        <button type="button" data-value="1280x720">720p</button>
-                                        <button type="button" data-value="1920x1080">1080p</button>
-                                        <button type="button" data-value="2560x1440">1440p</button>
-                                        <button type="button" data-value="source">Source</button>
-                                    </div>
-                                </div>
-
-                                <div class="settings-field" style="margin-bottom:8px;">
-                                    <div class="settings-label">Webcam quality</div>
-                                    <div class="settings-segmented" id="quick-cam-res-picker">
-                                        <button type="button" data-value="640x360">360p</button>
-                                        <button type="button" data-value="640x480">480p</button>
-                                        <button type="button" data-value="1280x720">720p</button>
-                                        <button type="button" data-value="source">Source</button>
-                                    </div>
-                                </div>
-
-                                <button type="button" id="quick-settings-more" class="quick-settings-more">
-                                    All settings
-                                    <span class="material-symbols-rounded">arrow_forward</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="flex items-center">
-                            <button
-                                id="settings-button"
-                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white/10 transition-colors">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    viewBox="0 0 24 24"
-                                    fill="currentColor"
-                                    class="size-6">
-                                    <path
-                                        fill-rule="evenodd"
-                                        d="M11.828 2.25c-.916 0-1.699.663-1.85 1.567l-.091.549a.798.798 0 0 1-.517.608 7.45 7.45 0 0 0-.478.198.798.798 0 0 1-.796-.064l-.453-.324a1.875 1.875 0 0 0-2.416.2l-.243.243a1.875 1.875 0 0 0-.2 2.416l.324.453a.798.798 0 0 1 .064.796 7.448 7.448 0 0 0-.198.478.798.798 0 0 1-.608.517l-.55.092a1.875 1.875 0 0 0-1.566 1.849v.344c0 .916.663 1.699 1.567 1.85l.549.091c.281.047.508.25.608.517.06.162.127.321.198.478a.798.798 0 0 1-.064.796l-.324.453a1.875 1.875 0 0 0 .2 2.416l.243.243c.648.648 1.67.733 2.416.2l.453-.324a.798.798 0 0 1 .796-.064c.157.071.316.137.478.198.267.1.47.327.517.608l.092.55c.15.903.932 1.566 1.849 1.566h.344c.916 0 1.699-.663 1.85-1.567l.091-.549a.798.798 0 0 1 .517-.608 7.52 7.52 0 0 0 .478-.198.798.798 0 0 1 .796.064l.453.324a1.875 1.875 0 0 0 2.416-.2l.243-.243c.648-.648.733-1.67.2-2.416l-.324-.453a.798.798 0 0 1-.064-.796c.071-.157.137-.316.198-.478.1-.267.327-.47.608-.517l.55-.091a1.875 1.875 0 0 0 1.566-1.85v-.344c0-.916-.663-1.699-1.567-1.85l-.549-.091a.798.798 0 0 1-.608-.517 7.507 7.507 0 0 0-.198-.478.798.798 0 0 1 .064-.796l.324-.453a1.875 1.875 0 0 0-.2-2.416l-.243-.243a1.875 1.875 0 0 0-2.416-.2l-.453.324a.798.798 0 0 1-.796.064 7.462 7.462 0 0 0-.478-.198.798.798 0 0 1-.517-.608l-.091-.55a1.875 1.875 0 0 0-1.85-1.566h-.344ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z"
-                                        clip-rule="evenodd" />
-                                </svg>
-                            </button>
-                        </div>
-                        <div class="flex items-center">
-                            <button
-                                id="share-button"
-                                class="rounded-full p-2 flex relative flex-0 align-middle items-center justify-center hover:bg-white/10 transition-colors">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    viewBox="0 0 24 24"
-                                    fill="currentColor"
-                                    class="size-6">
-                                    <path
-                                        fill-rule="evenodd"
-                                        d="M15.75 4.5a3 3 0 1 1 .825 2.066l-8.421 4.679a3.002 3.002 0 0 1 0 1.51l8.421 4.679a3 3 0 1 1-.729 1.31l-8.421-4.678a3 3 0 1 1 0-4.132l8.421-4.679a3 3 0 0 1-.096-.755Z"
-                                        clip-rule="evenodd" />
-                                </svg>
-                            </button>
-                        </div>
                         <div class="flex items-center">
                             <button
                                 id="theme-toggle"
@@ -375,12 +419,8 @@
         <!-- Mobile backdrop for panel overlays -->
         <div id="mobile-backdrop" class="mobile-backdrop"></div>
 
-        <!-- Top-center stack: room name header + update banner, so they never overlap -->
-        <div class="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2">
-            <!-- Room name header (shown when room has a name) -->
-            <div id="room-header" class="surface-glass border border-separator rounded-full px-4 py-1.5 text-xs font-medium text-muted hidden"></div>
-
-            <!-- Update available banner (server build changed since we connected) -->
+        <!-- Update available banner (server build changed since we connected); room state now lives in the persistent top bar -->
+        <div class="update-banner-wrap">
             <div id="update-banner" class="update-banner hidden">
                 <span>A new version is available</span>
                 <button id="update-refresh-btn" type="button">Refresh</button>

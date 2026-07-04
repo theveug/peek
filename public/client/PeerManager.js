@@ -346,6 +346,7 @@ export class PeerManager {
     }
 
     async _pollConnectionStats() {
+        const rttSamples = [];
         for (const [peerId, pc] of Object.entries(this.peers)) {
             try {
                 const stats = await pc.getStats();
@@ -362,8 +363,11 @@ export class PeerManager {
                 const total = packetsReceived + packetsLost;
                 const lossRate = total > 0 ? packetsLost / total : 0;
                 this.ui.updateConnectionQuality(peerId, this._connectionQualityFromStats(rtt, lossRate));
+                if (rtt !== null) rttSamples.push(rtt * 1000);
             } catch (_) {}
         }
+        const avgMs = rttSamples.length ? rttSamples.reduce((a, b) => a + b, 0) / rttSamples.length : null;
+        this.ui.updateMeshLatency?.(avgMs);
     }
 
     _startStatsPolling() {
@@ -572,6 +576,7 @@ export class PeerManager {
         this.status = status;
         this.send('status-update', null, { status });
         this.ui.updateParticipantStatus(this.peerId, status);
+        this.ui.updateIdentityStatus?.(status);
     }
 
     setManualStatus(status) {

@@ -92,7 +92,7 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
                     const meta = manager.getSessionMeta(sessionId);
 
                     const iceServers = generateIceServers(turnConfig);
-                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, buildId }));
+                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, buildId }));
 
                     peers.forEach(pid => {
                         const socket = manager.getPeerSocket(pid);

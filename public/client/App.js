@@ -6,6 +6,7 @@ import { initGradientBackground } from './GradientBackground.js';
 import { initTheme } from './ThemeManager.js';
 import { SettingsPanel } from './SettingsPanel.js';
 import { QuickRoomSettings } from './QuickRoomSettings.js';
+import { InvitePopover } from './InvitePopover.js';
 
 initTheme();
 initGradientBackground();
@@ -76,13 +77,7 @@ function connect() {
         }
         if (msg.type === 'init') {
             checkBuildId(msg.buildId);
-            if (msg.roomName) {
-                const header = document.getElementById('room-header');
-                if (header) {
-                    header.textContent = msg.roomName;
-                    header.classList.remove('hidden');
-                }
-            }
+            ui.setRoomMeta({ name: msg.roomName, code: sessionId, hasPassword: msg.hasPassword, maxPeers: msg.maxPeers });
         }
         peerManager.handleSignal(msg);
     };
@@ -601,12 +596,8 @@ window.addEventListener('keyup', (e) => {
     }
 });
 
-const shareButton = document.getElementById('share-button');
-if (shareButton) {
-    shareButton.addEventListener('click', () => {
-        navigator.clipboard.writeText(window.location.href);
-    });
-}
+// --- Invite popover (top bar) ---
+new InvitePopover({ ui, roomCode: sessionId });
 
 // --- Defaults ---
 const defaults = {

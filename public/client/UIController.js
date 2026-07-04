@@ -27,6 +27,8 @@ export class UIController {
         this.isPanning = false;
         this.chat = new ChatUI({ getNickname: (id) => this._peerNickname(id) });
         this._sharedFiles = [];
+        this.maxPeers = 6;
+        this.roomName = null;
         this.setupZoom();
         this.setupPictureInPicture();
         this._createToastContainer();
@@ -547,6 +549,11 @@ export class UIController {
         offline: 'Offline',
     };
 
+    _avatarInitials(displayName) {
+        return displayName.split(/\s+/).map(w => w[0]).join('').substring(0, 2).toUpperCase()
+            || displayName.substring(0, 2).toUpperCase();
+    }
+
     _createParticipantCard(peerId, displayName, isSelf) {
         const container = document.getElementById('participants');
 
@@ -563,9 +570,7 @@ export class UIController {
             : 'bg-indigo-600/30 border-2 border-indigo-500/40';
         const avatar = document.createElement('div');
         avatar.className = `flex items-center justify-center w-9 h-9 rounded-full ${avatarColor} text-white text-xs font-bold select-none`;
-        const initials = displayName.split(/\s+/).map(w => w[0]).join('').substring(0, 2).toUpperCase()
-            || displayName.substring(0, 2).toUpperCase();
-        avatar.textContent = initials;
+        avatar.textContent = this._avatarInitials(displayName);
 
         const statusDot = document.createElement('div');
         statusDot.className = 'participant-status-dot absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2';
@@ -714,6 +719,41 @@ export class UIController {
         const count = document.getElementById('participants')?.children.length || 0;
         const el = document.getElementById('member-count');
         if (el) el.textContent = count;
+        const topbarCount = document.getElementById('topbar-peer-count');
+        if (topbarCount) topbarCount.textContent = count;
+        const topbarCap = document.getElementById('topbar-peer-cap');
+        if (topbarCap) topbarCap.textContent = this.maxPeers;
+    }
+
+    // Called once from the 'init' handler — populates the top bar's room-state pill
+    // and stashes the cap so every later _updateMemberCount() reflects it.
+    setRoomMeta({ name, code, hasPassword, maxPeers }) {
+        this.roomName = name || null;
+        this.maxPeers = maxPeers || 6;
+
+        const nameEl = document.getElementById('topbar-room-name');
+        if (nameEl) nameEl.textContent = name || code;
+        // Inline style, not the `.hidden` utility class: `.material-symbols-rounded`
+        // (fonts.css, unlayered) otherwise beats Tailwind's layered `.hidden` utility
+        // in the cascade regardless of source order, silently keeping the icon visible.
+        const lockEl = document.getElementById('topbar-room-lock');
+        if (lockEl) lockEl.style.display = hasPassword ? '' : 'none';
+        const codeEl = document.getElementById('topbar-room-code');
+        if (codeEl) codeEl.textContent = code;
+
+        this._updateMemberCount();
+    }
+
+    updateMeshLatency(ms) {
+        const wrap = document.getElementById('topbar-latency-wrap');
+        const valueEl = document.getElementById('topbar-latency');
+        if (!wrap || !valueEl) return;
+        if (ms === null) {
+            wrap.classList.add('hidden');
+            return;
+        }
+        valueEl.textContent = Math.round(ms);
+        wrap.classList.remove('hidden');
     }
 
     _micOnSvg() {
@@ -783,15 +823,25 @@ export class UIController {
         const nameEl = el.querySelector('.participant-name');
         if (nameEl) nameEl.textContent = nickname;
         const avatar = el.querySelector('.flex-shrink-0 > div:first-child');
-        if (avatar) {
-            const initials = nickname.split(/\s+/).map(w => w[0]).join('').substring(0, 2).toUpperCase();
-            avatar.textContent = initials || nickname.substring(0, 2).toUpperCase();
+        if (avatar) avatar.textContent = this._avatarInitials(nickname);
+
+        if (peerId === this.selfPeerId) {
+            const identityName = document.getElementById('topbar-identity-name');
+            const identityAvatar = document.getElementById('topbar-identity-avatar');
+            if (identityName) identityName.textContent = nickname;
+            if (identityAvatar) identityAvatar.textContent = this._avatarInitials(nickname);
         }
 
         if (this._pendingJoinToasts && this._pendingJoinToasts.has(peerId)) {
             this._pendingJoinToasts.delete(peerId);
             this.showToast(`${nickname} joined`, 'join');
         }
+    }
+
+    updateIdentityStatus(status) {
+        const dot = document.getElementById('topbar-identity-status');
+        if (!dot) return;
+        dot.className = `topbar-identity-status ${status === 'online' ? '' : status}`.trim();
     }
 
     // --- Audio ---
