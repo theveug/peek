@@ -35,6 +35,15 @@ export class PeerManager {
         this.peerScreenStreamIds = {};
         this.senders = {};
         this._statsInterval = null;
+
+        // --- Active-speaker detection (drives optional auto-focus) ---
+        this.onActiveSpeakerChange = null; // set by App.js
+        this._speakerInterval = null;
+        this._activeSpeakerId = null;
+        this._speakerCandidateSince = {};
+        this._lastSpeakerSwitch = -Infinity;
+        this._localAnalyser = null;
+        this._localAnalyserStream = null;
     }
 
     // Adds every track of `stream` to `pc` and records the resulting RTCRtpSender
@@ -363,6 +372,106 @@ export class PeerManager {
         this._statsInterval = null;
     }
 
+    // RMS level (roughly 0-1) of the local mic, via a Web Audio analyser on micStream.
+    // Recreated whenever micStream itself changes (e.g. mic toggled off then on again).
+    _localMicLevel() {
+        if (!this.micEnabled || !this.micStream) return 0;
+        if (this._localAnalyserStream !== this.micStream) {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const source = ctx.createMediaStreamSource(this.micStream);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 512;
+            source.connect(analyser);
+            this._localAnalyser = analyser;
+            this._localAnalyserData = new Uint8Array(analyser.frequencyBinCount);
+            this._localAnalyserStream = this.micStream;
+        }
+        this._localAnalyser.getByteTimeDomainData(this._localAnalyserData);
+        let sumSquares = 0;
+        for (const v of this._localAnalyserData) {
+            const norm = (v - 128) / 128;
+            sumSquares += norm * norm;
+        }
+        return Math.sqrt(sumSquares / this._localAnalyserData.length);
+    }
+
+    async _remotePeerLevels() {
+        const levels = {};
+        for (const [peerId, pc] of Object.entries(this.peers)) {
+            try {
+                const stats = await pc.getStats();
+                stats.forEach(r => {
+                    if (r.type === 'inbound-rtp' && r.kind === 'audio' && typeof r.audioLevel === 'number') {
+                        levels[peerId] = Math.max(levels[peerId] || 0, r.audioLevel);
+                    }
+                });
+            } catch (_) {}
+        }
+        return levels;
+    }
+
+    // Picks the active speaker from current audio levels, excluding the local user
+    // (you already know when you're talking). Requires a peer to be the loudest
+    // candidate above a silence floor for a sustained hold time before switching to
+    // them, and enforces a minimum gap between switches — otherwise normal
+    // back-and-forth conversation makes the focused view flicker constantly.
+    _pickActiveSpeaker(levels, now) {
+        const SILENCE_FLOOR = 0.04;
+        const HOLD_MS = 500;
+        const MIN_SWITCH_GAP_MS = 1500;
+
+        let loudest = null;
+        let loudestLevel = SILENCE_FLOOR;
+        for (const [peerId, level] of Object.entries(levels)) {
+            if (level > loudestLevel) {
+                loudest = peerId;
+                loudestLevel = level;
+            }
+        }
+
+        for (const peerId of Object.keys(this._speakerCandidateSince)) {
+            if (peerId !== loudest) delete this._speakerCandidateSince[peerId];
+        }
+
+        if (!loudest) return this._activeSpeakerId;
+        if (loudest === this._activeSpeakerId) return this._activeSpeakerId;
+
+        if (this._speakerCandidateSince[loudest] === undefined) this._speakerCandidateSince[loudest] = now;
+        const heldLongEnough = now - this._speakerCandidateSince[loudest] >= HOLD_MS;
+        const gapOk = now - this._lastSpeakerSwitch >= MIN_SWITCH_GAP_MS;
+
+        if (heldLongEnough && gapOk) {
+            this._activeSpeakerId = loudest;
+            this._lastSpeakerSwitch = now;
+            delete this._speakerCandidateSince[loudest];
+        }
+        return this._activeSpeakerId;
+    }
+
+    async _pollActiveSpeaker() {
+        const levels = await this._remotePeerLevels();
+        levels.me = this._localMicLevel();
+
+        const remoteLevels = { ...levels };
+        delete remoteLevels.me;
+
+        const speaker = this._pickActiveSpeaker(remoteLevels, Date.now());
+        if (speaker && this.onActiveSpeakerChange) this.onActiveSpeakerChange(speaker);
+    }
+
+    _startSpeakerPolling() {
+        if (this._speakerInterval) return;
+        this._speakerInterval = setInterval(() => this._pollActiveSpeaker(), 200);
+    }
+
+    _stopSpeakerPolling() {
+        clearInterval(this._speakerInterval);
+        this._speakerInterval = null;
+        this._activeSpeakerId = null;
+        this._speakerCandidateSince = {};
+        this._lastSpeakerSwitch = -Infinity;
+    }
+
     async toggleMic() {
         if (!this.micStream) {
             try {
@@ -515,7 +624,10 @@ export class PeerManager {
             this._setupDataChannel(e.channel, remotePeerId);
         };
 
-        if (Object.keys(this.peers).length === 0) this._startStatsPolling();
+        if (Object.keys(this.peers).length === 0) {
+            this._startStatsPolling();
+            this._startSpeakerPolling();
+        }
         this.peers[remotePeerId] = pc;
         return pc;
     }
@@ -859,7 +971,10 @@ export class PeerManager {
         const pc = this.peers[peerId];
         if (pc) pc.close();
         delete this.peers[peerId];
-        if (Object.keys(this.peers).length === 0) this._stopStatsPolling();
+        if (Object.keys(this.peers).length === 0) {
+            this._stopStatsPolling();
+            this._stopSpeakerPolling();
+        }
         delete this.peerCamStreamIds[peerId];
         delete this.peerScreenStreamIds[peerId];
         delete this.senders[peerId];

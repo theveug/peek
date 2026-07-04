@@ -16,6 +16,7 @@ const peerManager = new PeerManager(null, ui);
 const debug = new DebugPanel(peerManager);
 ui.onWatchChange = (streamKey, watched) => peerManager.setWatched(streamKey, watched);
 ui.onPipExit = () => peerManager.handleTabVisibility(document.hidden);
+peerManager.onActiveSpeakerChange = (peerId) => ui.autoFocusTo(peerId);
 
 let socket;
 let reconnectTimer;
@@ -547,6 +548,7 @@ function openSettings() {
     document.getElementById('settings-nickname').value = localStorage.getItem('nickname') || '';
     document.getElementById('settings-mute').checked = localStorage.getItem('muteSounds') === '1';
     document.getElementById('settings-auto-accept-files').checked = localStorage.getItem('autoAcceptFiles') === '1';
+    document.getElementById('settings-follow-speaker').checked = localStorage.getItem('followActiveSpeaker') === '1';
     document.getElementById('settings-res').value = localStorage.getItem('screenShareRes') || '1280x720';
     document.getElementById('settings-fps').value = localStorage.getItem('screenShareFps') || '30';
     document.getElementById('settings-cam-res').value = localStorage.getItem('camRes') || '640x480';
@@ -573,6 +575,9 @@ settingsForm.addEventListener('submit', (e) => {
     localStorage.setItem('nickname', document.getElementById('settings-nickname').value.trim());
     localStorage.setItem('muteSounds', document.getElementById('settings-mute').checked ? '1' : '0');
     localStorage.setItem('autoAcceptFiles', document.getElementById('settings-auto-accept-files').checked ? '1' : '0');
+    const followSpeaker = document.getElementById('settings-follow-speaker').checked;
+    localStorage.setItem('followActiveSpeaker', followSpeaker ? '1' : '0');
+    if (followSpeaker) ui.autoFocusPaused = false; // re-enabling counts as "resume following"
     localStorage.setItem('screenShareRes', document.getElementById('settings-res').value);
     localStorage.setItem('screenShareFps', document.getElementById('settings-fps').value);
     localStorage.setItem('camRes', document.getElementById('settings-cam-res').value);

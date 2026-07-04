@@ -19,6 +19,7 @@ export class UIController {
         this.onWatchChange = null;
         this.onPipExit = null;
         this.focusedPeerId = null;
+        this.autoFocusPaused = false;
         this.viewMode = 'grid'; // 'focus' or 'grid'
         this.zoom = 1;
         this.panX = 0;
@@ -326,6 +327,19 @@ export class UIController {
         this.setViewMode('focus');
     }
 
+    // Called from PeerManager's active-speaker detection. Opt-in (localStorage
+    // 'followActiveSpeaker'), only while already in focus view (never forces a
+    // view-mode switch), and backs off once the user manually pins someone by
+    // clicking a grid tile — re-saving the setting in Settings resumes it.
+    autoFocusTo(peerId) {
+        if (localStorage.getItem('followActiveSpeaker') !== '1') return;
+        if (this.autoFocusPaused) return;
+        if (this.viewMode !== 'focus') return;
+        if (peerId === this.focusedPeerId) return;
+        if (!this.streams[peerId]) return;
+        this.focusStream(peerId);
+    }
+
     // --- Watched-tile tracking (drives bandwidth-saving pause/resume signalling) ---
 
     // Marks a stream as watched, evicting the least-recently-watched tile if over
@@ -437,7 +451,10 @@ export class UIController {
             });
             cell.appendChild(stopBtn);
 
-            cell.addEventListener('click', () => this.focusStream(peerId));
+            cell.addEventListener('click', () => {
+                this.autoFocusPaused = true;
+                this.focusStream(peerId);
+            });
         } else {
             const placeholder = document.createElement('div');
             placeholder.className = 'flex flex-col items-center gap-1.5 pointer-events-none px-2 text-center';
