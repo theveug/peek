@@ -4,6 +4,7 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Peek - Screen Share</title>
+        <link rel="stylesheet" href="/assets/fonts.css" />
         <link rel="stylesheet" href="/assets/style.css" />
     </head>
     <body class="dark">
@@ -329,109 +330,203 @@
             </div>
         </div>
 
-        <!-- Settings Modal -->
+        <!-- Settings Panel (full-frame overlay, redesign Phase 3) -->
         <div id="settings-modal" class="fixed inset-0 z-100 hidden">
-            <div class="absolute inset-0 bg-black/70" id="settings-backdrop"></div>
-            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 surface-elevated text-foreground rounded-xl p-6 w-full max-w-md shadow-2xl border border-separator">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold">Settings</h2>
-                    <button id="close-settings" class="text-muted hover:text-white text-2xl leading-none">&times;</button>
+            <div class="settings-overlay">
+                <div class="settings-nav">
+                    <div class="settings-nav-title">SETTINGS</div>
+                    <button type="button" class="settings-nav-item active" data-settings-section="profile">
+                        <span class="material-symbols-rounded">person</span>Profile
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="appearance">
+                        <span class="material-symbols-rounded">palette</span>Appearance
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="video">
+                        <span class="material-symbols-rounded">screen_share</span>Screen &amp; Video
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="audio">
+                        <span class="material-symbols-rounded">mic</span>Audio &amp; Mic
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="privacy">
+                        <span class="material-symbols-rounded">shield</span>Privacy &amp; P2P
+                    </button>
+                    <div class="settings-nav-spacer"></div>
+                    <div class="settings-nav-footer"><b>Peek</b><br>No account. No database. Settings stay on this device.</div>
                 </div>
-                <form id="settings-form" class="space-y-4">
-                    <div>
-                        <label for="settings-nickname" class="block mb-1 text-sm text-muted">Nickname</label>
-                        <input type="text" id="settings-nickname" class="w-full p-2 rounded surface-input" />
-                    </div>
-                    <div>
-                        <label class="block mb-1 text-sm text-muted">Status</label>
-                        <div id="status-picker" class="flex gap-2">
-                            <button type="button" data-status="online" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" title="Online">
-                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> Online
-                            </button>
-                            <button type="button" data-status="away" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" title="Away">
-                                <span class="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block"></span> Away
-                            </button>
-                            <button type="button" data-status="dnd" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" title="Do Not Disturb">
-                                <span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> DND
-                            </button>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <input type="checkbox" id="settings-mute" class="accent-indigo-500" />
-                        <label for="settings-mute" class="text-sm">Mute Sounds</label>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <input type="checkbox" id="settings-auto-accept-files" class="accent-indigo-500" />
-                        <label for="settings-auto-accept-files" class="text-sm">Auto-accept files in this room (only enable for people you trust)</label>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <input type="checkbox" id="settings-follow-speaker" class="accent-indigo-500" />
-                        <label for="settings-follow-speaker" class="text-sm">Automatically focus on whoever's speaking</label>
-                    </div>
-                    <div>
-                        <label for="settings-volume" class="block mb-1 text-sm text-muted">Notification Volume</label>
-                        <input id="settings-volume" type="range" min="0" max="1" step="0.01" class="w-full" />
-                        <p id="settings-volume-value" class="text-xs text-muted">30%</p>
-                    </div>
-                    <div>
-                        <label class="block mb-1 text-sm text-muted">Screen Share Quality</label>
-                        <div class="flex gap-3">
-                            <select id="settings-res" class="p-2 surface-input rounded text-sm">
-                                <option value="1280x720">720p</option>
-                                <option value="1920x1080">1080p</option>
-                                <option value="2560x1440">1440p</option>
-                                <option value="source">Source</option>
-                            </select>
-                            <select id="settings-fps" class="p-2 surface-input rounded text-sm">
-                                <option value="10">10 FPS</option>
-                                <option value="15">15 FPS</option>
-                                <option value="30">30 FPS</option>
-                                <option value="60">60 FPS</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div>
-                        <label class="block mb-1 text-sm text-muted">Webcam Quality</label>
-                        <div class="flex gap-3">
-                            <select id="settings-cam-res" class="p-2 surface-input rounded text-sm">
-                                <option value="640x360">360p</option>
-                                <option value="640x480">480p</option>
-                                <option value="1280x720">720p</option>
-                                <option value="source">Source</option>
-                            </select>
-                            <select id="settings-cam-fps" class="p-2 surface-input rounded text-sm">
-                                <option value="10">10 FPS</option>
-                                <option value="15">15 FPS</option>
-                                <option value="24">24 FPS</option>
-                                <option value="30">30 FPS</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div>
-                        <label for="settings-max-messages" class="block mb-1 text-sm text-muted">Max Chat Messages</label>
-                        <input type="number" id="settings-max-messages" class="w-24 p-2 surface-input rounded text-sm" min="10" max="500" />
-                    </div>
-                    <div class="border-t border-separator pt-4">
-                        <label class="block mb-2 text-sm text-muted font-medium">Mic Mode</label>
-                        <div class="flex gap-2 mb-3">
-                            <button type="button" data-mic-mode="toggle" class="mic-mode-pick flex-1 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all text-center">Toggle</button>
-                            <button type="button" data-mic-mode="push-to-talk" class="mic-mode-pick flex-1 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all text-center">Push to Talk</button>
-                            <button type="button" data-mic-mode="push-to-mute" class="mic-mode-pick flex-1 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all text-center">Push to Mute</button>
-                        </div>
-                        <div id="keybind-row" class="hidden">
-                            <label class="block mb-1 text-sm text-muted">Keybind</label>
-                            <div class="flex items-center gap-2">
-                                <input type="text" id="settings-keybind" readonly class="w-full p-2 surface-input rounded text-sm text-center cursor-pointer" placeholder="Click then press a key..." />
-                                <button type="button" id="keybind-clear" class="text-xs text-muted hover:text-foreground px-2 py-1">&times;</button>
+
+                <div class="settings-content">
+                    <button type="button" id="close-settings" class="settings-close-btn" title="Close">
+                        <span class="settings-close-btn-icon"><span class="material-symbols-rounded">close</span></span>
+                        <span class="settings-close-btn-esc">ESC</span>
+                    </button>
+
+                    <div class="settings-section-body">
+
+                        <!-- Profile -->
+                        <div class="settings-section active" data-settings-panel="profile">
+                            <h1>Profile</h1>
+                            <p class="settings-section-subcopy">Your name and status, visible to everyone in the room.</p>
+                            <div class="settings-field">
+                                <label for="settings-nickname" class="settings-label">Nickname</label>
+                                <input type="text" id="settings-nickname" class="settings-text-input" />
                             </div>
-                            <p class="text-[10px] text-muted mt-1">Click the field, then press the key you want to bind.</p>
+                            <div class="settings-field">
+                                <div class="settings-label">Status</div>
+                                <div id="status-picker" class="flex gap-2">
+                                    <button type="button" data-status="online" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" title="Online">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> Online
+                                    </button>
+                                    <button type="button" data-status="away" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" title="Away">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block"></span> Away
+                                    </button>
+                                    <button type="button" data-status="dnd" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" title="Do Not Disturb">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> DND
+                                    </button>
+                                </div>
+                            </div>
                         </div>
+
+                        <!-- Appearance -->
+                        <div class="settings-section" data-settings-panel="appearance">
+                            <h1>Appearance</h1>
+                            <p class="settings-section-subcopy">Make Peek yours. Changes apply instantly and save to this device.</p>
+                            <div class="settings-label">Theme</div>
+                            <div class="settings-segmented" id="settings-theme-picker" style="margin-bottom:30px;">
+                                <button type="button" data-theme="dark"><span class="material-symbols-rounded">dark_mode</span>Dark</button>
+                                <button type="button" data-theme="light"><span class="material-symbols-rounded">light_mode</span>Light</button>
+                            </div>
+                            <div class="settings-label">Accent color</div>
+                            <div class="settings-accent-swatches" id="settings-accent-picker"></div>
+                            <div class="settings-label">Preview</div>
+                            <div class="settings-preview-card">
+                                <div class="settings-preview-header">
+                                    <span style="width:28px;height:28px;border-radius:8px;background:var(--accent);color:var(--accentText);display:flex;align-items:center;justify-content:center;"><span class="material-symbols-rounded" style="font-size:17px;">screen_share</span></span>Peek
+                                </div>
+                                <div class="settings-preview-body">
+                                    <div style="display:flex;gap:12px;">
+                                        <span style="width:38px;height:38px;border-radius:11px;background:var(--accent);color:var(--accentText);font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none;">YO</span>
+                                        <div><div style="font-weight:700;color:var(--t1);font-size:14px;">you</div><div style="color:var(--t1);font-size:14px;margin-top:2px;">looks good with this accent</div></div>
+                                    </div>
+                                    <div style="display:flex;gap:10px;">
+                                        <button type="button" style="border:none;border-radius:9px;background:var(--accent);color:var(--accentText);font-weight:700;font-size:13px;padding:8px 16px;">Share screen</button>
+                                        <button type="button" style="border:1px solid var(--border);border-radius:9px;background:var(--bg4);color:var(--t1);font-weight:600;font-size:13px;padding:8px 16px;">Invite</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Screen & Video -->
+                        <div class="settings-section" data-settings-panel="video">
+                            <h1>Screen &amp; Video</h1>
+                            <p class="settings-section-subcopy">Quality auto-caps as the room grows, and restores when peers leave.</p>
+                            <div class="settings-field">
+                                <div class="settings-label">Screen share resolution</div>
+                                <div class="settings-segmented" id="settings-res-picker">
+                                    <button type="button" data-value="1280x720">720p</button>
+                                    <button type="button" data-value="1920x1080">1080p</button>
+                                    <button type="button" data-value="2560x1440">1440p</button>
+                                    <button type="button" data-value="source">Source</button>
+                                </div>
+                            </div>
+                            <div class="settings-field">
+                                <div class="settings-label">Screen share frame rate</div>
+                                <div class="settings-segmented" id="settings-fps-picker">
+                                    <button type="button" data-value="10">10 fps</button>
+                                    <button type="button" data-value="15">15 fps</button>
+                                    <button type="button" data-value="30">30 fps</button>
+                                    <button type="button" data-value="60">60 fps</button>
+                                </div>
+                            </div>
+                            <div class="settings-field">
+                                <div class="settings-label">Webcam resolution</div>
+                                <div class="settings-segmented" id="settings-cam-res-picker">
+                                    <button type="button" data-value="640x360">360p</button>
+                                    <button type="button" data-value="640x480">480p</button>
+                                    <button type="button" data-value="1280x720">720p</button>
+                                    <button type="button" data-value="source">Source</button>
+                                </div>
+                            </div>
+                            <div class="settings-field">
+                                <div class="settings-label">Webcam frame rate</div>
+                                <div class="settings-segmented" id="settings-cam-fps-picker">
+                                    <button type="button" data-value="10">10 fps</button>
+                                    <button type="button" data-value="15">15 fps</button>
+                                    <button type="button" data-value="24">24 fps</button>
+                                    <button type="button" data-value="30">30 fps</button>
+                                </div>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Automatically focus on whoever's speaking</div>
+                                    <div class="settings-toggle-row-desc">Switches the focused view to the active speaker while you're already in focus view.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-follow-speaker" /><span class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-max-messages" class="settings-label">Max chat messages kept</label>
+                                <input type="number" id="settings-max-messages" class="settings-text-input" style="max-width:120px;" min="10" max="500" />
+                            </div>
+                        </div>
+
+                        <!-- Audio & Mic -->
+                        <div class="settings-section" data-settings-panel="audio">
+                            <h1>Audio &amp; Mic</h1>
+                            <p class="settings-section-subcopy">Audio keeps flowing when the tab is backgrounded — only video pauses.</p>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Mute notification sounds</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-mute" /><span class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-volume" class="settings-label">Notification volume — <span id="settings-volume-value">30%</span></label>
+                                <input id="settings-volume" type="range" min="0" max="1" step="0.01" class="w-full" />
+                            </div>
+                            <div class="settings-field">
+                                <div class="settings-label">Mic mode</div>
+                                <div class="settings-segmented" id="settings-mic-mode-picker" style="width:100%;">
+                                    <button type="button" data-mic-mode="toggle" style="flex:1;justify-content:center;">Toggle</button>
+                                    <button type="button" data-mic-mode="push-to-talk" style="flex:1;justify-content:center;">Push to Talk</button>
+                                    <button type="button" data-mic-mode="push-to-mute" style="flex:1;justify-content:center;">Push to Mute</button>
+                                </div>
+                            </div>
+                            <div id="keybind-row" class="settings-field hidden">
+                                <label class="settings-label">Keybind</label>
+                                <div class="settings-keybind-row">
+                                    <input type="text" id="settings-keybind" readonly class="settings-keybind-input" placeholder="Click then press a key..." />
+                                    <button type="button" id="keybind-clear" class="text-xs text-muted hover:text-foreground px-2 py-1">&times;</button>
+                                </div>
+                                <p class="text-[10px] text-muted mt-1">Click the field, then press the key you want to bind.</p>
+                            </div>
+                        </div>
+
+                        <!-- Privacy & P2P -->
+                        <div class="settings-section" data-settings-panel="privacy">
+                            <h1>Privacy &amp; P2P</h1>
+                            <p class="settings-section-subcopy">Peek never stores anything on a server — most of this is how it always works, not a setting to turn on.</p>
+                            <div class="settings-info-card">
+                                <span class="material-symbols-rounded">lan</span>
+                                <div><div class="settings-info-card-title">Peer-to-peer mesh</div><div class="settings-info-card-desc">Media and messages travel directly between participants wherever possible.</div></div>
+                            </div>
+                            <div class="settings-info-card">
+                                <span class="material-symbols-rounded">memory</span>
+                                <div><div class="settings-info-card-title">In-memory only</div><div class="settings-info-card-desc">Nothing is written to a database. The room disappears when the last person leaves.</div></div>
+                            </div>
+                            <div class="settings-info-card">
+                                <span class="material-symbols-rounded">visibility_off</span>
+                                <div><div class="settings-info-card-title">The signalling server never sees your content</div><div class="settings-info-card-desc">It only helps peers find each other — chat, files, and media never pass through it.</div></div>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Auto-accept files in this room</div>
+                                    <div class="settings-toggle-row-desc">Only enable for people you trust — skips the per-file accept prompt.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-auto-accept-files" /><span class="settings-switch-track"></span></label>
+                            </div>
+                        </div>
+
                     </div>
-                    <div class="flex gap-3 pt-2">
-                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded text-sm">Save</button>
-                        <button type="button" id="cancel-settings" class="surface-input hover:opacity-80 px-4 py-2 rounded text-sm">Cancel</button>
-                    </div>
-                </form>
+                </div>
             </div>
         </div>
 

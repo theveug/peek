@@ -29,6 +29,31 @@
   --participant-name: #e5e5e5;
   --participant-border: rgba(23, 23, 23, 1);
   --spinner-fill: white;
+
+  /* ----- Redesign tokens (Phase 1) -----
+     Additive, not replacing the tokens above — existing markup keeps working
+     unchanged; new surfaces (starting with the settings panel) are built on
+     these. --accent* are overridden at runtime by AccentManager.js per the
+     user's chosen swatch; the values here are just the default (Violet, hue
+     286) so there's no flash-of-unstyled-accent before JS runs. */
+  --bg1: oklch(0.165 0.014 286);
+  --bg2: oklch(0.205 0.014 286);
+  --bg3: oklch(0.245 0.013 286);
+  --bg4: oklch(0.30 0.015 286);
+  --bg5: oklch(0.36 0.016 286);
+  --border: oklch(0.345 0.016 286);
+  --input: oklch(0.295 0.014 286);
+  --t1: oklch(0.96 0.005 286);
+  --t2: oklch(0.75 0.012 286);
+  --t3: oklch(0.60 0.014 286);
+  --accent: oklch(0.70 0.16 286);
+  --accentH: oklch(0.76 0.155 286);
+  --accentSoft: oklch(0.70 0.16 286 / 0.18);
+  --accentSoft2: oklch(0.70 0.16 286 / 0.32);
+  --accentText: oklch(0.99 0 0);
+  --green: oklch(0.80 0.17 150);
+  --amber: oklch(0.80 0.14 85);
+  --red: oklch(0.66 0.21 25);
 }
 
 body.light {
@@ -57,6 +82,25 @@ body.light {
   --participant-name: #1f2937;
   --participant-border: rgba(255, 255, 255, 1);
   --spinner-fill: #374151;
+
+  /* ----- Redesign tokens (Phase 1), light mode ----- */
+  --bg1: oklch(0.915 0.012 286);
+  --bg2: oklch(0.955 0.009 286);
+  --bg3: oklch(0.995 0.003 286);
+  --bg4: oklch(0.945 0.012 286);
+  --bg5: oklch(0.90 0.014 286);
+  --border: oklch(0.89 0.013 286);
+  --input: oklch(0.965 0.008 286);
+  --t1: oklch(0.27 0.02 286);
+  --t2: oklch(0.46 0.018 286);
+  --t3: oklch(0.60 0.016 286);
+  --green: oklch(0.66 0.16 150);
+  --amber: oklch(0.72 0.14 85);
+  --red: oklch(0.58 0.21 25);
+  /* --accent/--accentH/--accentSoft/--accentSoft2/--accentText intentionally
+     not redefined here — the accent hue is theme-independent (same OKLCH
+     lightness works in both modes per the design spec) and is fully owned by
+     AccentManager.js at runtime. */
 }
 
 /* ===== Semantic classes ===== */
@@ -202,6 +246,11 @@ html,
 body {
   height: 100%;
   max-height: 100%;
+  font-family: 'Public Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+.font-mono-app {
+  font-family: 'Fira Code', ui-monospace, monospace;
 }
 
 body:hover #controls {
@@ -784,7 +833,7 @@ a.link-preview:hover {
 
 .chat-markdown code {
   color: var(--chat-code-fg);
-  font-family: Menlo, Monaco, Consolas, monospace;
+  font-family: 'Fira Code', Menlo, Monaco, Consolas, monospace;
 }
 
 .copy-btn {
@@ -1022,6 +1071,401 @@ body,
   top: auto;
   right: auto;
   transform: translateX(-50%);
+}
+
+/* ===== Settings panel (redesign, Phase 3) ===== */
+.settings-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  background: var(--bg3);
+}
+
+.settings-nav {
+  width: 262px;
+  flex: none;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  padding: 22px 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-nav-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--t3);
+  padding: 0 10px 12px;
+}
+
+.settings-nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--t2);
+  text-align: left;
+  margin-bottom: 2px;
+  font-size: 14.5px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-nav-item:hover {
+  background: var(--bg3);
+}
+
+.settings-nav-item.active {
+  background: var(--accentSoft);
+  color: var(--t1);
+}
+
+.settings-nav-spacer {
+  flex: 1;
+}
+
+.settings-nav-footer {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--bg1);
+  font-size: 11.5px;
+  color: var(--t3);
+  line-height: 1.5;
+}
+
+.settings-nav-footer b {
+  color: var(--t2);
+}
+
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+}
+
+.settings-close-btn {
+  position: absolute;
+  top: 22px;
+  right: 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--t3);
+  cursor: pointer;
+  z-index: 1;
+}
+
+.settings-close-btn-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-close-btn-esc {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.settings-section-body {
+  max-width: 680px;
+  padding: 40px 48px;
+}
+
+.settings-section {
+  display: none;
+}
+
+.settings-section.active {
+  display: block;
+}
+
+.settings-section h1 {
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 4px;
+  color: var(--t1);
+}
+
+.settings-section-subcopy {
+  font-size: 14px;
+  color: var(--t3);
+  margin: 0 0 28px;
+}
+
+.settings-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--t3);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.settings-field {
+  margin-bottom: 26px;
+}
+
+.settings-text-input {
+  width: 100%;
+  max-width: 320px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--input);
+  border: 1px solid var(--border);
+  color: var(--t1);
+  font-size: 14px;
+}
+
+.settings-segmented {
+  display: inline-flex;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.settings-segmented button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  background: transparent;
+  color: var(--t2);
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-segmented button.active {
+  background: var(--bg4);
+  color: var(--t1);
+}
+
+.settings-accent-swatches {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 30px;
+}
+
+.settings-accent-swatch {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  border: none;
+  cursor: pointer;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: none;
+}
+
+.settings-accent-swatch.active {
+  box-shadow: 0 0 0 3px var(--bg3), 0 0 0 5px var(--accent);
+}
+
+.settings-accent-swatch .material-symbols-rounded {
+  opacity: 0;
+  font-size: 22px;
+}
+
+.settings-accent-swatch.active .material-symbols-rounded {
+  opacity: 1;
+}
+
+.settings-preview-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.settings-preview-header {
+  background: var(--bg2);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border-bottom: 1px solid var(--border);
+  color: var(--t1);
+  font-weight: 700;
+}
+
+.settings-preview-body {
+  background: var(--bg3);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+
+.settings-toggle-row-title {
+  font-weight: 700;
+  color: var(--t1);
+  font-size: 14px;
+}
+
+.settings-toggle-row-desc {
+  font-size: 12.5px;
+  color: var(--t3);
+  margin-top: 2px;
+}
+
+.settings-switch {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.settings-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.settings-switch-track {
+  position: absolute;
+  inset: 0;
+  background: var(--bg5);
+  border-radius: 999px;
+  transition: background 0.15s;
+  pointer-events: none; /* visual only — the checkbox input beneath it handles clicks */
+}
+
+.settings-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+
+.settings-switch input:checked + .settings-switch-track {
+  background: var(--accent);
+}
+
+.settings-switch input:checked + .settings-switch-track::after {
+  transform: translateX(18px);
+}
+
+.settings-info-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+
+.settings-info-card .material-symbols-rounded {
+  color: var(--green);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.settings-info-card-title {
+  font-weight: 700;
+  color: var(--t1);
+  font-size: 14px;
+}
+
+.settings-info-card-desc {
+  font-size: 12.5px;
+  color: var(--t3);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+.settings-keybind-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-keybind-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--input);
+  border: 1px solid var(--border);
+  color: var(--t1);
+  font-size: 14px;
+  text-align: center;
+  cursor: pointer;
+  font-family: 'Fira Code', monospace;
+}
+
+@media (max-width: 767px) {
+  .settings-overlay {
+    flex-direction: column;
+  }
+
+  .settings-nav {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    padding: 10px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .settings-nav-title,
+  .settings-nav-spacer,
+  .settings-nav-footer {
+    display: none;
+  }
+
+  .settings-nav-item {
+    width: auto;
+    white-space: nowrap;
+    margin-bottom: 0;
+  }
+
+  .settings-section-body {
+    padding: 24px 20px;
+  }
 }
 
 /* ===== Mobile responsive ===== */

@@ -81,8 +81,9 @@ async function main() {
 
         // --- Case 3: auto-accept toggle — no prompt, file arrives directly ---
         await pageB.click('#settings-button');
+        await pageB.click('[data-settings-section="privacy"]');
         await pageB.check('#settings-auto-accept-files');
-        await pageB.click('#settings-form button[type="submit"]');
+        await pageB.click('#close-settings');
         await pageB.waitForTimeout(300);
 
         await sendTestFile(pageA, 'auto-accepted.txt');

@@ -119,8 +119,11 @@ app.post('/api/validate-room', rateLimit(60_000, 30), (req, res) => {
     res.json({ valid: true, needsPassword: false, name: meta.name });
 });
 
+// Retired standalone settings page — settings now live in a single overlay
+// reachable from the lobby and in-room (see public/client/SettingsPanel.js).
+// Redirect old bookmarked URLs instead of 404ing.
 app.get('/settings', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public/settings.html'));
+    res.redirect('/');
 });
 
 // Serve session page for valid room codes
