@@ -8,7 +8,7 @@ export class SessionManager {
     createSession(sessionId, { name = null, password = null, maxPeers = 6, creatorToken = null } = {}) {
         if (!this.sessions.has(sessionId)) {
             const clampedMaxPeers = Math.min(12, Math.max(2, parseInt(maxPeers, 10) || 6));
-            this.sessions.set(sessionId, { peers: new Set(), name, password, maxPeers: clampedMaxPeers, createdAt: Date.now(), creatorToken, moderatorPeerId: null });
+            this.sessions.set(sessionId, { peers: new Set(), name, password, maxPeers: clampedMaxPeers, createdAt: Date.now(), creatorToken, creatorPeerId: null, moderatorPeerIds: new Set() });
         }
     }
 
@@ -19,23 +19,49 @@ export class SessionManager {
     // no moderator — same spirit as losing the room name in this path.
     addPeer(sessionId, peerId, socket, { password = null } = {}) {
         if (!this.sessions.has(sessionId)) {
-            this.sessions.set(sessionId, { peers: new Set(), name: null, password, maxPeers: 6, createdAt: Date.now(), creatorToken: null, moderatorPeerId: null });
+            this.sessions.set(sessionId, { peers: new Set(), name: null, password, maxPeers: 6, createdAt: Date.now(), creatorToken: null, creatorPeerId: null, moderatorPeerIds: new Set() });
         }
         this.sessions.get(sessionId).peers.add(peerId);
         this.peerMap.set(peerId, { sessionId, socket });
     }
 
     // A peer presenting the token minted at room creation claims (or reclaims, after a
-    // reconnect issues them a new peerId) moderator status for that session.
+    // reconnect issues them a new peerId) creator/moderator status for that session.
+    // The old creatorPeerId (stale after a reconnect) is dropped from moderatorPeerIds.
     claimModerator(sessionId, peerId, token) {
         const s = this.sessions.get(sessionId);
         if (!s || !s.creatorToken || !token || s.creatorToken !== token) return false;
-        s.moderatorPeerId = peerId;
+        if (s.creatorPeerId) s.moderatorPeerIds.delete(s.creatorPeerId);
+        s.creatorPeerId = peerId;
+        s.moderatorPeerIds.add(peerId);
         return true;
     }
 
+    // Broader check — creator + anyone promoted. Used for force-stop-stream and
+    // crown-badge visibility. Any moderator can target any peer, including the creator.
     isModerator(sessionId, peerId) {
-        return this.sessions.get(sessionId)?.moderatorPeerId === peerId;
+        return !!this.sessions.get(sessionId)?.moderatorPeerIds.has(peerId);
+    }
+
+    // Stricter check — only the current token-holding creator. Used for kick and
+    // promote/demote, both deliberately kept owner-only.
+    isCreator(sessionId, peerId) {
+        return this.sessions.get(sessionId)?.creatorPeerId === peerId;
+    }
+
+    promoteModerator(sessionId, requesterPeerId, targetPeerId) {
+        const s = this.sessions.get(sessionId);
+        if (!s || s.creatorPeerId !== requesterPeerId) return false;
+        s.moderatorPeerIds.add(targetPeerId);
+        return true;
+    }
+
+    demoteModerator(sessionId, requesterPeerId, targetPeerId) {
+        const s = this.sessions.get(sessionId);
+        if (!s || s.creatorPeerId !== requesterPeerId) return false;
+        if (targetPeerId === s.creatorPeerId) return false; // can't demote the creator
+        s.moderatorPeerIds.delete(targetPeerId);
+        return true;
     }
 
     // Created-but-never-joined sessions have no peers, so removePeer() never deletes them.
@@ -61,6 +87,10 @@ export class SessionManager {
             const session = this.sessions.get(sessionId);
             if (session) {
                 session.peers.delete(peerId);
+                // Promotion is session-lifetime only, not reconnect-durable (a promoted
+                // peer has no token to reclaim it with) — drop it on disconnect. The
+                // creator's own entry is re-added by claimModerator() on their reconnect.
+                session.moderatorPeerIds.delete(peerId);
                 if (session.peers.size === 0) {
                     this.sessions.delete(sessionId);
                 }
@@ -76,7 +106,7 @@ export class SessionManager {
     getSessionMeta(sessionId) {
         const s = this.sessions.get(sessionId);
         if (!s) return null;
-        return { name: s.name, hasPassword: !!s.password, peerCount: s.peers.size, maxPeers: s.maxPeers ?? 6, moderatorPeerId: s.moderatorPeerId ?? null };
+        return { name: s.name, hasPassword: !!s.password, peerCount: s.peers.size, maxPeers: s.maxPeers ?? 6, creatorPeerId: s.creatorPeerId ?? null, moderatorPeerIds: [...s.moderatorPeerIds] };
     }
 
     validatePassword(sessionId, password) {

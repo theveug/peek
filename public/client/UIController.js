@@ -19,7 +19,8 @@ export class UIController {
         this.onWatchChange = null;
         this.onPipExit = null;
         this.onModeratorAction = null; // set by App.js — (action, peerId)
-        this.moderatorPeerId = null;
+        this.creatorPeerId = null;
+        this.moderatorPeerIds = new Set();
         this.focusedPeerId = null;
         this.autoFocusPaused = false;
         this.viewMode = 'grid'; // 'focus' or 'grid'
@@ -630,9 +631,9 @@ export class UIController {
 
         const crownBadge = document.createElement('span');
         crownBadge.className = 'participant-crown material-symbols-rounded';
-        crownBadge.title = 'Room moderator';
+        crownBadge.title = peerId === this.creatorPeerId ? 'Room creator' : 'Moderator';
         crownBadge.textContent = 'workspace_premium';
-        crownBadge.style.display = peerId === this.moderatorPeerId ? '' : 'none';
+        crownBadge.style.display = this.moderatorPeerIds?.has(peerId) ? '' : 'none';
 
         avatarWrap.appendChild(avatar);
         avatarWrap.appendChild(statusDot);
@@ -684,7 +685,7 @@ export class UIController {
 
         if (!isSelf) {
             const modMenu = this._buildModeratorMenu(peerId);
-            const iAmModerator = !!this.selfPeerId && this.selfPeerId === this.moderatorPeerId;
+            const iAmModerator = !!this.selfPeerId && this.moderatorPeerIds.has(this.selfPeerId);
             modMenu.style.display = iAmModerator ? 'flex' : 'none';
             card.appendChild(modMenu);
         }
@@ -698,9 +699,15 @@ export class UIController {
     }
 
     // Kebab button + tiny popover for moderator-only actions on another peer's card.
-    // Hidden by default — updateModeratorStatus() reveals it only on the moderator's
-    // own client. Enforcement is server-side regardless (see WebSocketServer.js); this
-    // is just the UI entry point.
+    // Hidden by default — updateModeratorStatus() reveals it only when the local user
+    // is themselves a moderator. Enforcement is server-side regardless (see
+    // WebSocketServer.js); this is just the UI entry point.
+    //
+    // Menu items are (re)built fresh every time the popover opens, not once at card
+    // creation — "Stop their stream" is available to any moderator (including against
+    // the room creator's own card), but "Kick"/"Make moderator"/"Remove moderator" are
+    // creator-only and the promote/demote label depends on the target's *current*
+    // moderator membership, both of which can change after the card already exists.
     _buildModeratorMenu(peerId) {
         const wrap = document.createElement('div');
         wrap.className = 'participant-mod-menu relative flex-shrink-0';
@@ -715,31 +722,36 @@ export class UIController {
         const menu = document.createElement('div');
         menu.className = 'participant-mod-popover hidden';
 
-        const stopBtn = document.createElement('button');
-        stopBtn.type = 'button';
-        stopBtn.textContent = 'Stop their stream';
-        stopBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            menu.classList.add('hidden');
-            this.onModeratorAction?.('stop-stream', peerId);
-        });
+        const addMenuItem = (label, action, extraClass) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            if (extraClass) item.className = extraClass;
+            item.textContent = label;
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                menu.classList.add('hidden');
+                this.onModeratorAction?.(action, peerId);
+            });
+            menu.appendChild(item);
+        };
 
-        const kickBtn = document.createElement('button');
-        kickBtn.type = 'button';
-        kickBtn.className = 'participant-mod-kick';
-        kickBtn.textContent = 'Kick from room';
-        kickBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            menu.classList.add('hidden');
-            this.onModeratorAction?.('kick', peerId);
-        });
+        const renderMenuItems = () => {
+            menu.innerHTML = '';
+            addMenuItem('Stop their stream', 'stop-stream');
 
-        menu.appendChild(stopBtn);
-        menu.appendChild(kickBtn);
+            const iAmCreator = !!this.selfPeerId && this.selfPeerId === this.creatorPeerId;
+            if (iAmCreator) {
+                const isTargetMod = this.moderatorPeerIds.has(peerId);
+                addMenuItem(isTargetMod ? 'Remove moderator' : 'Make moderator', isTargetMod ? 'demote' : 'promote');
+                addMenuItem('Kick from room', 'kick', 'participant-mod-kick');
+            }
+        };
 
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             document.querySelectorAll('.participant-mod-popover').forEach(p => { if (p !== menu) p.classList.add('hidden'); });
+            const opening = menu.classList.contains('hidden');
+            if (opening) renderMenuItems();
             menu.classList.toggle('hidden');
         });
 
@@ -847,20 +859,28 @@ export class UIController {
     }
 
     // Refreshes every participant card's crown badge + kebab-menu visibility when
-    // moderator status changes (initial join, a claim, or a reconnect-reclaim).
-    updateModeratorStatus(moderatorPeerId) {
-        this.moderatorPeerId = moderatorPeerId;
-        const iAmModerator = !!this.selfPeerId && this.selfPeerId === moderatorPeerId;
+    // moderator status changes (initial join, a promote/demote, or a reconnect-reclaim).
+    // moderatorPeerIds may be a Set or a plain array (WS payloads arrive as arrays).
+    updateModeratorStatus(creatorPeerId, moderatorPeerIds) {
+        this.creatorPeerId = creatorPeerId;
+        this.moderatorPeerIds = moderatorPeerIds instanceof Set ? moderatorPeerIds : new Set(moderatorPeerIds || []);
+        const iAmModerator = !!this.selfPeerId && this.moderatorPeerIds.has(this.selfPeerId);
 
         document.querySelectorAll('#participants .participant-card').forEach(card => {
             const peerId = card.id.replace('participant-', '');
             const crown = card.querySelector('.participant-crown');
-            if (crown) crown.style.display = peerId === moderatorPeerId ? '' : 'none';
+            if (crown) {
+                crown.style.display = this.moderatorPeerIds.has(peerId) ? '' : 'none';
+                crown.title = peerId === this.creatorPeerId ? 'Room creator' : 'Moderator';
+            }
 
             const modMenu = card.querySelector('.participant-mod-menu');
             if (modMenu) {
                 const showMenu = iAmModerator && peerId !== this.selfPeerId;
                 modMenu.style.display = showMenu ? 'flex' : 'none';
+                // Force the popover closed and stale — it rebuilds fresh on next open,
+                // so a permission change never leaves an outdated menu visibly open.
+                modMenu.querySelector('.participant-mod-popover')?.classList.add('hidden');
             }
         });
     }

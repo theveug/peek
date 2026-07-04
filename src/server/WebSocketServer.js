@@ -90,20 +90,20 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
                     manager.addPeer(sessionId, peerId, ws, { password: msg.password || null });
                     const peers = manager.getPeersInSession(sessionId).filter(p => p !== peerId);
 
-                    // A claim can flip moderatorPeerId, so this must run before reading
-                    // getSessionMeta() below for the init payload to reflect it.
+                    // A claim can flip creatorPeerId/moderatorPeerIds, so this must run
+                    // before reading getSessionMeta() below for the init payload to reflect it.
                     const claimedModerator = msg.creatorToken ? manager.claimModerator(sessionId, peerId, msg.creatorToken) : false;
                     const meta = manager.getSessionMeta(sessionId);
 
                     const iceServers = generateIceServers(turnConfig);
-                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, moderatorPeerId: meta?.moderatorPeerId || null, buildId }));
+                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, creatorPeerId: meta?.creatorPeerId || null, moderatorPeerIds: meta?.moderatorPeerIds || [], buildId }));
 
                     peers.forEach(pid => {
                         const socket = manager.getPeerSocket(pid);
                         if (socket) {
                             socket.send(JSON.stringify({ type: 'peer-joined', peerId }));
                             if (claimedModerator) {
-                                socket.send(JSON.stringify({ type: 'moderator-update', moderatorPeerId: peerId }));
+                                socket.send(JSON.stringify({ type: 'moderator-update', creatorPeerId: meta?.creatorPeerId || null, moderatorPeerIds: meta?.moderatorPeerIds || [] }));
                             }
                         }
                     });
@@ -155,14 +155,46 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
                     break;
                 }
 
+                // Kick stays owner-only (isCreator, not the broader isModerator) — a
+                // promoted moderator can stop anyone's stream (including the creator's)
+                // but cannot remove anyone from the room.
                 case 'kick': {
                     const sessionId = manager.getSessionId(peerId);
-                    if (!manager.isModerator(sessionId, peerId)) break;
+                    if (!manager.isCreator(sessionId, peerId)) break;
                     const target = manager.getPeerSocket(to);
                     if (target) {
                         target.send(JSON.stringify({ type: 'kicked' }));
                         target.close();
                     }
+                    break;
+                }
+
+                // Promote/demote are also owner-only — SessionManager's methods already
+                // re-check isCreator internally, but checking here too avoids doing any
+                // work (or broadcasting) for an unauthorized request.
+                case 'promote-moderator': {
+                    const sessionId = manager.getSessionId(peerId);
+                    if (!manager.promoteModerator(sessionId, peerId, to)) break;
+                    const meta = manager.getSessionMeta(sessionId);
+                    manager.getPeersInSession(sessionId).forEach(pid => {
+                        const socket = manager.getPeerSocket(pid);
+                        if (socket) {
+                            socket.send(JSON.stringify({ type: 'moderator-update', creatorPeerId: meta?.creatorPeerId || null, moderatorPeerIds: meta?.moderatorPeerIds || [] }));
+                        }
+                    });
+                    break;
+                }
+
+                case 'demote-moderator': {
+                    const sessionId = manager.getSessionId(peerId);
+                    if (!manager.demoteModerator(sessionId, peerId, to)) break;
+                    const meta = manager.getSessionMeta(sessionId);
+                    manager.getPeersInSession(sessionId).forEach(pid => {
+                        const socket = manager.getPeerSocket(pid);
+                        if (socket) {
+                            socket.send(JSON.stringify({ type: 'moderator-update', creatorPeerId: meta?.creatorPeerId || null, moderatorPeerIds: meta?.moderatorPeerIds || [] }));
+                        }
+                    });
                     break;
                 }
             }

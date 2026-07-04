@@ -21,6 +21,8 @@ ui.onPipExit = () => peerManager.handleTabVisibility(document.hidden);
 ui.onModeratorAction = (action, peerId) => {
     if (action === 'stop-stream') peerManager.requestStopStream(peerId);
     else if (action === 'kick') peerManager.kickPeer(peerId);
+    else if (action === 'promote') peerManager.promotePeer(peerId);
+    else if (action === 'demote') peerManager.demotePeer(peerId);
 };
 peerManager.onActiveSpeakerChange = (peerId) => ui.autoFocusTo(peerId);
 peerManager.onSpeakingChange = (peerId, speaking) => ui.setSpeaking(peerId, speaking);

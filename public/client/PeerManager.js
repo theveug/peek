@@ -17,7 +17,8 @@ export class PeerManager {
         this.peers = {};
         this.stream = null;
         this.peerId = null;
-        this.moderatorPeerId = null;
+        this.creatorPeerId = null;
+        this.moderatorPeerIds = new Set();
         this.onForceStopped = null; // set by App.js — keeps share/cam button icons in sync
         this.isSharing = false;
         this.iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
@@ -94,7 +95,7 @@ export class PeerManager {
         this.send(watched ? 'watch-stream' : 'unwatch-stream', peerId, { kind: isCam ? 'cam' : 'screen' });
     }
 
-    async handleSignal({ type, peerId, peers, from, payload, iceServers, moderatorPeerId }) {
+    async handleSignal({ type, peerId, peers, from, payload, iceServers, creatorPeerId, moderatorPeerIds }) {
         // console.groupCollapsed(`PeerManager.handleSignal(${type})`);
         // console.log('[SIGNAL]', type, { peerId, peers, from, payload });
 
@@ -116,8 +117,9 @@ export class PeerManager {
                         this.initiateConnection(id);
                     }
                 });
-                this.moderatorPeerId = moderatorPeerId || null;
-                this.ui.updateModeratorStatus(this.moderatorPeerId);
+                this.creatorPeerId = creatorPeerId || null;
+                this.moderatorPeerIds = new Set(moderatorPeerIds || []);
+                this.ui.updateModeratorStatus(this.creatorPeerId, this.moderatorPeerIds);
                 setTimeout(() => {
                     this.broadcastMicStatus();
                     this.broadcastDeafenStatus();
@@ -127,8 +129,9 @@ export class PeerManager {
                 break;
 
             case 'moderator-update':
-                this.moderatorPeerId = moderatorPeerId || null;
-                this.ui.updateModeratorStatus(this.moderatorPeerId);
+                this.creatorPeerId = creatorPeerId || null;
+                this.moderatorPeerIds = new Set(moderatorPeerIds || []);
+                this.ui.updateModeratorStatus(this.creatorPeerId, this.moderatorPeerIds);
                 break;
 
             case 'force-stop-stream':
@@ -1157,18 +1160,33 @@ export class PeerManager {
         }
     }
 
+    // Broader tier — creator + anyone promoted. Can stop any peer's stream, including
+    // the creator's own.
     isModeratorMe() {
-        return !!this.peerId && this.moderatorPeerId === this.peerId;
+        return !!this.peerId && this.moderatorPeerIds.has(this.peerId);
     }
 
-    // Both moderator-only actions are enforced server-side (WebSocketServer.js checks
-    // SessionManager.isModerator before acting) — these just send the request.
+    // Stricter tier — only the current token-holding creator. Can kick and promote/demote.
+    isCreatorMe() {
+        return !!this.peerId && this.creatorPeerId === this.peerId;
+    }
+
+    // All four actions are enforced server-side (WebSocketServer.js checks
+    // SessionManager.isModerator/isCreator before acting) — these just send the request.
     requestStopStream(targetPeerId) {
         this.send('force-stop-stream', targetPeerId, {});
     }
 
     kickPeer(targetPeerId) {
         this.send('kick', targetPeerId, {});
+    }
+
+    promotePeer(targetPeerId) {
+        this.send('promote-moderator', targetPeerId, {});
+    }
+
+    demotePeer(targetPeerId) {
+        this.send('demote-moderator', targetPeerId, {});
     }
 
     send(type, to, payload) {
