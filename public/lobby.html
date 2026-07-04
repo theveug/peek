@@ -9,73 +9,12 @@
     </head>
     <body class="dark">
         <canvas id="gradient-canvas"></canvas>
+        <div class="lobby-glow" aria-hidden="true"></div>
 
-        <div class="flex items-center justify-center h-screen relative z-10">
-            <div class="surface-glass border border-separator rounded-2xl p-8 w-full max-w-md shadow-2xl">
-                <div class="text-center mb-8">
-                    <h1 class="text-3xl font-bold text-foreground tracking-tight">Peek</h1>
-                    <p class="text-muted text-sm mt-1">Screen sharing & chat, peer-to-peer</p>
-                </div>
-
-                <!-- Saved Rooms -->
-                <div id="saved-rooms-section" class="mb-6 hidden">
-                    <h2 class="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Saved Rooms</h2>
-                    <div id="saved-rooms-list" class="space-y-2"></div>
-                    <div id="saved-rooms-error" class="text-xs text-red-400 mt-2 hidden"></div>
-                </div>
-
-                <!-- Create Room -->
-                <div class="mb-6">
-                    <h2 class="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Create a Room</h2>
-                    <form id="create-form" class="space-y-3">
-                        <input type="text" id="create-name" placeholder="Room name (optional)" class="w-full p-2.5 surface-input rounded-lg text-sm placeholder-muted focus:outline-none focus:ring-1 focus:ring-indigo-500/50" maxlength="50" />
-                        <input type="password" id="create-password" placeholder="Password (optional)" class="w-full p-2.5 surface-input rounded-lg text-sm placeholder-muted focus:outline-none focus:ring-1 focus:ring-indigo-500/50" />
-                        <div>
-                            <select id="create-max-peers" class="w-full p-2.5 surface-input rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500/50">
-                                <option value="4">Max 4 participants</option>
-                                <option value="6" selected>Max 6 participants</option>
-                                <option value="8">Max 8 participants</option>
-                                <option value="10">Max 10 participants</option>
-                                <option value="12">Max 12 participants</option>
-                            </select>
-                            <p class="text-xs text-muted mt-1">More than 6 may automatically reduce stream quality to keep things smooth.</p>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <input type="checkbox" id="create-save-room" class="rounded" />
-                            <label for="create-save-room" class="text-xs text-muted">Save this room to this device</label>
-                        </div>
-                        <input type="text" id="create-save-label" placeholder="Label (optional)" class="w-full p-2 surface-input rounded-lg text-xs placeholder-muted hidden" maxlength="50" />
-                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-lg text-sm font-medium transition-colors">Create Room</button>
-                    </form>
-                </div>
-
-                <div class="flex items-center gap-3 mb-6">
-                    <div class="flex-1 h-px bg-separator"></div>
-                    <span class="text-xs text-muted">or</span>
-                    <div class="flex-1 h-px bg-separator"></div>
-                </div>
-
-                <!-- Join Room -->
-                <div>
-                    <h2 class="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Join a Room</h2>
-                    <form id="join-form" class="space-y-3">
-                        <input type="text" id="join-code" placeholder="Room code (5 characters)" class="w-full p-2.5 surface-input rounded-lg text-sm text-center tracking-widest font-mono placeholder-muted focus:outline-none focus:ring-1 focus:ring-indigo-500/50" maxlength="5" pattern="[A-Za-z0-9]{5}" required />
-                        <div id="join-password-row" class="hidden">
-                            <input type="password" id="join-password" placeholder="Enter room password" class="w-full p-2.5 surface-input rounded-lg text-sm placeholder-muted focus:outline-none focus:ring-1 focus:ring-indigo-500/50" />
-                        </div>
-                        <div id="join-error" class="text-xs text-red-400 hidden"></div>
-                        <div id="join-room-name" class="text-xs text-muted hidden"></div>
-                        <div class="flex items-center gap-2">
-                            <input type="checkbox" id="join-save-room" class="rounded" />
-                            <label for="join-save-room" class="text-xs text-muted">Save this room to this device</label>
-                        </div>
-                        <input type="text" id="join-save-label" placeholder="Label (optional)" class="w-full p-2 surface-input rounded-lg text-xs placeholder-muted hidden" maxlength="50" />
-                        <button type="submit" class="w-full surface-input hover:opacity-80 text-foreground py-2.5 rounded-lg text-sm font-medium transition-colors border border-separator">Join Room</button>
-                    </form>
-                </div>
-
-                <div class="mt-6 flex justify-center gap-2">
-                    <button id="theme-toggle" class="text-muted hover:text-foreground transition-colors p-2 rounded-lg" title="Toggle theme">
+        <div class="lobby-page">
+            <div class="lobby-shell">
+                <div class="lobby-toolbar">
+                    <button id="theme-toggle" class="lobby-icon-btn" title="Toggle theme">
                         <svg id="theme-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
                             <path d="M12 2.25a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V3a.75.75 0 0 1 .75-.75ZM7.5 12a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM18.894 6.166a.75.75 0 0 0-1.06-1.06l-1.591 1.59a.75.75 0 1 0 1.06 1.061l1.591-1.59ZM21.75 12a.75.75 0 0 1-.75.75h-2.25a.75.75 0 0 1 0-1.5H21a.75.75 0 0 1 .75.75ZM17.834 18.894a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 1 0-1.061 1.06l1.59 1.591ZM12 18a.75.75 0 0 1 .75.75V21a.75.75 0 0 1-1.5 0v-2.25A.75.75 0 0 1 12 18ZM7.758 17.303a.75.75 0 0 0-1.061-1.06l-1.591 1.59a.75.75 0 0 0 1.06 1.061l1.591-1.59ZM6 12a.75.75 0 0 1-.75.75H3a.75.75 0 0 1 0-1.5h2.25A.75.75 0 0 1 6 12ZM6.697 7.757a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 0 0-1.061 1.06l1.59 1.591Z" />
                         </svg>
@@ -83,9 +22,90 @@
                             <path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 0 1 .162.819A8.97 8.97 0 0 0 9 6a9 9 0 0 0 9 9 8.97 8.97 0 0 0 3.463-.69.75.75 0 0 1 .981.98 10.503 10.503 0 0 1-9.694 6.46c-5.799 0-10.5-4.7-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 0 1 .818.162Z" clip-rule="evenodd" />
                         </svg>
                     </button>
-                    <button id="settings-button" class="text-muted hover:text-foreground transition-colors p-2 rounded-lg" title="Settings">
+                    <button id="settings-button" class="lobby-icon-btn" title="Settings">
                         <span class="material-symbols-rounded">settings</span>
                     </button>
+                </div>
+
+                <div class="lobby-hero">
+                    <div class="lobby-hero-icon"><span class="material-symbols-rounded">screen_share</span></div>
+                    <h1>Start a room</h1>
+                    <p>Spin up a private, peer-to-peer room for screen-share, voice, chat and files. It lives only while people are connected — nothing is stored.</p>
+                </div>
+
+                <div class="lobby-cards">
+                    <!-- Create Room -->
+                    <div class="lobby-card">
+                        <div class="settings-label" style="margin:0;">Create a room</div>
+                        <form id="create-form" class="lobby-form">
+                            <input type="text" id="create-name" placeholder="Room name (optional)" class="settings-text-input" style="max-width:none;" maxlength="50" />
+                            <div class="lobby-form-row">
+                                <div class="lobby-input-affix">
+                                    <span class="material-symbols-rounded">lock</span>
+                                    <input type="password" id="create-password" placeholder="Password (optional)" class="settings-text-input" style="max-width:none;" />
+                                </div>
+                                <div class="lobby-stepper">
+                                    <span class="lobby-stepper-label">CAP</span>
+                                    <button type="button" id="create-max-peers-dec" class="lobby-stepper-btn" title="Decrease max participants">&minus;</button>
+                                    <input type="number" id="create-max-peers" class="lobby-stepper-value" value="6" min="2" max="12" readonly />
+                                    <button type="button" id="create-max-peers-inc" class="lobby-stepper-btn" title="Increase max participants">+</button>
+                                </div>
+                            </div>
+                            <div class="lobby-checkbox-row">
+                                <input type="checkbox" id="create-save-room" />
+                                <label for="create-save-room">Save this room to this device</label>
+                            </div>
+                            <input type="text" id="create-save-label" placeholder="Label (optional)" class="settings-text-input hidden" style="max-width:none;" maxlength="50" />
+                            <button type="submit" class="lobby-btn-primary">
+                                <span class="material-symbols-rounded">add_circle</span>Create &amp; enter
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Join Room -->
+                    <div class="lobby-card">
+                        <div class="settings-label" style="margin:0;">Join with a code</div>
+                        <form id="join-form" class="lobby-form">
+                            <div class="lobby-input-affix">
+                                <span class="material-symbols-rounded">tag</span>
+                                <input type="text" id="join-code" placeholder="room code or paste link" class="settings-text-input font-mono-app" style="max-width:none;text-transform:uppercase;letter-spacing:0.08em;" maxlength="5" pattern="[A-Za-z0-9]{5}" required />
+                            </div>
+                            <div id="join-password-row" class="hidden">
+                                <input type="password" id="join-password" placeholder="Enter room password" class="settings-text-input" style="max-width:none;" />
+                            </div>
+                            <div id="join-error" class="lobby-error hidden"></div>
+                            <div id="join-room-name" class="lobby-note hidden"></div>
+                            <div class="lobby-checkbox-row">
+                                <input type="checkbox" id="join-save-room" />
+                                <label for="join-save-room">Save this room to this device</label>
+                            </div>
+                            <input type="text" id="join-save-label" placeholder="Label (optional)" class="settings-text-input hidden" style="max-width:none;" maxlength="50" />
+                            <button type="submit" class="lobby-btn-secondary">
+                                <span class="material-symbols-rounded">login</span>Join room
+                            </button>
+                        </form>
+                        <div class="lobby-note-card">
+                            <span class="material-symbols-rounded">public</span>
+                            Links open in any modern browser — no install, no account. You'll be asked for a password only if the room has one.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent (Saved Rooms) -->
+                <div id="saved-rooms-section" class="lobby-recent hidden">
+                    <div class="lobby-recent-header">
+                        <span class="settings-label" style="margin:0;">Recent</span>
+                        <span class="lobby-recent-note font-mono-app">codes remembered on this device · rooms aren't stored</span>
+                    </div>
+                    <div id="saved-rooms-list" class="lobby-recent-grid"></div>
+                    <div id="saved-rooms-error" class="lobby-error" style="margin-top:10px;"></div>
+                </div>
+
+                <div class="lobby-privacy-footer">
+                    <span><span class="material-symbols-rounded">lan</span>Peer-to-peer mesh</span>
+                    <span><span class="material-symbols-rounded">memory</span>In-memory only</span>
+                    <span><span class="material-symbols-rounded">person_off</span>No accounts</span>
+                    <span><span class="material-symbols-rounded">visibility_off</span>Signalling server never sees content</span>
                 </div>
             </div>
         </div>
@@ -308,8 +328,18 @@
                 fullRoomError.classList.remove('hidden');
             }
 
+            // Max-participants stepper (min 2, max 12, default 6)
+            const maxPeersInput = document.getElementById('create-max-peers');
+            document.getElementById('create-max-peers-dec').addEventListener('click', () => {
+                maxPeersInput.value = String(Math.max(2, Number(maxPeersInput.value) - 1));
+            });
+            document.getElementById('create-max-peers-inc').addEventListener('click', () => {
+                maxPeersInput.value = String(Math.min(12, Number(maxPeersInput.value) + 1));
+            });
+
             // Create room
             const createBtn = document.querySelector('#create-form button[type="submit"]');
+            const createBtnLabel = createBtn.innerHTML;
             const createSaveCheckbox = document.getElementById('create-save-room');
             const createSaveLabel = document.getElementById('create-save-label');
             createSaveCheckbox.addEventListener('change', () => {
@@ -323,7 +353,7 @@
                 try {
                     const name = document.getElementById('create-name').value.trim();
                     const password = document.getElementById('create-password').value;
-                    const maxPeers = document.getElementById('create-max-peers').value;
+                    const maxPeers = maxPeersInput.value;
                     const res = await fetch('/api/create-room', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -340,7 +370,7 @@
                     window.location.href = '/' + code;
                 } catch {
                     createBtn.disabled = false;
-                    createBtn.textContent = 'Create Room';
+                    createBtn.innerHTML = createBtnLabel;
                 }
             });
 
@@ -358,8 +388,9 @@
             });
 
             const joinBtn = joinForm.querySelector('button[type="submit"]');
+            const joinBtnLabel = joinBtn.innerHTML;
 
-            // Shared by the manual join form and "Join" clicks on saved rooms.
+            // Shared by the manual join form and "Rejoin" clicks on recent rooms.
             // Returns true on success (caller navigates away), false to let the caller re-show its own UI.
             async function attemptJoin(code, password, { onNeedsPassword, onWrongPassword, onFull } = {}) {
                 const res = await fetch('/api/validate-room', {
@@ -427,18 +458,49 @@
                     // fall through to re-enable button below
                 }
                 joinBtn.disabled = false;
-                joinBtn.textContent = 'Join Room';
+                joinBtn.innerHTML = joinBtnLabel;
             });
 
-            // Auto-uppercase room code
+            // Auto-uppercase room code; typed input is stripped to alphanumeric as before,
+            // but a pasted link (e.g. https://peek.app/AB12C) is reduced to its trailing code.
             joinCode.addEventListener('input', () => {
-                joinCode.value = joinCode.value.replace(/[^A-Za-z0-9]/g, '');
+                joinCode.value = joinCode.value.replace(/[^A-Za-z0-9]/g, '').slice(-5);
+            });
+            joinCode.addEventListener('paste', (e) => {
+                const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+                if (!text) return;
+                e.preventDefault();
+                joinCode.value = text.replace(/[^A-Za-z0-9]/g, '').slice(-5);
             });
 
-            // --- Saved rooms panel ---
+            // --- Recent (saved) rooms ---
             const savedSection = document.getElementById('saved-rooms-section');
             const savedList = document.getElementById('saved-rooms-list');
             const savedError = document.getElementById('saved-rooms-error');
+
+            function hueFromString(str) {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) % 360;
+                return Math.abs(hash);
+            }
+
+            function initialsFromLabel(label) {
+                const words = label.trim().split(/\s+/).filter(Boolean);
+                if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+                return label.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || '??';
+            }
+
+            function formatRelativeTime(ms) {
+                if (!ms) return '';
+                const diff = Date.now() - ms;
+                const min = Math.round(diff / 60000);
+                if (min < 1) return 'just now';
+                if (min < 60) return `${min}m ago`;
+                const hr = Math.round(min / 60);
+                if (hr < 24) return `${hr}h ago`;
+                const day = Math.round(hr / 24);
+                return `${day}d ago`;
+            }
 
             function renderSavedRooms() {
                 const rooms = getSavedRooms();
@@ -446,32 +508,50 @@
                 savedList.innerHTML = '';
 
                 rooms.forEach((room) => {
-                    const row = document.createElement('div');
-                    row.className = 'flex items-center gap-2 p-2.5 surface-input rounded-lg';
+                    const card = document.createElement('div');
+                    card.className = 'lobby-recent-card';
+
+                    const top = document.createElement('div');
+                    top.className = 'lobby-recent-top';
+
+                    const avatar = document.createElement('div');
+                    avatar.className = 'lobby-recent-avatar';
+                    avatar.style.background = `oklch(0.55 0.13 ${hueFromString(room.code + room.label)})`;
+                    avatar.textContent = initialsFromLabel(room.label);
+                    top.appendChild(avatar);
 
                     const info = document.createElement('div');
-                    info.className = 'flex-1 min-w-0';
+                    info.className = 'lobby-recent-info';
 
-                    const labelEl = document.createElement('div');
-                    labelEl.className = 'text-sm font-medium truncate';
-                    labelEl.textContent = room.label;
-                    info.appendChild(labelEl);
+                    const nameEl = document.createElement('div');
+                    nameEl.className = 'lobby-recent-name';
+                    nameEl.textContent = room.label;
+                    if (room.password) {
+                        const lockIcon = document.createElement('span');
+                        lockIcon.className = 'material-symbols-rounded';
+                        lockIcon.textContent = 'lock';
+                        nameEl.appendChild(lockIcon);
+                    }
+                    info.appendChild(nameEl);
 
-                    const codeEl = document.createElement('div');
-                    codeEl.className = 'text-[10px] text-muted font-mono tracking-widest';
-                    codeEl.textContent = room.code + (room.password ? ' \u{1F512}' : '');
-                    info.appendChild(codeEl);
+                    const metaEl = document.createElement('div');
+                    metaEl.className = 'lobby-recent-meta font-mono-app';
+                    metaEl.textContent = room.code + (room.savedAt ? ` · ${formatRelativeTime(room.savedAt)}` : '');
+                    info.appendChild(metaEl);
 
-                    row.appendChild(info);
+                    top.appendChild(info);
+                    card.appendChild(top);
 
-                    const joinRowBtn = document.createElement('button');
-                    joinRowBtn.type = 'button';
-                    joinRowBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shrink-0';
-                    joinRowBtn.textContent = 'Join';
-                    joinRowBtn.addEventListener('click', async () => {
+                    const bottom = document.createElement('div');
+                    bottom.className = 'lobby-recent-bottom';
+
+                    const rejoinBtn = document.createElement('button');
+                    rejoinBtn.type = 'button';
+                    rejoinBtn.className = 'lobby-recent-rejoin';
+                    rejoinBtn.innerHTML = 'Rejoin <span class="material-symbols-rounded" style="font-size:16px;">arrow_forward</span>';
+                    rejoinBtn.addEventListener('click', async () => {
                         savedError.classList.add('hidden');
-                        joinRowBtn.disabled = true;
-                        joinRowBtn.textContent = '...';
+                        rejoinBtn.disabled = true;
                         try {
                             await attemptJoin(room.code, room.password, {
                                 onFull: () => {
@@ -492,26 +572,28 @@
                                     joinPasswordRow.classList.remove('hidden');
                                     joinPassword.focus();
                                 },
+                            }).then((joined) => {
+                                if (joined) saveRoom({ code: room.code, label: room.label, password: room.password });
                             });
                         } finally {
-                            joinRowBtn.disabled = false;
-                            joinRowBtn.textContent = 'Join';
+                            rejoinBtn.disabled = false;
                         }
                     });
-                    row.appendChild(joinRowBtn);
+                    bottom.appendChild(rejoinBtn);
+                    card.appendChild(bottom);
 
                     const removeBtn = document.createElement('button');
                     removeBtn.type = 'button';
                     removeBtn.title = 'Remove';
-                    removeBtn.className = 'p-1.5 rounded-lg text-muted hover:text-red-400 transition-colors shrink-0';
-                    removeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" /></svg>';
+                    removeBtn.className = 'lobby-recent-remove';
+                    removeBtn.innerHTML = '<span class="material-symbols-rounded">close</span>';
                     removeBtn.addEventListener('click', () => {
                         removeRoom(room.code);
                         renderSavedRooms();
                     });
-                    row.appendChild(removeBtn);
+                    card.appendChild(removeBtn);
 
-                    savedList.appendChild(row);
+                    savedList.appendChild(card);
                 });
             }
 

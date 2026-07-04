@@ -16,7 +16,7 @@ function setSavedRooms(rooms) {
 
 export function saveRoom({ code, label, password }) {
     const rooms = getSavedRooms().filter(r => r.code !== code);
-    rooms.unshift({ code, label: (label || '').trim() || code, password: password || null });
+    rooms.unshift({ code, label: (label || '').trim() || code, password: password || null, savedAt: Date.now() });
     setSavedRooms(rooms);
 }
 
