@@ -5,6 +5,7 @@ import { DebugPanel } from './DebugPanel.js';
 import { initGradientBackground } from './GradientBackground.js';
 import { initTheme } from './ThemeManager.js';
 import { SettingsPanel } from './SettingsPanel.js';
+import { QuickRoomSettings } from './QuickRoomSettings.js';
 
 initTheme();
 initGradientBackground();
@@ -545,6 +546,9 @@ window.addEventListener('resize', () => {
 // --- Settings panel (redesign Phase 3 — see public/client/SettingsPanel.js) ---
 const settingsPanel = new SettingsPanel({ ui, peerManager });
 document.getElementById('settings-button').addEventListener('click', () => settingsPanel.open());
+
+// --- Quick room settings popover (status/file-trust/follow-speaker/quality) ---
+new QuickRoomSettings({ ui, peerManager, settingsPanel });
 
 function updateMicUI(enabled) {
     document.getElementById('mic-off-icon').classList.toggle('hidden', enabled);
