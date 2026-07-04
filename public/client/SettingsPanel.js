@@ -268,6 +268,7 @@ export class SettingsPanel {
         if (keybindRow) keybindRow.classList.toggle('hidden', micMode === 'toggle');
         const keybindInput = document.getElementById('settings-keybind');
         if (keybindInput) keybindInput.value = localStorage.getItem('micKeybind') || '';
+        this.ui?.updateMicModeBadge?.(micMode);
     }
 
     _refreshAudio() {

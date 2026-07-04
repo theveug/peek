@@ -1221,6 +1221,295 @@ body,
   transform: translateX(-50%);
 }
 
+/* ===== Stage + controls dock (redesign, Phase 2d) ===== */
+.stage-header {
+  flex: none;
+  height: 52px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--t3);
+}
+
+.stage-view-toggle {
+  display: inline-flex;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.stage-view-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  background: transparent;
+  color: var(--t3);
+}
+
+.stage-view-btn .material-symbols-rounded {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.stage-view-btn.active {
+  background: var(--bg5);
+  color: var(--t1);
+}
+
+.stage-header-spacer {
+  flex: 1;
+}
+
+.stage-header-stat {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--t3);
+}
+
+.stage-header-stat .material-symbols-rounded {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.stage-header-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+}
+
+/* --- Grid tiles --- */
+.grid-tile {
+  border-radius: 14px;
+  background: var(--bg3);
+}
+
+.grid-tile-name {
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+
+.grid-tile-mic svg {
+  width: 14px;
+  height: 14px;
+}
+
+.grid-tile-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--accent);
+  color: var(--accentText);
+  border-radius: 8px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.grid-tile-badge .material-symbols-rounded {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.grid-tile-paused-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  background: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.grid-tile-play-circle {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.grid-tile-play-circle .material-symbols-rounded {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.grid-tile-paused-hint {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.grid-tile-paused-sub {
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* --- Focus view --- */
+.focus-sharing-pill {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--accent);
+  color: var(--accentText);
+  border-radius: 9px;
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 700;
+  z-index: 2;
+}
+
+.focus-sharing-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  animation: focusLiveDot 1.4s infinite;
+}
+
+@keyframes focusLiveDot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.focus-quality-caption {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 3px 9px;
+  border-radius: 7px;
+  z-index: 2;
+}
+
+.focus-icon-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.focus-icon-btn .material-symbols-rounded {
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* --- Controls dock --- */
+.dock-bar {
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 999px;
+}
+
+.dock-btn {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg5);
+  color: var(--t1);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.dock-btn:hover {
+  background: var(--bg4);
+}
+
+.dock-btn-active-red {
+  background: var(--red);
+  color: #fff;
+}
+
+.dock-btn-active-red:hover {
+  background: var(--red);
+  opacity: 0.9;
+}
+
+.dock-mode-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 8px;
+  font-weight: 600;
+  background: var(--bg2);
+  color: var(--t2);
+  border-radius: 4px;
+  padding: 1px 3px;
+  line-height: 1.4;
+}
+
+.dock-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+.dock-leave-btn {
+  height: 48px;
+  border: none;
+  border-radius: 24px;
+  background: var(--red);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.dock-leave-btn:hover {
+  opacity: 0.9;
+}
+
+.dock-leave-btn .material-symbols-rounded {
+  font-size: 22px;
+  line-height: 1;
+}
+
 /* ===== Settings panel (redesign, Phase 3) ===== */
 .settings-overlay {
   position: absolute;
@@ -2672,5 +2961,19 @@ body,
 
   .topbar-invite-btn {
     padding: 8px 10px;
+  }
+
+  /* Stage header: keep the view toggle (the one control people actually need on
+     mobile) and drop the two stat readouts — not enough width for all three. */
+  .stage-header {
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  .stage-header-stat,
+  .stage-header-divider,
+  #stage-quality-divider,
+  #stage-quality-stat {
+    display: none !important;
   }
 }

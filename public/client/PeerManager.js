@@ -239,6 +239,7 @@ export class PeerManager {
             this.stream = newStream;
             this.ui.addStream('me', this.stream);
             this.isSharing = true;
+            this.ui.updateStageQuality?.(this.getScreenQualityLabel());
 
             this.stream.getVideoTracks()[0].onended = () => {
                 this.stopSharing();
@@ -641,9 +642,19 @@ export class PeerManager {
 
         this.ui.removeStream('me');
         this.isSharing = false;
+        this.ui.updateStageQuality?.(null);
 
         // Notify peers that streaming stopped
         this.send('stop-sharing', null, {});
+    }
+
+    // Formats the effective (room-size-capped) outgoing screen-share quality for
+    // the stage header's "Auto · 1280x720 · 30fps" readout — reuses the same
+    // resolved constraints _resolveQuality() already computes for getUserMedia.
+    getScreenQualityLabel() {
+        const { width, height, frameRate } = this._resolveQuality('screen');
+        const res = width && height ? `${width.max}x${height.max}` : 'source';
+        return `Auto · ${res} · ${frameRate}fps`;
     }
 
 

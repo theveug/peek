@@ -312,7 +312,10 @@ function sendMessage() {
 }
 
 function updateShareButton() {
-    document.getElementById('stop-share-button').classList.toggle('hidden', !peerManager.isSharing);
+    // Inline style, not the `.hidden` utility class: `.dock-btn` (tailwind.css, unlayered
+    // custom rule) sets `display:flex` and beats Tailwind's layered `.hidden` utility in
+    // the cascade regardless of source order — see CLAUDE.md's cascade-layers gotcha.
+    document.getElementById('stop-share-button').style.display = peerManager.isSharing ? '' : 'none';
     document.getElementById('share-toggle').title = peerManager.isSharing ? 'Share a different window' : 'Share screen';
 }
 
@@ -337,8 +340,12 @@ document.getElementById('stop-share-button').onclick = () => {
     updateShareButton();
 };
 
-document.getElementById('grid-button').addEventListener('click', () => {
-    ui.toggleViewMode();
+document.getElementById('stage-view-grid').addEventListener('click', () => {
+    ui.setViewMode('grid');
+});
+
+document.getElementById('stage-view-focus').addEventListener('click', () => {
+    ui.setViewMode('focus');
 });
 
 document.getElementById('leave-room-button').addEventListener('click', () => {

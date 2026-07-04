@@ -327,6 +327,26 @@ export class UIController {
         this.panY = 0;
         this.applyTransform();
         this.setViewMode('focus');
+        this._updateFocusMeta(peerId);
+    }
+
+    _updateFocusMeta(peerId) {
+        const isCam = peerId.endsWith('-cam');
+        const actualPeerId = isCam ? peerId.slice(0, -4) : peerId;
+        const nickname = this._peerNickname(actualPeerId);
+
+        const nameEl = document.getElementById('focus-sharing-name');
+        if (nameEl) nameEl.textContent = nickname;
+
+        const caption = document.getElementById('focus-quality-caption');
+        const video = this.focusedVideo;
+        const updateCaption = () => {
+            if (!caption) return;
+            const { videoWidth: w, videoHeight: h } = video;
+            caption.textContent = w && h ? `${nickname} · ${w}x${h}` : nickname;
+        };
+        updateCaption();
+        video.onloadedmetadata = updateCaption;
     }
 
     // Called from PeerManager's active-speaker detection. Opt-in (localStorage
@@ -422,14 +442,24 @@ export class UIController {
         const isCam = peerId.endsWith('-cam');
         const actualPeerId = isCam ? peerId.slice(0, -4) : peerId;
         const nickname = this._peerNickname(actualPeerId);
+        const micEnabled = this._micEnabled?.[actualPeerId] ?? false;
 
         const cell = document.createElement('div');
-        cell.className = 'relative overflow-hidden cursor-pointer bg-black flex items-center justify-center';
+        cell.className = 'grid-tile relative overflow-hidden cursor-pointer bg-black flex items-center justify-center';
         cell.dataset.peerId = peerId;
 
         const label = document.createElement('div');
-        label.className = 'absolute bottom-2 left-2 text-xs text-white/80 bg-black/40 px-2 py-0.5 rounded-full pointer-events-none';
-        label.textContent = nickname + (isCam ? ' · Cam' : '');
+        label.className = 'grid-tile-name absolute bottom-2.5 left-2.5 flex items-center gap-1.5 text-xs font-medium text-white pointer-events-none';
+
+        const micIcon = document.createElement('span');
+        micIcon.className = 'grid-tile-mic inline-flex items-center';
+        micIcon.style.color = micEnabled ? '#22c55e' : '#ef4444';
+        micIcon.innerHTML = micEnabled ? this._micOnSvg() : this._micOffSvg();
+        label.appendChild(micIcon);
+
+        const labelText = document.createElement('span');
+        labelText.textContent = nickname + (isCam ? ' · Cam' : '');
+        label.appendChild(labelText);
 
         if (this.watchedTiles.has(peerId)) {
             const video = document.createElement('video');
@@ -440,6 +470,20 @@ export class UIController {
             video.className = 'w-full h-full object-contain';
             cell.appendChild(video);
             cell.appendChild(label);
+
+            if (!isCam) {
+                const badge = document.createElement('div');
+                badge.className = 'grid-tile-badge';
+                badge.innerHTML = '<span class="material-symbols-rounded">screen_share</span>';
+                const badgeText = document.createElement('span');
+                badge.appendChild(badgeText);
+                const updateBadge = () => {
+                    if (video.videoWidth && video.videoHeight) badgeText.textContent = `${video.videoHeight}p`;
+                };
+                updateBadge();
+                video.addEventListener('loadedmetadata', updateBadge);
+                cell.appendChild(badge);
+            }
 
             const stopBtn = document.createElement('button');
             stopBtn.type = 'button';
@@ -458,32 +502,25 @@ export class UIController {
                 this.focusStream(peerId);
             });
         } else {
-            const placeholder = document.createElement('div');
-            placeholder.className = 'flex flex-col items-center gap-1.5 pointer-events-none px-2 text-center';
+            const overlay = document.createElement('div');
+            overlay.className = 'grid-tile-paused-overlay';
 
-            const avatar = document.createElement('div');
-            avatar.className = 'w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white/80';
-            avatar.innerHTML = isCam
-                ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6"><path d="M3.25 4A2.25 2.25 0 0 0 1 6.25v7.5A2.25 2.25 0 0 0 3.25 16h6.5A2.25 2.25 0 0 0 12 13.75v-1.638l3.058 1.892c.745.461 1.71-.074 1.71-.95V7.446c0-.876-.965-1.41-1.71-.95L12 8.388V6.25A2.25 2.25 0 0 0 9.75 4h-6.5Z" /></svg>'
-                : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6"><path fill-rule="evenodd" d="M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.105a3.501 3.501 0 0 0 1.1 1.677A.75.75 0 0 1 13.26 18H6.74a.75.75 0 0 1-.484-1.323A3.501 3.501 0 0 0 7.355 15H4.25A2.25 2.25 0 0 1 2 12.75v-8.5Zm1.5 0a.75.75 0 0 1 .75-.75h11.5a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.75.75H4.25a.75.75 0 0 1-.75-.75v-7.5Z" clip-rule="evenodd" /></svg>';
+            const playCircle = document.createElement('span');
+            playCircle.className = 'grid-tile-play-circle';
+            playCircle.innerHTML = '<span class="material-symbols-rounded">play_arrow</span>';
 
-            const nameLine = document.createElement('div');
-            nameLine.className = 'text-sm font-medium text-white/90 truncate max-w-[10rem]';
-            nameLine.textContent = nickname;
-
-            const typeLine = document.createElement('div');
-            typeLine.className = 'text-xs text-white/50';
-            typeLine.textContent = isCam ? 'Webcam' : 'Screen share';
-
-            const hint = document.createElement('div');
-            hint.className = 'text-xs text-white/40 mt-1';
+            const hint = document.createElement('span');
+            hint.className = 'grid-tile-paused-hint';
             hint.textContent = 'Click to watch';
 
-            placeholder.appendChild(avatar);
-            placeholder.appendChild(nameLine);
-            placeholder.appendChild(typeLine);
-            placeholder.appendChild(hint);
-            cell.appendChild(placeholder);
+            const sub = document.createElement('span');
+            sub.className = 'grid-tile-paused-sub';
+            sub.textContent = 'stream paused · saving bandwidth';
+
+            overlay.appendChild(playCircle);
+            overlay.appendChild(hint);
+            overlay.appendChild(sub);
+            cell.appendChild(overlay);
             cell.appendChild(label);
 
             cell.addEventListener('click', () => {
@@ -770,9 +807,26 @@ export class UIController {
     // (not mic-enabled/disabled, which only tells you they *could* be making sound).
     setSpeaking(peerId, speaking) {
         const el = document.getElementById(`participant-${peerId}`);
-        if (!el) return;
-        const avatar = el.querySelector('.flex-shrink-0 > div:first-child');
-        if (avatar) avatar.classList.toggle('status-talking', speaking);
+        if (el) {
+            const avatar = el.querySelector('.flex-shrink-0 > div:first-child');
+            if (avatar) avatar.classList.toggle('status-talking', speaking);
+        }
+        // A peer's stream(s) can appear as a grid tile under either key
+        // (screen-share and/or webcam) — the ring reflects the person, not the tile.
+        [peerId, `${peerId}-cam`].forEach(key => {
+            const tile = this.gridView?.querySelector(`[data-peer-id="${key}"]`);
+            if (tile) tile.classList.toggle('status-talking', speaking);
+        });
+    }
+
+    _updateGridMicIcon(peerId, enabled) {
+        [peerId, `${peerId}-cam`].forEach(key => {
+            const tile = this.gridView?.querySelector(`[data-peer-id="${key}"]`);
+            const icon = tile?.querySelector('.grid-tile-mic');
+            if (!icon) return;
+            icon.style.color = enabled ? '#22c55e' : '#ef4444';
+            icon.innerHTML = enabled ? this._micOnSvg() : this._micOffSvg();
+        });
     }
 
     updateParticipantMic(peerId, enabled) {
@@ -781,6 +835,9 @@ export class UIController {
             this.addParticipant(peerId);
             el = document.getElementById(`participant-${peerId}`);
         }
+        this._micEnabled = this._micEnabled || {};
+        this._micEnabled[peerId] = enabled;
+        this._updateGridMicIcon(peerId, enabled);
         const dot = el.querySelector('.participant-mic');
         const label = el.querySelector('.participant-mic-label');
         if (enabled) {
@@ -972,21 +1029,20 @@ export class UIController {
     updateLayout() {
         const remoteStreams = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam');
         const spinner = document.getElementById('spinner');
-        const gridBtn = document.getElementById('grid-toggle');
+        const stageHeader = document.getElementById('stage-header');
 
         if (remoteStreams.length === 0) {
             spinner.classList.remove('hidden');
             this.focusedView.style.display = 'none';
             this.gridView.style.display = 'none';
-            if (gridBtn) gridBtn.style.display = 'none';
+            if (stageHeader) stageHeader.style.display = 'none';
             return;
         }
 
         spinner.classList.add('hidden');
 
-        if (gridBtn) {
-            gridBtn.style.display = 'flex';
-        }
+        if (stageHeader) stageHeader.style.display = 'flex';
+        this._updateStageHeader();
 
         if (this.viewMode === 'grid') {
             this.focusedView.style.display = 'none';
@@ -1007,7 +1063,39 @@ export class UIController {
             });
             this.focusedView.style.display = 'flex';
             this.gridView.style.display = 'none';
+            this._updateFocusMeta(this.focusedPeerId);
         }
+    }
+
+    _updateStageHeader() {
+        const gridBtn = document.getElementById('stage-view-grid');
+        const focusBtn = document.getElementById('stage-view-focus');
+        if (gridBtn) gridBtn.classList.toggle('active', this.viewMode === 'grid');
+        if (focusBtn) focusBtn.classList.toggle('active', this.viewMode === 'focus');
+
+        const countEl = document.getElementById('stage-stream-count');
+        if (countEl) countEl.textContent = `${this.watchedTiles.size} / ${this.maxWatchedTiles}`;
+    }
+
+    // Called by PeerManager whenever our own screen-share starts/stops/quality
+    // changes — pass null to hide the segment (nothing meaningful while not sharing).
+    updateStageQuality(label) {
+        const stat = document.getElementById('stage-quality-stat');
+        const divider = document.getElementById('stage-quality-divider');
+        const labelEl = document.getElementById('stage-quality-label');
+        const show = !!label;
+        if (stat) stat.style.display = show ? 'flex' : 'none';
+        if (divider) divider.style.display = show ? '' : 'none';
+        if (labelEl) labelEl.textContent = label || '';
+    }
+
+    updateMicModeBadge(micMode) {
+        const badge = document.getElementById('mic-mode-badge');
+        if (!badge) return;
+        const labels = { 'push-to-talk': 'PTT', 'push-to-mute': 'PTM' };
+        const text = labels[micMode];
+        badge.textContent = text || '';
+        badge.classList.toggle('hidden', !text);
     }
 
     handleVisibilityChange(blurred) {
