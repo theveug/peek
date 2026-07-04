@@ -980,6 +980,146 @@ body.light .panel-tab:hover {
   background: var(--card-hover);
 }
 
+/* ===== Members sidebar (redesign, Phase 2c) ===== */
+/* Rows are plain (no hover, no click) — DMs are out of scope, so nothing
+   should look interactive here. Scoped to .members-panel since the base
+   .participant-card:hover above is shared with no other surface today. */
+.members-panel .participant-card {
+  cursor: default;
+}
+
+.members-panel .participant-card:hover {
+  background: transparent;
+}
+
+/* Self stays in the DOM (so the existing peerId-keyed update methods keep
+   working) but is not shown in the list — their identity lives in the
+   footer strip instead. */
+.members-panel .participant-card[data-self="1"] {
+  display: none;
+}
+
+.participant-avatar {
+  border-radius: 11px;
+}
+
+.participant-right-col {
+  min-width: 14px;
+}
+
+.sidebar-trust-card {
+  flex-shrink: 0;
+  margin: 10px 12px;
+  padding: 13px;
+  border-radius: 12px;
+  background: var(--accentSoft);
+  border: 1px solid var(--accentSoft2);
+}
+
+.sidebar-trust-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 12.5px;
+}
+
+.sidebar-trust-title .material-symbols-rounded {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.sidebar-trust-body {
+  font-size: 11.5px;
+  color: var(--t2);
+  margin-top: 6px;
+  line-height: 1.45;
+}
+
+.sidebar-identity {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding: 11px 12px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.sidebar-identity-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--accent);
+  color: var(--accentText);
+  font-weight: 800;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-identity-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-identity-name {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--t1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-status-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--t3);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sidebar-status-trigger .quick-status-caret {
+  font-size: 14px;
+}
+
+.sidebar-status-trigger + .quick-status-menu {
+  top: calc(100% + 8px);
+  left: -12px;
+  right: auto;
+  width: 160px;
+}
+
+.sidebar-settings-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--t2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-settings-btn:hover {
+  background: var(--bg3);
+}
+
+.sidebar-settings-btn .material-symbols-rounded {
+  font-size: 20px;
+  line-height: 1;
+}
+
 /* ===== Status ring animation ===== */
 @keyframes pulse-ring {
   0% {
@@ -1741,6 +1881,14 @@ body,
     transform: translateX(100%);
     transition: transform 0.3s ease;
     border-left: 1px solid var(--color-separator) !important;
+  }
+
+  /* The mobile bottom controls bar is fixed at z-index:90, above this drawer
+     (z-index:80) so mic/cam/leave stay reachable while the drawer is open —
+     but that means the sidebar footer strip would otherwise render underneath
+     it. Reserve space instead of fighting the z-order. */
+  .sidebar-identity {
+    padding-bottom: calc(11px + 64px + env(safe-area-inset-bottom));
   }
 
   .members-panel.mobile-open {

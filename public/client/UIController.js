@@ -528,6 +528,14 @@ export class UIController {
         this.selfPeerId = peerId;
         const nickname = localStorage.getItem('nickname') || 'You';
         this._createParticipantCard(peerId, nickname, true);
+
+        const sidebarName = document.getElementById('sidebar-identity-name');
+        const sidebarAvatar = document.getElementById('sidebar-identity-avatar');
+        if (sidebarName) sidebarName.textContent = nickname;
+        if (sidebarAvatar) {
+            sidebarAvatar.textContent = this._avatarInitials(nickname);
+            sidebarAvatar.style.background = this._avatarSquareColor(peerId, true);
+        }
     }
 
     addParticipant(peerId) {
@@ -554,6 +562,20 @@ export class UIController {
             || displayName.substring(0, 2).toUpperCase();
     }
 
+    // Deterministic per-peer hue, same algorithm as lobby.html's hueFromString()
+    // (duplicated rather than shared — lobby.html and this file are separate,
+    // unbundled page entry points with no shared module today).
+    _hueFromString(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) % 360;
+        return Math.abs(hash);
+    }
+
+    _avatarSquareColor(peerId, isSelf) {
+        if (isSelf) return 'var(--accent)';
+        return `oklch(0.64 0.15 ${this._hueFromString(peerId)})`;
+    }
+
     _createParticipantCard(peerId, displayName, isSelf) {
         const container = document.getElementById('participants');
 
@@ -565,29 +587,21 @@ export class UIController {
         const avatarWrap = document.createElement('div');
         avatarWrap.className = 'relative flex-shrink-0';
 
-        const avatarColor = isSelf
-            ? 'bg-emerald-600/30 border-2 border-emerald-500/40'
-            : 'bg-indigo-600/30 border-2 border-indigo-500/40';
         const avatar = document.createElement('div');
-        avatar.className = `flex items-center justify-center w-9 h-9 rounded-full ${avatarColor} text-white text-xs font-bold select-none`;
+        avatar.className = 'participant-avatar flex items-center justify-center w-9 h-9 text-white text-xs font-bold select-none';
+        avatar.style.background = this._avatarSquareColor(peerId, isSelf);
         avatar.textContent = this._avatarInitials(displayName);
 
         const statusDot = document.createElement('div');
-        statusDot.className = 'participant-status-dot absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2';
+        statusDot.className = 'participant-status-dot absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2';
         statusDot.style.background = this._statusColors.online;
         statusDot.title = 'Online';
 
-        const micDot = document.createElement('div');
-        micDot.className = 'participant-mic absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center border-2';
-        micDot.style.cssText = 'background:#ef4444; color:white;';
-        micDot.innerHTML = this._micOffSvg();
-
         avatarWrap.appendChild(avatar);
         avatarWrap.appendChild(statusDot);
-        avatarWrap.appendChild(micDot);
 
         const info = document.createElement('div');
-        info.className = 'flex flex-col min-w-0';
+        info.className = 'flex flex-col min-w-0 flex-1';
 
         const nameRow = document.createElement('div');
         nameRow.className = 'flex items-center gap-1.5';
@@ -598,13 +612,6 @@ export class UIController {
 
         nameRow.appendChild(name);
 
-        if (isSelf) {
-            const youBadge = document.createElement('span');
-            youBadge.className = 'text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-full bg-emerald-600/20 text-emerald-400 leading-none';
-            youBadge.textContent = 'you';
-            nameRow.appendChild(youBadge);
-        }
-
         const statusRow = document.createElement('div');
         statusRow.className = 'participant-status-icons flex items-center gap-1.5 mt-0.5';
 
@@ -613,34 +620,29 @@ export class UIController {
         statusLabel.textContent = 'Online';
         statusRow.appendChild(statusLabel);
 
-        const separator = document.createElement('span');
-        separator.className = 'text-[10px] text-muted';
-        separator.textContent = '·';
-        statusRow.appendChild(separator);
+        info.appendChild(nameRow);
+        info.appendChild(statusRow);
 
-        const micLabel = document.createElement('span');
-        micLabel.className = 'participant-mic-label text-[10px]';
-        micLabel.textContent = 'Muted';
-        statusRow.appendChild(micLabel);
+        const rightCol = document.createElement('div');
+        rightCol.className = 'participant-right-col flex flex-col items-end gap-1 flex-shrink-0';
 
         if (!isSelf) {
-            const sigSep = document.createElement('span');
-            sigSep.className = 'text-[10px] text-muted';
-            sigSep.textContent = '·';
-            statusRow.appendChild(sigSep);
-
             const sigIcon = document.createElement('span');
             sigIcon.className = 'participant-signal-icon inline-flex items-center';
             sigIcon.title = 'Connection: Unknown';
             sigIcon.innerHTML = this._signalBarsSvg('unknown');
-            statusRow.appendChild(sigIcon);
+            rightCol.appendChild(sigIcon);
         }
 
-        info.appendChild(nameRow);
-        info.appendChild(statusRow);
+        const micIcon = document.createElement('span');
+        micIcon.className = 'participant-mic inline-flex items-center';
+        micIcon.style.color = '#ef4444';
+        micIcon.innerHTML = this._micOffSvg();
+        rightCol.appendChild(micIcon);
 
         card.appendChild(avatarWrap);
         card.appendChild(info);
+        card.appendChild(rightCol);
 
         if (isSelf) {
             container.prepend(card);
@@ -718,7 +720,7 @@ export class UIController {
     _updateMemberCount() {
         const count = document.getElementById('participants')?.children.length || 0;
         const el = document.getElementById('member-count');
-        if (el) el.textContent = count;
+        if (el) el.textContent = `${count} / ${this.maxPeers}`;
         const topbarCount = document.getElementById('topbar-peer-count');
         if (topbarCount) topbarCount.textContent = count;
         const topbarCap = document.getElementById('topbar-peer-cap');
@@ -782,11 +784,11 @@ export class UIController {
         const dot = el.querySelector('.participant-mic');
         const label = el.querySelector('.participant-mic-label');
         if (enabled) {
-            dot.style.background = '#22c55e';
+            dot.style.color = '#22c55e';
             dot.innerHTML = this._micOnSvg();
             if (label) label.textContent = 'Unmuted';
         } else {
-            dot.style.background = '#ef4444';
+            dot.style.color = '#ef4444';
             dot.innerHTML = this._micOffSvg();
             if (label) label.textContent = 'Muted';
             // A muted mic can't be producing real audio levels, but clear the ring
@@ -830,6 +832,11 @@ export class UIController {
             const identityAvatar = document.getElementById('topbar-identity-avatar');
             if (identityName) identityName.textContent = nickname;
             if (identityAvatar) identityAvatar.textContent = this._avatarInitials(nickname);
+
+            const sidebarName = document.getElementById('sidebar-identity-name');
+            const sidebarAvatar = document.getElementById('sidebar-identity-avatar');
+            if (sidebarName) sidebarName.textContent = nickname;
+            if (sidebarAvatar) sidebarAvatar.textContent = this._avatarInitials(nickname);
         }
 
         if (this._pendingJoinToasts && this._pendingJoinToasts.has(peerId)) {
@@ -840,8 +847,12 @@ export class UIController {
 
     updateIdentityStatus(status) {
         const dot = document.getElementById('topbar-identity-status');
-        if (!dot) return;
-        dot.className = `topbar-identity-status ${status === 'online' ? '' : status}`.trim();
+        if (dot) dot.className = `topbar-identity-status ${status === 'online' ? '' : status}`.trim();
+
+        const sidebarDot = document.getElementById('sidebar-status-dot');
+        const sidebarLabel = document.getElementById('sidebar-status-label');
+        if (sidebarDot) sidebarDot.className = `quick-status-dot ${status === 'online' ? '' : status}`.trim();
+        if (sidebarLabel) sidebarLabel.textContent = this._statusLabels[status] || 'Online';
     }
 
     // --- Audio ---
