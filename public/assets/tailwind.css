@@ -9,18 +9,11 @@
   --color-muted: #737373;
   --color-subtle: #525252;
   --color-separator: rgba(255, 255, 255, 0.06);
-  --surface-glass: rgba(23, 23, 23, 0.25);
   --surface-input: rgba(38, 38, 38, 0.6);
   --surface-elevated: #1a1a1a;
-  --controls-glass: rgba(10, 10, 10, 0.65);
-  --controls-border: rgba(255, 255, 255, 0.08);
   --card-hover: rgba(255, 255, 255, 0.05);
   --scrollbar-thumb: rgba(255, 255, 255, 0.1);
   --scrollbar-hover: rgba(255, 255, 255, 0.2);
-  --gradient-1: #1a0533;
-  --gradient-2: #0a1628;
-  --gradient-3: #0f2027;
-  --gradient-4: #0d001a;
   --chat-code-bg: #1e1e1e;
   --chat-code-fg: #eee;
   --chat-body: #d4d4d4;
@@ -62,18 +55,11 @@ body.light {
   --color-muted: #6b7280;
   --color-subtle: #9ca3af;
   --color-separator: rgba(0, 0, 0, 0.1);
-  --surface-glass: rgba(255, 255, 255, 0.3);
   --surface-input: rgba(0, 0, 0, 0.04);
   --surface-elevated: #ffffff;
-  --controls-glass: rgba(255, 255, 255, 0.7);
-  --controls-border: rgba(0, 0, 0, 0.1);
   --card-hover: rgba(0, 0, 0, 0.04);
   --scrollbar-thumb: rgba(0, 0, 0, 0.12);
   --scrollbar-hover: rgba(0, 0, 0, 0.22);
-  --gradient-1: #e8d5f5;
-  --gradient-2: #c7d8f0;
-  --gradient-3: #d4eef2;
-  --gradient-4: #f0ddf7;
   --chat-code-bg: #f3f4f6;
   --chat-code-fg: #1f2937;
   --chat-body: #374151;
@@ -130,12 +116,6 @@ body.light {
   border-color: var(--participant-border);
 }
 
-.surface-glass {
-  background: var(--surface-glass);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
 .surface-input {
   background: var(--surface-input);
   color: var(--color-foreground);
@@ -145,24 +125,8 @@ body.light {
   background: var(--surface-elevated);
 }
 
-.controls-glass {
-  background: var(--controls-glass);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid var(--controls-border);
-}
-
 .placeholder-muted::placeholder {
   color: var(--color-muted);
-}
-
-/* ===== Animated gradient background ===== */
-#gradient-canvas {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  width: 100%;
-  height: 100%;
 }
 
 /* ===== Toasts ===== */
@@ -247,6 +211,10 @@ body {
   height: 100%;
   max-height: 100%;
   font-family: 'Public Sans', ui-sans-serif, system-ui, sans-serif;
+  /* The animated gradient canvas used to be the only thing painting a page
+     background — nothing else ever declared one. Now that it's removed
+     (Phase 4), this is the actual base color behind the stage/lobby. */
+  background: var(--bg1);
 }
 
 .font-mono-app {
@@ -528,10 +496,8 @@ body:hover #controls {
   align-items: center;
   gap: 0.75rem;
   padding: 0.625rem 0.75rem 0.625rem 1rem;
-  background: var(--controls-glass);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid var(--controls-border);
+  background: var(--bg3);
+  border: 1px solid var(--border);
   border-radius: 999px;
   font-size: 0.8125rem;
   color: var(--color-foreground);
@@ -1081,6 +1047,7 @@ a.link-preview:hover {
   min-width: 240px;
   max-width: 50vw;
   flex-shrink: 0;
+  background: var(--bg2);
 }
 
 .chat-resize-handle {
@@ -1104,6 +1071,7 @@ a.link-preview:hover {
   min-width: 160px;
   max-width: 40vw;
   flex-shrink: 0;
+  background: var(--bg2);
 }
 
 .members-panel.collapsed {
@@ -1152,6 +1120,8 @@ body.light .members-resize-handle.active {
   z-index: 65;
   color: var(--color-muted);
   cursor: pointer;
+  background: var(--bg3);
+  border: 1px solid var(--border);
 }
 
 .panel-tab:hover {
@@ -1399,10 +1369,6 @@ body.light .panel-tab:hover {
 }
 
 /* ===== Light mode control hover ===== */
-body.light .controls-glass button:hover {
-  background: rgba(0, 0, 0, 0.08);
-}
-
 body.light .chat-resize-handle:hover,
 body.light .chat-resize-handle.active {
   background: oklch(58.5% 0.233 277.117);
@@ -1410,10 +1376,8 @@ body.light .chat-resize-handle.active {
 
 /* ===== Theme transition ===== */
 body,
-.surface-glass,
 .surface-input,
-.surface-elevated,
-.controls-glass {
+.surface-elevated {
   transition:
     background 0.3s ease,
     color 0.3s ease,
@@ -1656,6 +1620,8 @@ body,
   gap: 8px;
   padding: 8px;
   border-radius: 999px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
 }
 
 .dock-btn {

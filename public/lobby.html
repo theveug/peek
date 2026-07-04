@@ -8,7 +8,6 @@
         <link rel="stylesheet" href="/assets/style.css" />
     </head>
     <body class="dark">
-        <canvas id="gradient-canvas"></canvas>
         <div class="lobby-glow" aria-hidden="true"></div>
 
         <div class="lobby-page">
@@ -311,13 +310,11 @@
         </div>
 
         <script type="module">
-            import { initGradientBackground } from '/client/GradientBackground.js';
             import { initTheme } from '/client/ThemeManager.js';
             import { getSavedRooms, saveRoom, removeRoom } from '/client/savedRooms.js';
             import { SettingsPanel } from '/client/SettingsPanel.js';
 
             initTheme();
-            initGradientBackground();
 
             const settingsPanel = new SettingsPanel();
             document.getElementById('settings-button').addEventListener('click', () => settingsPanel.open());

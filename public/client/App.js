@@ -2,7 +2,6 @@
 import { PeerManager } from './PeerManager.js';
 import { UIController } from './UIController.js';
 import { DebugPanel } from './DebugPanel.js';
-import { initGradientBackground } from './GradientBackground.js';
 import { initTheme } from './ThemeManager.js';
 import { SettingsPanel } from './SettingsPanel.js';
 import { QuickRoomSettings } from './QuickRoomSettings.js';
@@ -10,7 +9,6 @@ import { InvitePopover } from './InvitePopover.js';
 import { SidebarIdentity } from './SidebarIdentity.js';
 
 initTheme();
-initGradientBackground();
 
 const sessionId = location.pathname.split('/').pop();
 const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
