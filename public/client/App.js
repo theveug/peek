@@ -17,6 +17,7 @@ const debug = new DebugPanel(peerManager);
 ui.onWatchChange = (streamKey, watched) => peerManager.setWatched(streamKey, watched);
 ui.onPipExit = () => peerManager.handleTabVisibility(document.hidden);
 peerManager.onActiveSpeakerChange = (peerId) => ui.autoFocusTo(peerId);
+peerManager.onSpeakingChange = (peerId, speaking) => ui.setSpeaking(peerId, speaking);
 
 let socket;
 let reconnectTimer;

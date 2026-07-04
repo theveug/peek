@@ -724,6 +724,15 @@ export class UIController {
         return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-2.5 h-2.5"><path d="M7.22 3.22a.75.75 0 0 1 1.06 0L12 6.94l3.72-3.72a.75.75 0 1 1 1.06 1.06L13.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L12 9.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06L10.94 8 7.22 4.28a.75.75 0 0 1 0-1.06Z" /></svg>`;
     }
 
+    // Discord-style speaking ring — toggled by PeerManager's real audio-level polling
+    // (not mic-enabled/disabled, which only tells you they *could* be making sound).
+    setSpeaking(peerId, speaking) {
+        const el = document.getElementById(`participant-${peerId}`);
+        if (!el) return;
+        const avatar = el.querySelector('.flex-shrink-0 > div:first-child');
+        if (avatar) avatar.classList.toggle('status-talking', speaking);
+    }
+
     updateParticipantMic(peerId, enabled) {
         let el = document.getElementById(`participant-${peerId}`);
         if (!el) {
@@ -732,17 +741,17 @@ export class UIController {
         }
         const dot = el.querySelector('.participant-mic');
         const label = el.querySelector('.participant-mic-label');
-        const avatar = el.querySelector('.flex-shrink-0 > div:first-child');
         if (enabled) {
             dot.style.background = '#22c55e';
             dot.innerHTML = this._micOnSvg();
             if (label) label.textContent = 'Unmuted';
-            if (avatar) avatar.classList.add('status-talking');
         } else {
             dot.style.background = '#ef4444';
             dot.innerHTML = this._micOffSvg();
             if (label) label.textContent = 'Muted';
-            if (avatar) avatar.classList.remove('status-talking');
+            // A muted mic can't be producing real audio levels, but clear the ring
+            // immediately rather than waiting on the next speaking-poll tick.
+            this.setSpeaking(peerId, false);
         }
     }
 

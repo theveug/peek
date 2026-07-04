@@ -36,12 +36,16 @@ export class PeerManager {
         this.senders = {};
         this._statsInterval = null;
 
-        // --- Active-speaker detection (drives optional auto-focus) ---
+        // --- Active-speaker detection (drives optional auto-focus + per-peer speaking rings) ---
         this.onActiveSpeakerChange = null; // set by App.js
+        this.onSpeakingChange = null; // set by App.js — (peerId, isSpeaking), includes local peerId
         this._speakerInterval = null;
         this._activeSpeakerId = null;
         this._speakerCandidateSince = {};
         this._lastSpeakerSwitch = -Infinity;
+        this._speakingState = {};
+        this._lastLoudAt = {};
+        this._noiseFloor = {};
         this._localAnalyser = null;
         this._localAnalyserStream = null;
     }
@@ -411,23 +415,20 @@ export class PeerManager {
     }
 
     // Picks the active speaker from current audio levels, excluding the local user
-    // (you already know when you're talking). Requires a peer to be the loudest
-    // candidate above a silence floor for a sustained hold time before switching to
-    // them, and enforces a minimum gap between switches — otherwise normal
-    // back-and-forth conversation makes the focused view flicker constantly.
-    _pickActiveSpeaker(levels, now) {
-        const SILENCE_FLOOR = 0.04;
+    // (you already know when you're talking). `speaking` is the same adaptive-floor
+    // signal driving the speaking-ring (see _updateSpeakingStates) — not a raw level
+    // — so a mic with a high self-noise floor can't win purely by being loud at rest.
+    // Requires a candidate to be the (only) one speaking for a sustained hold time
+    // before switching to them, and enforces a minimum gap between switches —
+    // otherwise normal back-and-forth conversation makes the focused view flicker.
+    _pickActiveSpeaker(speaking, now) {
         const HOLD_MS = 500;
         const MIN_SWITCH_GAP_MS = 1500;
 
-        let loudest = null;
-        let loudestLevel = SILENCE_FLOOR;
-        for (const [peerId, level] of Object.entries(levels)) {
-            if (level > loudestLevel) {
-                loudest = peerId;
-                loudestLevel = level;
-            }
-        }
+        // If more than one remote peer is currently flagged speaking, don't guess —
+        // wait for it to resolve to a single candidate rather than picking arbitrarily.
+        const candidates = Object.keys(speaking).filter(id => speaking[id]);
+        const loudest = candidates.length === 1 ? candidates[0] : null;
 
         for (const peerId of Object.keys(this._speakerCandidateSince)) {
             if (peerId !== loudest) delete this._speakerCandidateSince[peerId];
@@ -448,14 +449,63 @@ export class PeerManager {
         return this._activeSpeakerId;
     }
 
+    // Toggles the speaking-ring indicator per peer (including the local user, keyed
+    // by the real peerId — not the 'me' stream-key used elsewhere for video tiles).
+    // Deliberately more responsive/less sticky than _pickActiveSpeaker's hold-time —
+    // a visual ring flickering briefly is cheap, unlike yanking the focused view
+    // around — but still has a short release window so it doesn't blink off between
+    // individual words.
+    //
+    // Uses an adaptive per-peer noise floor rather than one fixed threshold — a flat
+    // threshold reads as "always speaking" for anyone whose mic/room has a higher
+    // self-noise floor than that constant (fan noise, mic gain, open-mic hum with no
+    // push-to-talk), and reads as "never speaking" for someone with a very quiet mic.
+    // The floor tracks each peer's own ambient level and only adapts while they're NOT
+    // currently counted as speaking, so a sustained loud voice doesn't drag its own
+    // floor up and mask itself.
+    // Returns { peerId: boolean } — who's currently counted as speaking, after the
+    // adaptive floor + release-window debounce. This is the single source of truth
+    // both the speaking-ring and _pickActiveSpeaker consume.
+    _updateSpeakingStates(levels, now) {
+        const MARGIN = 0.03;
+        const RELEASE_MS = 400;
+        const FLOOR_ADAPT_UP = 0.02;
+        const FLOOR_ADAPT_DOWN = 0.2;
+
+        const speaking = {};
+        for (const [peerId, level] of Object.entries(levels)) {
+            if (this._noiseFloor[peerId] === undefined) this._noiseFloor[peerId] = level;
+            const floor = this._noiseFloor[peerId];
+            const isSpeech = level > floor + MARGIN;
+
+            if (!isSpeech) {
+                const rate = level > floor ? FLOOR_ADAPT_UP : FLOOR_ADAPT_DOWN;
+                this._noiseFloor[peerId] = floor + (level - floor) * rate;
+            }
+
+            if (isSpeech) this._lastLoudAt[peerId] = now;
+            const isSpeaking = (now - (this._lastLoudAt[peerId] ?? -Infinity)) < RELEASE_MS;
+            speaking[peerId] = isSpeaking;
+
+            if (this._speakingState[peerId] !== isSpeaking) {
+                this._speakingState[peerId] = isSpeaking;
+                if (this.onSpeakingChange) this.onSpeakingChange(peerId, isSpeaking);
+            }
+        }
+        return speaking;
+    }
+
     async _pollActiveSpeaker() {
         const levels = await this._remotePeerLevels();
-        levels.me = this._localMicLevel();
+        if (this.peerId) levels[this.peerId] = this._localMicLevel();
 
-        const remoteLevels = { ...levels };
-        delete remoteLevels.me;
+        const now = Date.now();
+        const speaking = this._updateSpeakingStates(levels, now);
 
-        const speaker = this._pickActiveSpeaker(remoteLevels, Date.now());
+        const remoteSpeaking = { ...speaking };
+        delete remoteSpeaking[this.peerId];
+
+        const speaker = this._pickActiveSpeaker(remoteSpeaking, now);
         if (speaker && this.onActiveSpeakerChange) this.onActiveSpeakerChange(speaker);
     }
 
@@ -470,6 +520,13 @@ export class PeerManager {
         this._activeSpeakerId = null;
         this._speakerCandidateSince = {};
         this._lastSpeakerSwitch = -Infinity;
+
+        for (const [peerId, speaking] of Object.entries(this._speakingState)) {
+            if (speaking && this.onSpeakingChange) this.onSpeakingChange(peerId, false);
+        }
+        this._speakingState = {};
+        this._lastLoudAt = {};
+        this._noiseFloor = {};
     }
 
     async toggleMic() {
