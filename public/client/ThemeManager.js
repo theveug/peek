@@ -1,4 +1,5 @@
 import { initAccent } from './AccentManager.js';
+import { getStoredBackgroundTint, applyBackgroundTint } from './BackgroundManager.js';
 
 function updateIcons(theme) {
     const sun = document.getElementById('theme-sun');
@@ -22,6 +23,7 @@ function apply(theme) {
         document.body.classList.add('dark');
     }
     updateIcons(theme);
+    applyBackgroundTint(getStoredBackgroundTint(), theme === 'light');
 }
 
 // Applies + persists a specific theme. Exported so both the lobby/room

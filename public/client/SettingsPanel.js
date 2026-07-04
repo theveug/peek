@@ -4,6 +4,7 @@
 // design spec's interaction model (see CLAUDE.md's redesign notes).
 import { setTheme, getEffectiveTheme } from './ThemeManager.js';
 import { setAccent, getStoredAccent, accentPresetNames, presetColor } from './AccentManager.js';
+import { setBackgroundTint, getStoredBackgroundTint, bgTintPresetNames, presetBgColor } from './BackgroundManager.js';
 
 export class SettingsPanel {
     // ui/peerManager are optional — on the lobby (pre-room) there's neither, and
@@ -19,6 +20,7 @@ export class SettingsPanel {
         if (!this.modal) return;
 
         this._buildAccentSwatches();
+        this._buildBackgroundSwatches();
         this._wireNav();
         this._wireProfile();
         this._wireAppearance();
@@ -131,6 +133,25 @@ export class SettingsPanel {
         });
     }
 
+    _buildBackgroundSwatches() {
+        const container = document.getElementById('settings-bg-picker');
+        if (!container) return;
+        bgTintPresetNames().forEach(name => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'settings-accent-swatch';
+            btn.title = name.charAt(0).toUpperCase() + name.slice(1);
+            btn.dataset.bg = name;
+            btn.style.background = presetBgColor(name);
+            btn.innerHTML = '<span class="material-symbols-rounded icon-filled">check</span>';
+            btn.addEventListener('click', () => {
+                setBackgroundTint(name, getEffectiveTheme() === 'light');
+                this._refreshAppearance();
+            });
+            container.appendChild(btn);
+        });
+    }
+
     _wireAppearance() {
         this.modal.querySelectorAll('#settings-theme-picker button').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -149,6 +170,11 @@ export class SettingsPanel {
         const currentAccent = getStoredAccent();
         this.modal.querySelectorAll('#settings-accent-picker button').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.accent === currentAccent);
+        });
+
+        const currentBgTint = getStoredBackgroundTint();
+        this.modal.querySelectorAll('#settings-bg-picker button').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.bg === currentBgTint);
         });
     }
 
