@@ -173,8 +173,13 @@ if (fileAttachBtn && fileInput) {
         const files = [...fileInput.files];
         fileInput.value = '';
         ui.addPendingFiles(files);
+        // Pending-attachment chips render in the Chat tab's composer — switch there
+        // so a file picked from the Files tab's dropzone card is actually visible.
+        ui._switchTab('chat');
     });
 }
+
+document.getElementById('files-dropzone-card')?.addEventListener('click', () => fileInput?.click());
 
 document.addEventListener('paste', (e) => {
     if (document.activeElement?.id === 'message' && e.clipboardData.files.length) {
@@ -204,7 +209,7 @@ document.addEventListener('paste', (e) => {
         [1, 2].forEach(n => {
             const input = document.createElement('input');
             input.type = 'text';
-            input.className = 'poll-option-input w-full surface-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500/50';
+            input.className = 'poll-option-input poll-input w-full surface-input rounded-lg px-3 py-2 text-sm';
             input.placeholder = `Option ${n}`;
             optionsList.appendChild(input);
         });
@@ -287,6 +292,8 @@ input.addEventListener('keydown', (e) => {
         sendMessage();
     }
 });
+
+document.getElementById('send-message-btn').addEventListener('click', () => sendMessage());
 
 function sendMessage() {
     const text = input.value.trim();

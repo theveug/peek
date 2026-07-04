@@ -47,16 +47,8 @@ export class UIController {
         const toChat = tab === 'chat';
         document.getElementById('chat-tab-content').classList.toggle('hidden', !toChat);
         document.getElementById('files-tab-content').classList.toggle('hidden', toChat);
-        const chatBtn = document.getElementById('tab-chat');
-        const filesBtn = document.getElementById('tab-files');
-        chatBtn.classList.toggle('border-indigo-500', toChat);
-        chatBtn.classList.toggle('text-foreground', toChat);
-        chatBtn.classList.toggle('border-transparent', !toChat);
-        chatBtn.classList.toggle('text-muted', !toChat);
-        filesBtn.classList.toggle('border-indigo-500', !toChat);
-        filesBtn.classList.toggle('text-foreground', !toChat);
-        filesBtn.classList.toggle('border-transparent', toChat);
-        filesBtn.classList.toggle('text-muted', toChat);
+        document.getElementById('tab-chat').classList.toggle('active', toChat);
+        document.getElementById('tab-files').classList.toggle('active', !toChat);
     }
 
     _addFileToTab(entry) {
@@ -77,7 +69,7 @@ export class UIController {
         const row = document.createElement('div');
         row.className = 'flex items-center gap-3 p-2.5 rounded-lg surface-input';
         row.innerHTML = `
-            <div class="shrink-0 w-8 h-8 rounded flex items-center justify-center bg-white/5 text-muted">${fileIconSvg}</div>
+            <div class="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center file-row-icon">${fileIconSvg}</div>
             <div class="flex-1 min-w-0">
                 <div class="text-sm font-medium truncate">${escapeHtml(entry.fileName)}</div>
                 <div class="text-[10px] text-muted">${escapeHtml(entry.sender)} · ${this._formatFileSize(entry.fileSize)}</div>

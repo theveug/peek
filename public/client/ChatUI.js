@@ -240,7 +240,7 @@ export class ChatUI {
 
         const container = document.createElement('div');
         container.dataset.pollId = pollId;
-        container.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-2"><span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="text-[10px] bg-indigo-600/20 text-indigo-400 px-1.5 py-0.5 rounded-full font-medium leading-none">Poll</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="ml-7"><div class="font-medium mb-3">${escapeHtml(question)}</div><div class="poll-options flex flex-col gap-2"></div><div class="poll-footer text-[10px] text-muted mt-2">0 votes</div></div></div>`;
+        container.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-2"><span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="poll-badge px-1.5 py-0.5 rounded-full font-medium leading-none">Poll</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="ml-7"><div class="font-medium mb-3">${escapeHtml(question)}</div><div class="poll-options flex flex-col gap-2"></div><div class="poll-footer text-[10px] text-muted mt-2">0 votes</div></div></div>`;
 
         this._renderPollOptions(container, pollId);
         chatLog.appendChild(container);
@@ -275,9 +275,9 @@ export class ChatUI {
             const isMyVote = poll.myVote === i;
 
             const btn = document.createElement('button');
-            btn.className = `poll-option relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-left w-full overflow-hidden border transition-colors ${isMyVote ? 'border-indigo-500/70' : 'border-white/10'} ${hasVoted ? 'cursor-default' : 'hover:border-indigo-500/40'}`;
+            btn.className = `poll-option relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-left w-full overflow-hidden border transition-colors ${isMyVote ? 'poll-option-voted' : ''} ${hasVoted ? 'cursor-default' : 'poll-option-hoverable'}`;
             btn.disabled = hasVoted;
-            btn.innerHTML = `<div class="absolute inset-0 bg-indigo-600/20 origin-left transition-transform duration-500" style="transform:scaleX(${pct})"></div><span class="relative z-10 flex-1">${escapeHtml(option)}${isMyVote ? ' <span class="text-indigo-400">✓</span>' : ''}</span><span class="relative z-10 text-[10px] text-muted">${count} ${count === 1 ? 'vote' : 'votes'}</span>`;
+            btn.innerHTML = `<div class="poll-option-fill absolute inset-0 origin-left transition-transform duration-500" style="transform:scaleX(${pct})"></div><span class="relative z-10 flex-1">${escapeHtml(option)}${isMyVote ? ' <span class="poll-option-check">✓</span>' : ''}</span><span class="relative z-10 text-[10px] text-muted">${count} ${count === 1 ? 'vote' : 'votes'}</span>`;
 
             if (!hasVoted) {
                 btn.addEventListener('click', () => {
