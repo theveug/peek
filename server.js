@@ -24,7 +24,10 @@ const useHttps = existsSync(certKey) && existsSync(certFile);
 const server = useHttps
     ? createHttpsServer({ key: readFileSync(certKey), cert: readFileSync(certFile) }, app)
     : createHttpServer(app);
-const wss = new WebSocketServer({ server });
+// Signalling messages are small (SDP offers top out around a few KB) — a large
+// cap would let one peer send a huge broadcast payload the server fans out to
+// every other peer in the room (amplification DoS).
+const wss = new WebSocketServer({ server, maxPayload: 64 * 1024 });
 
 const manager = new SessionManager();
 

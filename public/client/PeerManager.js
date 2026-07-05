@@ -792,7 +792,9 @@ export class PeerManager {
                 const nickname = this.ui._peerNickname(peerId);
                 this.ui.addPollMessage(nickname, msg.pollId, msg.question, msg.options, this.peerId);
             } else if (msg.type === 'poll-vote') {
-                this.ui.updatePollVote(msg.pollId, msg.optionIndex, msg.voterId);
+                // Use the connection's real peerId, not the sender-supplied voterId —
+                // trusting msg.voterId lets any peer cast/overwrite votes as someone else.
+                this.ui.updatePollVote(msg.pollId, msg.optionIndex, peerId);
             } else if (msg.type === 'chat') {
                 this.ui.addChatMessage(this.ui._peerNickname(peerId), msg.text, msg.messageId, msg.replyTo || null);
                 this.ui.updateTypingIndicator(peerId, false);

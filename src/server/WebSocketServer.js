@@ -26,6 +26,14 @@ function generateIceServers(turnConfig) {
 export function setupWebSocket(wss, turnConfig, manager, buildId) {
     const PING_INTERVAL = 30_000;
 
+    // The per-connection failedJoins counter alone isn't enough — it resets on
+    // every new socket, so a script could brute-force passwords 5 at a time by
+    // reconnecting. Track failures per IP too, fixed-window like server.js's
+    // HTTP rateLimit(). In-memory only, cleared wholesale each window.
+    const FAILED_JOIN_LIMIT = 20;
+    const failedJoinsByIp = new Map();
+    const failedJoinsTimer = setInterval(() => failedJoinsByIp.clear(), 10 * 60_000);
+
     const pingTimer = setInterval(() => {
         wss.clients.forEach(ws => {
             if (ws.isAlive === false) return ws.terminate();
@@ -34,9 +42,13 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
         });
     }, PING_INTERVAL);
 
-    wss.on('close', () => clearInterval(pingTimer));
+    wss.on('close', () => {
+        clearInterval(pingTimer);
+        clearInterval(failedJoinsTimer);
+    });
 
-    wss.on('connection', (ws) => {
+    wss.on('connection', (ws, req) => {
+        const ip = req.socket.remoteAddress;
         ws.isAlive = true;
         ws.on('pong', () => { ws.isAlive = true; });
 
@@ -63,8 +75,15 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
                         return;
                     }
 
+                    if ((failedJoinsByIp.get(ip) || 0) >= FAILED_JOIN_LIMIT) {
+                        ws.send(JSON.stringify({ type: 'join-error', reason: 'invalid-password' }));
+                        ws.close();
+                        return;
+                    }
+
                     if (!manager.validatePassword(sessionId, msg.password || null)) {
                         ws.send(JSON.stringify({ type: 'join-error', reason: 'invalid-password' }));
+                        failedJoinsByIp.set(ip, (failedJoinsByIp.get(ip) || 0) + 1);
                         if (++failedJoins >= 5) ws.close();
                         return;
                     }
@@ -115,6 +134,11 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
                 case 'ice-candidate':
                 case 'watch-stream':
                 case 'unwatch-stream': {
+                    // Only relay within the sender's own session — peerIds are global
+                    // (and survive a same-socket room change), so without this any
+                    // client could push signalling at peers in other rooms.
+                    const sessionId = manager.getSessionId(peerId);
+                    if (!sessionId || manager.getSessionId(to) !== sessionId) break;
                     const target = manager.getPeerSocket(to);
                     if (target) {
                         target.send(JSON.stringify({ type, from: peerId, payload }));
@@ -148,6 +172,7 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
                 case 'force-stop-stream': {
                     const sessionId = manager.getSessionId(peerId);
                     if (!manager.isModerator(sessionId, peerId)) break;
+                    if (manager.getSessionId(to) !== sessionId) break;
                     const target = manager.getPeerSocket(to);
                     if (target) {
                         target.send(JSON.stringify({ type: 'force-stop-stream', from: peerId }));
@@ -161,6 +186,7 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
                 case 'kick': {
                     const sessionId = manager.getSessionId(peerId);
                     if (!manager.isCreator(sessionId, peerId)) break;
+                    if (manager.getSessionId(to) !== sessionId) break;
                     const target = manager.getPeerSocket(to);
                     if (target) {
                         target.send(JSON.stringify({ type: 'kicked' }));
