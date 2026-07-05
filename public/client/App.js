@@ -580,7 +580,12 @@ if (membersToggle && membersSidebar) {
     const tab = document.getElementById('toggle-members');
     if (!handle || !panel) return;
     const savedW = localStorage.getItem('membersWidth');
-    if (savedW && !isMobile()) panel.style.width = savedW + 'px';
+    // Applying the saved width unconditionally would set an inline style that beats
+    // the .collapsed class's `width: 0` rule — a panel that was closed before a
+    // refresh would render open (at its old width) while the handle (hidden by the
+    // collapsed-state check above) stayed undraggable, until the toggle button was
+    // clicked to reconcile the two.
+    if (savedW && !isMobile() && !panel.classList.contains('collapsed')) panel.style.width = savedW + 'px';
     let startX, startW;
 
     const startDrag = (e) => {
