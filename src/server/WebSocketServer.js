@@ -110,7 +110,7 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
                         });
                     }
 
-                    manager.addPeer(sessionId, peerId, ws, { password: msg.password || null });
+                    manager.addPeer(sessionId, peerId, ws, { password: msg.password || null, creatorToken: msg.creatorToken || null });
                     const peers = manager.getPeersInSession(sessionId).filter(p => p !== peerId);
 
                     // A claim can flip creatorPeerId/moderatorPeerIds, so this must run

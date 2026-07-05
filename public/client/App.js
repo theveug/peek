@@ -431,7 +431,12 @@ if (mobileBackdrop) {
 }
 
 const chatButton = document.getElementById('togglechat');
+let suppressChatToggle = false;
 chatButton.addEventListener('click', () => {
+    if (suppressChatToggle) {
+        suppressChatToggle = false;
+        return;
+    }
     const chatBox = document.getElementById('chat');
     const handle = document.getElementById('chat-resize-handle');
     if (!chatBox) return;
@@ -469,15 +474,25 @@ if (isMobile()) {
 }
 
 // Resizable chat panel (width persists to localStorage) — desktop only
-(function initChatResize() {
+//
+// The chat-tab pill overlaps the handle by 4px (negative margin, so its rounded
+// corner sits flush against the panel) and sits above it in z-index, which means
+// that entire 4px-wide column is functionally the tab, not the handle — a
+// mousedown there never reaches the handle's own listener. The tab's own
+// mousedown (captured below) checks whether the click landed in that shared
+// column and, if so, starts the same drag instead of letting it become a toggle
+// click.
+function initChatResize() {
     const handle = document.getElementById('chat-resize-handle');
     const chat = document.getElementById('chat');
+    const tab = document.getElementById('togglechat');
     if (!handle || !chat) return;
     const savedW = localStorage.getItem('chatWidth');
     if (savedW && !isMobile()) chat.style.width = savedW + 'px';
+
     let startX, startW;
-    handle.addEventListener('mousedown', (e) => {
-        if (isMobile()) return;
+
+    const startDrag = (e) => {
         e.preventDefault();
         startX = e.clientX;
         startW = chat.offsetWidth;
@@ -498,19 +513,41 @@ if (isMobile()) {
         };
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
+    };
+
+    handle.addEventListener('mousedown', (e) => {
+        if (isMobile()) return;
+        startDrag(e);
     });
-})();
+
+    if (tab) {
+        tab.addEventListener('mousedown', (e) => {
+            if (isMobile()) return;
+            const rect = handle.getBoundingClientRect();
+            if (e.clientX >= rect.left && e.clientX <= rect.right) {
+                suppressChatToggle = true;
+                startDrag(e);
+            }
+        });
+    }
+}
+initChatResize();
 
 // Members sidebar toggle
 const membersToggle = document.getElementById('toggle-members');
 const membersSidebar = document.getElementById('members-sidebar');
 const membersHandle = document.getElementById('members-resize-handle');
+let suppressMembersToggle = false;
 if (membersToggle && membersSidebar) {
     if (!isMobile() && localStorage.getItem('membersHidden') === '1') {
         membersSidebar.classList.add('collapsed');
         if (membersHandle) membersHandle.style.display = 'none';
     }
     membersToggle.addEventListener('click', () => {
+        if (suppressMembersToggle) {
+            suppressMembersToggle = false;
+            return;
+        }
         if (isMobile()) {
             const chatBox = document.getElementById('chat');
             if (chatBox) chatBox.classList.remove('mobile-open');
@@ -532,15 +569,21 @@ if (membersToggle && membersSidebar) {
 }
 
 // Resizable members panel (width persists to localStorage) — desktop only
+//
+// Same members-tab/handle overlap as the chat side (see initChatResize above):
+// the tab's negative margin covers the handle's full 4px width for the tab's
+// height, and sits above it in z-index, so a mousedown there needs to be
+// forwarded into the same drag instead of silently doing nothing.
 (function initMembersResize() {
     const handle = document.getElementById('members-resize-handle');
     const panel = document.getElementById('members-sidebar');
+    const tab = document.getElementById('toggle-members');
     if (!handle || !panel) return;
     const savedW = localStorage.getItem('membersWidth');
     if (savedW && !isMobile()) panel.style.width = savedW + 'px';
     let startX, startW;
-    handle.addEventListener('mousedown', (e) => {
-        if (isMobile()) return;
+
+    const startDrag = (e) => {
         e.preventDefault();
         startX = e.clientX;
         startW = panel.offsetWidth;
@@ -561,7 +604,23 @@ if (membersToggle && membersSidebar) {
         };
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
+    };
+
+    handle.addEventListener('mousedown', (e) => {
+        if (isMobile()) return;
+        startDrag(e);
     });
+
+    if (tab) {
+        tab.addEventListener('mousedown', (e) => {
+            if (isMobile()) return;
+            const rect = handle.getBoundingClientRect();
+            if (e.clientX >= rect.left && e.clientX <= rect.right) {
+                suppressMembersToggle = true;
+                startDrag(e);
+            }
+        });
+    }
 })();
 
 // Close mobile panels on resize to desktop

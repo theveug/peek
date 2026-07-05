@@ -32,20 +32,20 @@
   --bg1: oklch(0.165 0.014 286);
   --bg2: oklch(0.205 0.014 286);
   --bg3: oklch(0.245 0.013 286);
-  --bg4: oklch(0.30 0.015 286);
+  --bg4: oklch(0.3 0.015 286);
   --bg5: oklch(0.36 0.016 286);
   --border: oklch(0.345 0.016 286);
   --input: oklch(0.295 0.014 286);
   --t1: oklch(0.96 0.005 286);
   --t2: oklch(0.75 0.012 286);
-  --t3: oklch(0.60 0.014 286);
-  --accent: oklch(0.70 0.16 286);
+  --t3: oklch(0.6 0.014 286);
+  --accent: oklch(0.7 0.16 286);
   --accentH: oklch(0.76 0.155 286);
-  --accentSoft: oklch(0.70 0.16 286 / 0.18);
-  --accentSoft2: oklch(0.70 0.16 286 / 0.32);
+  --accentSoft: oklch(0.7 0.16 286 / 0.18);
+  --accentSoft2: oklch(0.7 0.16 286 / 0.32);
   --accentText: oklch(0.99 0 0);
-  --green: oklch(0.80 0.17 150);
-  --amber: oklch(0.80 0.14 85);
+  --green: oklch(0.8 0.17 150);
+  --amber: oklch(0.8 0.14 85);
   --red: oklch(0.66 0.21 25);
 }
 
@@ -74,12 +74,12 @@ body.light {
   --bg2: oklch(0.955 0.009 286);
   --bg3: oklch(0.995 0.003 286);
   --bg4: oklch(0.945 0.012 286);
-  --bg5: oklch(0.90 0.014 286);
+  --bg5: oklch(0.9 0.014 286);
   --border: oklch(0.89 0.013 286);
   --input: oklch(0.965 0.008 286);
   --t1: oklch(0.27 0.02 286);
   --t2: oklch(0.46 0.018 286);
-  --t3: oklch(0.60 0.016 286);
+  --t3: oklch(0.6 0.016 286);
   --green: oklch(0.66 0.16 150);
   --amber: oklch(0.72 0.14 85);
   --red: oklch(0.58 0.21 25);
@@ -210,7 +210,7 @@ html,
 body {
   height: 100%;
   max-height: 100%;
-  font-family: 'Public Sans', ui-sans-serif, system-ui, sans-serif;
+  font-family: "Public Sans", ui-sans-serif, system-ui, sans-serif;
   /* The animated gradient canvas used to be the only thing painting a page
      background — nothing else ever declared one. Now that it's removed
      (Phase 4), this is the actual base color behind the stage/lobby. */
@@ -218,7 +218,7 @@ body {
 }
 
 .font-mono-app {
-  font-family: 'Fira Code', ui-monospace, monospace;
+  font-family: "Fira Code", ui-monospace, monospace;
 }
 
 body:hover #controls {
@@ -818,7 +818,9 @@ a.link-preview:hover {
   font-weight: 700;
   background: transparent;
   color: var(--t3);
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .panel-tab-btn.active {
@@ -932,7 +934,7 @@ a.link-preview:hover {
 }
 
 .files-dropzone-sub {
-  font-family: 'Fira Code', ui-monospace, monospace;
+  font-family: "Fira Code", ui-monospace, monospace;
   font-size: 10.5px;
   margin-top: 3px;
 }
@@ -1029,7 +1031,7 @@ a.link-preview:hover {
 
 .chat-markdown code {
   color: var(--chat-code-fg);
-  font-family: 'Fira Code', Menlo, Monaco, Consolas, monospace;
+  font-family: "Fira Code", Menlo, Monaco, Consolas, monospace;
 }
 
 .copy-btn {
@@ -1062,7 +1064,7 @@ a.link-preview:hover {
 
 .chat-resize-handle:hover,
 .chat-resize-handle.active {
-  background: oklch(51.1% 0.262 276.966);
+  background: var(--accent);
 }
 
 /* ===== Members sidebar ===== */
@@ -1099,12 +1101,7 @@ a.link-preview:hover {
 
 .members-resize-handle:hover,
 .members-resize-handle.active {
-  background: oklch(51.1% 0.262 276.966);
-}
-
-body.light .members-resize-handle:hover,
-body.light .members-resize-handle.active {
-  background: oklch(58.5% 0.233 277.117);
+  background: var(--accent);
 }
 
 /* ===== Panel toggle tabs ===== */
@@ -1114,7 +1111,7 @@ body.light .members-resize-handle.active {
   align-items: center;
   justify-content: center;
   position: relative;
-  width: 20px;
+  width: 32px;
   height: 56px;
   flex-shrink: 0;
   z-index: 65;
@@ -1134,7 +1131,7 @@ body.light .panel-tab:hover {
 }
 
 .chat-tab {
-  margin-left: -10px;
+  margin-left: -4px;
   border-radius: 0 10px 10px 0;
   border-left: none !important;
 }
@@ -1146,7 +1143,7 @@ body.light .panel-tab:hover {
 }
 
 .members-tab {
-  margin-right: -10px;
+  margin-right: -4px;
   border-radius: 10px 0 0 10px;
   border-right: none !important;
 }
@@ -1446,12 +1443,6 @@ body.light .panel-tab:hover {
   background: var(--scrollbar-hover);
 }
 
-/* ===== Light mode control hover ===== */
-body.light .chat-resize-handle:hover,
-body.light .chat-resize-handle.active {
-  background: oklch(58.5% 0.233 277.117);
-}
-
 /* ===== Theme transition ===== */
 body,
 .surface-input,
@@ -1468,7 +1459,7 @@ body,
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 79;
+  z-index: 9;
 }
 
 .mobile-backdrop.active {
@@ -1622,7 +1613,7 @@ body,
 }
 
 .grid-tile-paused-sub {
-  font-family: 'Fira Code', ui-monospace, monospace;
+  font-family: "Fira Code", ui-monospace, monospace;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.6);
 }
@@ -1653,15 +1644,20 @@ body,
 }
 
 @keyframes focusLiveDot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 .focus-quality-caption {
   position: absolute;
   bottom: 14px;
   left: 14px;
-  font-family: 'Fira Code', ui-monospace, monospace;
+  font-family: "Fira Code", ui-monospace, monospace;
   font-size: 11.5px;
   color: rgba(255, 255, 255, 0.85);
   background: rgba(0, 0, 0, 0.4);
@@ -1735,7 +1731,7 @@ body,
   position: absolute;
   bottom: 2px;
   right: 2px;
-  font-family: 'Fira Code', ui-monospace, monospace;
+  font-family: "Fira Code", ui-monospace, monospace;
   font-size: 8px;
   font-weight: 600;
   background: var(--bg2);
@@ -1818,7 +1814,9 @@ body,
   margin-bottom: 2px;
   font-size: 14.5px;
   font-weight: 600;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .settings-nav-item:hover {
@@ -1955,7 +1953,9 @@ body,
   font-weight: 600;
   background: transparent;
   color: var(--t2);
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .settings-segmented button.active {
@@ -1984,7 +1984,9 @@ body,
 }
 
 .settings-accent-swatch.active {
-  box-shadow: 0 0 0 3px var(--bg3), 0 0 0 5px var(--accent);
+  box-shadow:
+    0 0 0 3px var(--bg3),
+    0 0 0 5px var(--accent);
 }
 
 .settings-accent-swatch .material-symbols-rounded {
@@ -2071,7 +2073,7 @@ body,
 }
 
 .settings-switch-track::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 3px;
   left: 3px;
@@ -2136,7 +2138,7 @@ body,
   font-size: 14px;
   text-align: center;
   cursor: pointer;
-  font-family: 'Fira Code', monospace;
+  font-family: "Fira Code", monospace;
 }
 
 @media (max-width: 767px) {
@@ -2545,8 +2547,15 @@ body,
 }
 
 @keyframes lobbyGlowPulse {
-  0%, 100% { transform: scale(1); opacity: 0.7; }
-  50% { transform: scale(1.15); opacity: 1; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
 }
 
 .lobby-shell {
@@ -2567,7 +2576,9 @@ body,
   color: var(--t3);
   padding: 8px;
   border-radius: 10px;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .lobby-icon-btn:hover {
@@ -2747,7 +2758,9 @@ body,
   font-weight: 700;
   cursor: pointer;
   border: none;
-  transition: filter 0.15s, background 0.15s;
+  transition:
+    filter 0.15s,
+    background 0.15s;
 }
 
 .lobby-btn-primary {
@@ -2920,7 +2933,9 @@ body,
   color: var(--t3);
   padding: 4px;
   border-radius: 8px;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .lobby-recent-remove:hover {
@@ -3070,8 +3085,15 @@ body,
 }
 
 @keyframes topbarLivePulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in oklch, var(--green) 50%, transparent); }
-  50% { opacity: 0.8; box-shadow: 0 0 0 4px transparent; }
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--green) 50%, transparent);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 4px transparent;
+  }
 }
 
 .topbar-latency-wrap {
@@ -3113,7 +3135,9 @@ body,
   justify-content: center;
   color: var(--t2);
   flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .topbar-icon-btn:hover {

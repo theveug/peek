@@ -16,12 +16,20 @@ export class SessionManager {
 
     // `password` only applies when the join lazily recreates a dead session — a saved
     // password-protected room recreated this way keeps its protection instead of
-    // silently coming back passwordless. Lazily recreated rooms have no creatorToken
-    // (nobody went through /api/create-room for this instance), so they start with
-    // no moderator — same spirit as losing the room name in this path.
-    addPeer(sessionId, peerId, socket, { password = null } = {}) {
+    // silently coming back passwordless. `creatorToken` gets the same treatment: if the
+    // very first joiner of a lazily-recreated session presents one (this happens when
+    // the whole server process restarts — a dev deploy, a crash-restart — which wipes
+    // every in-memory session, including ones that *did* go through /api/create-room),
+    // it's adopted as that session's creatorToken so claimModerator() (called right
+    // after this, in WebSocketServer.js's 'join' case) can succeed and the original
+    // creator doesn't lose their crown just because the process happened to restart
+    // between their disconnect and reconnect. Safe because the token is an unguessable
+    // secret the client already held — only whoever legitimately created the room (or
+    // wins the race to reconnect first after a restart, same trust level as recreating
+    // a saved room today) can supply one that matches on a later claim.
+    addPeer(sessionId, peerId, socket, { password = null, creatorToken = null } = {}) {
         if (!this.sessions.has(sessionId)) {
-            this.sessions.set(sessionId, { peers: new Set(), name: null, password, maxPeers: 6, createdAt: Date.now(), creatorToken: null, creatorPeerId: null, moderatorPeerIds: new Set() });
+            this.sessions.set(sessionId, { peers: new Set(), name: null, password, maxPeers: 6, createdAt: Date.now(), creatorToken, creatorPeerId: null, moderatorPeerIds: new Set() });
         }
         this.sessions.get(sessionId).peers.add(peerId);
         this.peerMap.set(peerId, { sessionId, socket });
