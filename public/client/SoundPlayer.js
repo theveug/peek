@@ -15,7 +15,14 @@ function unlockAudio() {
     if (audioUnlocked) return;
     Object.values(Sounds).forEach(s => {
         if (s instanceof Audio) {
-            s.play().then(() => s.pause()).catch(() => {});
+            s.muted = true;
+            s.play().then(() => {
+                s.pause();
+                s.currentTime = 0;
+                s.muted = false;
+            }).catch(() => {
+                s.muted = false;
+            });
         }
     });
     audioUnlocked = true;
