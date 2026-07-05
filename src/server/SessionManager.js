@@ -1,4 +1,6 @@
 // --- src/server/SessionManager.js ---
+import { timingSafeEqual } from 'crypto';
+
 export class SessionManager {
     constructor() {
         this.sessions = new Map(); // sessionId -> { peers: Set, name, password }
@@ -52,6 +54,7 @@ export class SessionManager {
     promoteModerator(sessionId, requesterPeerId, targetPeerId) {
         const s = this.sessions.get(sessionId);
         if (!s || s.creatorPeerId !== requesterPeerId) return false;
+        if (!s.peers.has(targetPeerId)) return false; // target must be in this room
         s.moderatorPeerIds.add(targetPeerId);
         return true;
     }
@@ -113,7 +116,14 @@ export class SessionManager {
         const s = this.sessions.get(sessionId);
         if (!s) return true;
         if (!s.password) return true;
-        return s.password === password;
+        if (typeof password !== 'string') return false;
+        const expected = Buffer.from(s.password);
+        const given = Buffer.from(password);
+        // Constant-time compare so response timing doesn't leak how much of a
+        // guess matched. timingSafeEqual requires equal lengths, so a length
+        // mismatch short-circuits — that only leaks the password's length.
+        if (expected.length !== given.length) return false;
+        return timingSafeEqual(expected, given);
     }
 
     getPeersInSession(sessionId) {
