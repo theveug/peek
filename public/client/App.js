@@ -317,7 +317,7 @@ function sendMessage() {
         const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
         const reply = ui.getReplyTo();
         peerManager.broadcastChat(text, nickname, messageId, reply || null);
-        ui.addChatMessage('Me', text, messageId, reply);
+        ui.addChatMessage('Me', text, messageId, reply, true);
         ui.clearReply();
         input.value = '';
     }

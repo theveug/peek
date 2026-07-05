@@ -6,7 +6,11 @@ function generateIceServers(turnConfig) {
     const servers = [{ urls: 'stun:stun.l.google.com:19302' }];
 
     if (turnConfig) {
-        const ttl = 24 * 60 * 60;
+        // Short-lived on purpose: these creds let the holder relay arbitrary
+        // traffic through our TURN server, and anyone who joins any room once
+        // receives a set. 2h covers any real session without leaving a wide
+        // free-relay window open per join.
+        const ttl = 2 * 60 * 60;
         const expiry = Math.floor(Date.now() / 1000) + ttl;
         const username = `${expiry}:peek`;
         const credential = createHmac('sha1', turnConfig.secret)

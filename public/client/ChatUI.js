@@ -9,7 +9,7 @@ export class ChatUI {
         this._reactions = new Map();
         this._onReaction = null;
         this._replyTo = null;
-        this._polls = {};
+        this._polls = new Map(); // keyed by peer-supplied pollId — Map, not {}, so a "__proto__" id can't poison lookups
         this.onPollVote = null;
     }
 
@@ -186,7 +186,7 @@ export class ChatUI {
     }
 
     addReaction(messageId, emoji, nickname, fromPeerId) {
-        const msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
+        const msgEl = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
         if (!msgEl) return;
         const bar = msgEl.querySelector('.reaction-bar');
         if (!bar) return;
@@ -233,10 +233,10 @@ export class ChatUI {
         const color = isSelf ? '#22c55e' : this._colorForName(sender);
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        this._polls[pollId] = {
+        this._polls.set(pollId, {
             question, options, myPeerId, myVote: null,
             votes: Object.fromEntries(options.map((_, i) => [i, new Set()])),
-        };
+        });
 
         const container = document.createElement('div');
         container.dataset.pollId = pollId;
@@ -249,17 +249,20 @@ export class ChatUI {
     }
 
     updatePollVote(pollId, optionIndex, voterId) {
-        const poll = this._polls[pollId];
+        const poll = this._polls.get(pollId);
         if (!poll) return;
+        // optionIndex is peer-supplied — reject anything that isn't a real option
+        // slot before using it to index into poll.votes.
+        if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= poll.options.length) return;
         for (const set of Object.values(poll.votes)) set.delete(voterId);
         if (poll.votes[optionIndex]) poll.votes[optionIndex].add(voterId);
         if (voterId === poll.myPeerId) poll.myVote = optionIndex;
-        const container = document.querySelector(`[data-poll-id="${pollId}"]`);
+        const container = document.querySelector(`[data-poll-id="${CSS.escape(pollId)}"]`);
         if (container) this._renderPollOptions(container, pollId);
     }
 
     _renderPollOptions(container, pollId) {
-        const poll = this._polls[pollId];
+        const poll = this._polls.get(pollId);
         if (!poll) return;
         const optionsEl = container.querySelector('.poll-options');
         const footerEl = container.querySelector('.poll-footer');
@@ -434,7 +437,10 @@ export class ChatUI {
         return this._chatAvatarColors[Math.abs(hash) % this._chatAvatarColors.length];
     }
 
-    addChatMessage(sender, text, messageId, replyData) {
+    // isSelf is passed explicitly by the caller (true only for the local echo) —
+    // don't infer it from `sender === 'Me'`, or a remote peer who sets their
+    // nickname to "Me" would render with the local user's own self-styling.
+    addChatMessage(sender, text, messageId, replyData, isSelf = false) {
         const chatLog = document.getElementById('chat-log');
         const msgContainer = document.createElement('div');
         if (!messageId) messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
@@ -442,7 +448,6 @@ export class ChatUI {
 
         const raw = DOMPurify.sanitize(marked.parse(text));
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const isSelf = sender === 'Me';
         const initial = isSelf ? (localStorage.getItem('nickname') || 'Me').charAt(0).toUpperCase() : sender.charAt(0).toUpperCase();
         const color = isSelf ? '#22c55e' : this._colorForName(sender);
 
@@ -458,7 +463,7 @@ export class ChatUI {
         const replyQuote = msgContainer.querySelector('.chat-reply-quote');
         if (replyQuote) {
             replyQuote.addEventListener('click', () => {
-                const target = document.querySelector(`[data-message-id="${replyQuote.dataset.replyTo}"]`);
+                const target = document.querySelector(`[data-message-id="${CSS.escape(replyQuote.dataset.replyTo)}"]`);
                 if (target) {
                     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     target.querySelector('.chat-message')?.classList.add('chat-message-highlight');
