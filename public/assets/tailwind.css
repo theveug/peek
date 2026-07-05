@@ -1105,20 +1105,25 @@ a.link-preview:hover {
 }
 
 /* ===== Panel toggle tabs ===== */
+/* Tabs overlay the stage's edges (children of #videos, which is the
+   position:relative stacking context) instead of sitting in the flex row as
+   their own column — they shouldn't cost the layout 32px of width just to
+   host a toggle button. */
 .panel-tab {
-  align-self: center;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
   width: 32px;
   height: 56px;
-  flex-shrink: 0;
-  z-index: 65;
+  z-index: 20;
   color: var(--color-muted);
   cursor: pointer;
   background: var(--bg3);
   border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .panel-tab:hover {
@@ -1131,27 +1136,15 @@ body.light .panel-tab:hover {
 }
 
 .chat-tab {
-  margin-left: -4px;
+  left: 0;
   border-radius: 0 10px 10px 0;
   border-left: none !important;
 }
 
-/* Chat panel gone (hidden) — the tab has nothing left to overlap, so don't
-   pull it partway off-screen. */
-#chat.hidden ~ .chat-tab {
-  margin-left: 0;
-}
-
 .members-tab {
-  margin-right: -4px;
+  right: 0;
   border-radius: 10px 0 0 10px;
   border-right: none !important;
-}
-
-/* Members panel gone (collapsed) — same reasoning, mirrored; .members-tab
-   precedes #members-sidebar in the DOM so :has() is needed to look ahead. */
-.members-tab:has(~ #members-sidebar.collapsed) {
-  margin-right: 0;
 }
 
 /* ===== Participant card ===== */
