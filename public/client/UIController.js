@@ -440,7 +440,7 @@ export class UIController {
         const micEnabled = this._micEnabled?.[actualPeerId] ?? false;
 
         const cell = document.createElement('div');
-        cell.className = 'grid-tile relative overflow-hidden cursor-pointer bg-black flex items-center justify-center';
+        cell.className = 'grid-tile relative overflow-hidden cursor-pointer bg-black flex items-center justify-center min-h-0 min-w-0';
         cell.dataset.peerId = peerId;
 
         const label = document.createElement('div');
