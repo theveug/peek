@@ -21,7 +21,11 @@ export class PeerManager {
         this.moderatorPeerIds = new Set();
         this.onForceStopped = null; // set by App.js — keeps share/cam button icons in sync
         this.isSharing = false;
-        this.iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+        // Placeholder until the server's 'init' supplies the real list (built
+        // from the deployment's STUN_URL/TURN env config). Deliberately empty,
+        // not a public-STUN fallback — no third party should see call metadata
+        // by default, and on a LAN host candidates alone connect fine.
+        this.iceServers = [];
         this.micStream = null;
         this.micEnabled = false;
         this.deafened = false;

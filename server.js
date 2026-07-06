@@ -35,10 +35,18 @@ const turnConfig = (process.env.TURN_URL && process.env.TURN_SECRET)
     ? { url: process.env.TURN_URL, secret: process.env.TURN_SECRET }
     : null;
 
+// Optional public STUN for internet deployments without TURN. Deliberately no
+// hardcoded default (this used to be Google's STUN): a third-party server
+// seeing every participant's IP on every call cut against the privacy ethos,
+// and on a LAN host candidates suffice with no STUN/TURN at all.
+const stunUrl = process.env.STUN_URL || null;
+
 if (turnConfig) {
     Debug.log('TURN server configured:', turnConfig.url);
+} else if (stunUrl) {
+    Debug.log('STUN server configured:', stunUrl);
 } else {
-    Debug.log('No TURN server configured — STUN only');
+    Debug.log('No STUN/TURN configured — direct/LAN candidates only');
 }
 
 // Identifies this running process to connected clients so they can tell when
@@ -47,7 +55,7 @@ if (turnConfig) {
 const APP_VERSION = process.env.APP_VERSION || '0.0.0';
 const BUILD_ID = `${APP_VERSION}-${Date.now()}`;
 
-setupWebSocket(wss, turnConfig, manager, BUILD_ID);
+setupWebSocket(wss, { turnConfig, stunUrl }, manager, BUILD_ID);
 
 function generateUniqueShortCode(length = 5) {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -78,6 +86,46 @@ function rateLimit(windowMs, max) {
 
 // Sessions created via /api/create-room that nobody ever joins would otherwise live forever.
 setInterval(() => manager.sweepEmptySessions(10 * 60_000), 60_000).unref();
+
+// Behind a reverse proxy (nginx/caddy/cloudflared), req.ip is the proxy's
+// address unless Express is told to trust X-Forwarded-For — which would make
+// the per-IP rate limits one shared bucket for every visitor. Opt-in only
+// (TRUST_PROXY=1 for one hop, or any value Express's 'trust proxy' accepts):
+// trusting the header with no proxy in front lets clients spoof their IP.
+const TRUST_PROXY = process.env.TRUST_PROXY || null;
+if (TRUST_PROXY) {
+    app.set('trust proxy', TRUST_PROXY === '1' || TRUST_PROXY === 'true' ? 1 : TRUST_PROXY);
+}
+
+// Security headers on every response. script-src is a strict 'self' — all
+// third-party libs are self-hosted (public/assets/vendor) and both pages'
+// former inline scripts are external files now (lobby.js, markdown-setup.js),
+// so nothing needs 'unsafe-inline'. style-src keeps 'unsafe-inline' because
+// the redesign leans on inline style="" attributes (see CLAUDE.md). connect-src
+// lists ws:/wss: explicitly since not every browser lets 'self' cover the
+// scheme change to the signalling socket; img-src allows blob: for received
+// file-image previews. Any new external resource will be blocked until it's
+// self-hosted — that's the point.
+app.use((req, res, next) => {
+    res.setHeader('Content-Security-Policy', [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' blob: data:",
+        "media-src 'self' blob:",
+        "connect-src 'self' ws: wss:",
+        "font-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ].join('; '));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), display-capture=(self), geolocation=()');
+    next();
+});
 
 app.use(express.json());
 app.use('/assets', express.static(path.join(__dirname, 'public/assets')));

@@ -2,8 +2,18 @@
 import { v4 as uuidv4 } from 'uuid';
 import { createHmac } from 'crypto';
 
-function generateIceServers(turnConfig) {
-    const servers = [{ urls: 'stun:stun.l.google.com:19302' }];
+// No hardcoded public STUN (this used to default to Google's) — every
+// participant's IP pinging a third party on each call cut against the
+// privacy ethos, and on a disconnected LAN host candidates alone are enough
+// for the mesh to form. STUN_URL is opt-in for internet deployments without
+// TURN; a TURN allocation already yields the server-reflexive candidate, so
+// TURN deployments don't need a separate STUN entry either.
+function generateIceServers({ turnConfig, stunUrl }) {
+    const servers = [];
+
+    if (stunUrl) {
+        servers.push({ urls: stunUrl });
+    }
 
     if (turnConfig) {
         // Short-lived on purpose: these creds let the holder relay arbitrary
@@ -27,7 +37,7 @@ function generateIceServers(turnConfig) {
     return servers;
 }
 
-export function setupWebSocket(wss, turnConfig, manager, buildId) {
+export function setupWebSocket(wss, iceConfig, manager, buildId) {
     const PING_INTERVAL = 30_000;
 
     // The per-connection failedJoins counter alone isn't enough — it resets on
@@ -51,8 +61,14 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
         clearInterval(failedJoinsTimer);
     });
 
+    // Mirrors Express's TRUST_PROXY opt-in (server.js) for the WS-side per-IP
+    // throttle — without it, behind a reverse proxy every client shares the
+    // proxy's address and one brute-forcer locks everyone out of password joins.
+    const trustProxy = !!process.env.TRUST_PROXY;
+
     wss.on('connection', (ws, req) => {
-        const ip = req.socket.remoteAddress;
+        const forwardedFor = trustProxy ? req.headers['x-forwarded-for'] : null;
+        const ip = forwardedFor ? String(forwardedFor).split(',')[0].trim() : req.socket.remoteAddress;
         ws.isAlive = true;
         ws.on('pong', () => { ws.isAlive = true; });
 
@@ -68,7 +84,7 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
                 return;
             }
 
-            const { type, sessionId, to, payload, text, messageId } = msg;
+            const { type, sessionId, to, payload } = msg;
 
             switch (type) {
                 case 'join': {
@@ -118,7 +134,7 @@ export function setupWebSocket(wss, turnConfig, manager, buildId) {
                     const claimedModerator = msg.creatorToken ? manager.claimModerator(sessionId, peerId, msg.creatorToken) : false;
                     const meta = manager.getSessionMeta(sessionId);
 
-                    const iceServers = generateIceServers(turnConfig);
+                    const iceServers = generateIceServers(iceConfig);
                     ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, creatorPeerId: meta?.creatorPeerId || null, moderatorPeerIds: meta?.moderatorPeerIds || [], buildId }));
 
                     peers.forEach(pid => {
