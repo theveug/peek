@@ -1296,7 +1296,7 @@ export class UIController {
     updateMicModeBadge(micMode) {
         const badge = document.getElementById('mic-mode-badge');
         if (!badge) return;
-        const labels = { 'push-to-talk': 'PTT', 'push-to-mute': 'PTM' };
+        const labels = { 'push-to-talk': 'PTT', 'push-to-mute': 'PTM', 'voice-activity': 'VA' };
         const text = labels[micMode];
         badge.textContent = text || '';
         badge.classList.toggle('hidden', !text);

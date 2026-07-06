@@ -663,6 +663,7 @@
                                     <button type="button" data-mic-mode="toggle" style="flex:1;justify-content:center;">Toggle</button>
                                     <button type="button" data-mic-mode="push-to-talk" style="flex:1;justify-content:center;">Push to Talk</button>
                                     <button type="button" data-mic-mode="push-to-mute" style="flex:1;justify-content:center;">Push to Mute</button>
+                                    <button type="button" data-mic-mode="voice-activity" style="flex:1;justify-content:center;">Voice Activity</button>
                                 </div>
                             </div>
                             <div id="keybind-row" class="settings-field hidden">
@@ -672,6 +673,11 @@
                                     <button type="button" id="keybind-clear" class="text-xs text-muted hover:text-foreground px-2 py-1">&times;</button>
                                 </div>
                                 <p class="text-[10px] text-muted mt-1">Click the field, then press the key you want to bind.</p>
+                            </div>
+                            <div id="mic-threshold-row" class="settings-field hidden">
+                                <label for="settings-mic-threshold" class="settings-label">Mic sensitivity — <span id="settings-mic-threshold-value">Medium</span></label>
+                                <input id="settings-mic-threshold" type="range" min="0.01" max="0.1" step="0.01" class="w-full" />
+                                <p class="text-[10px] text-muted mt-1">Only transmits while you're speaking above this level — lower is more sensitive.</p>
                             </div>
                         </div>
 

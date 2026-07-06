@@ -494,7 +494,12 @@ export class PeerManager {
     // adaptive floor + release-window debounce. This is the single source of truth
     // both the speaking-ring and _pickActiveSpeaker consume.
     _updateSpeakingStates(levels, now) {
-        const MARGIN = 0.03;
+        // User-adjustable via Settings' "Mic sensitivity" slider (voice-activity
+        // mode only, but this one constant drives speech detection for every
+        // peer as computed locally, so it also subtly tunes how sensitive
+        // everyone else's speaking-ring looks on this client — a harmless,
+        // local-only side effect).
+        const MARGIN = parseFloat(typeof localStorage !== 'undefined' ? localStorage.getItem('micThreshold') : null) || 0.03;
         const RELEASE_MS = 400;
         const FLOOR_ADAPT_UP = 0.02;
         const FLOOR_ADAPT_DOWN = 0.2;
@@ -529,11 +534,39 @@ export class PeerManager {
         const now = Date.now();
         const speaking = this._updateSpeakingStates(levels, now);
 
+        if (this.peerId) this._reconcileMicGate(!!speaking[this.peerId]);
+
         const remoteSpeaking = { ...speaking };
         delete remoteSpeaking[this.peerId];
 
         const speaker = this._pickActiveSpeaker(remoteSpeaking, now);
         if (speaker && this.onActiveSpeakerChange) this.onActiveSpeakerChange(speaker);
+    }
+
+    // Voice-activity mode gates actual transmission on the speaking signal
+    // above, rather than only driving the cosmetic speaking-ring — so the mic
+    // isn't "locked open" the moment it's toggled on. Uses replaceTrack(null)
+    // on each connection's mic sender (the same pause primitive
+    // setSenderPaused uses for video) rather than track.enabled, since the
+    // track is shared with _localMicLevel()'s analyser — disabling the track
+    // itself would silence that too and the gate could never reopen.
+    // Outside voice-activity mode (or while muted via the mic toggle), always
+    // reconciles back to the live track, so switching mic modes can't leave a
+    // sender stuck gated closed from a prior voice-activity session.
+    _reconcileMicGate(speakingLocally) {
+        const micMode = (typeof localStorage !== 'undefined' && localStorage.getItem('micMode')) || 'toggle';
+        const shouldTransmit = micMode !== 'voice-activity' || !this.micEnabled || speakingLocally;
+
+        // Reconciled unconditionally (not just on a state change) so a sender
+        // added mid-gate — e.g. a new peer joining while voice-activity has the
+        // gate closed — is brought in line on the very next 200ms tick rather
+        // than being stuck open until the next actual speaking transition.
+        // replaceTrack with the track it's already carrying is a cheap no-op.
+        const liveTrack = this.micStream?.getAudioTracks()[0] || null;
+        for (const peerId of Object.keys(this.senders)) {
+            const sender = this.senders[peerId]?.['mic-audio'];
+            if (sender) sender.replaceTrack(shouldTransmit ? liveTrack : null).catch(() => {});
+        }
     }
 
     _startSpeakerPolling() {
@@ -560,11 +593,10 @@ export class PeerManager {
         if (!this.micStream) {
             try {
                 this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const audioTrack = this.micStream.getAudioTracks()[0];
                 this.micEnabled = true;
 
                 for (const [peerId, pc] of Object.entries(this.peers)) {
-                    pc.addTrack(audioTrack, this.micStream);
+                    this._addTrackedStream(pc, peerId, this.micStream, 'mic');
                     const offer = await pc.createOffer();
                     await pc.setLocalDescription(offer);
                     this.send('offer', peerId, offer);
@@ -1009,7 +1041,7 @@ export class PeerManager {
         }
 
         if (this.micStream) {
-            this.micStream.getTracks().forEach(track => pc.addTrack(track, this.micStream));
+            this._addTrackedStream(pc, peerId, this.micStream, 'mic');
         } else {
             pc.addTransceiver('audio', { direction: 'recvonly' });
         }
@@ -1041,7 +1073,7 @@ export class PeerManager {
         if (this.micStream) {
             const hasAudioSender = pc.getSenders().some(s => s.track && s.track.kind === 'audio');
             if (!hasAudioSender) {
-                this.micStream.getTracks().forEach(track => pc.addTrack(track, this.micStream));
+                this._addTrackedStream(pc, from, this.micStream, 'mic');
             }
         }
 

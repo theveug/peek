@@ -260,6 +260,12 @@ export class SettingsPanel {
             });
         });
 
+        const micThreshold = document.getElementById('settings-mic-threshold');
+        micThreshold?.addEventListener('input', (e) => {
+            localStorage.setItem('micThreshold', e.target.value);
+            this._updateMicThresholdLabel(parseFloat(e.target.value));
+        });
+
         const keybindInput = document.getElementById('settings-keybind');
         if (keybindInput) {
             keybindInput.addEventListener('click', () => {
@@ -299,10 +305,24 @@ export class SettingsPanel {
             b.classList.toggle('active', b.dataset.micMode === micMode);
         });
         const keybindRow = document.getElementById('keybind-row');
-        if (keybindRow) keybindRow.classList.toggle('hidden', micMode === 'toggle');
+        if (keybindRow) keybindRow.classList.toggle('hidden', micMode !== 'push-to-talk' && micMode !== 'push-to-mute');
         const keybindInput = document.getElementById('settings-keybind');
         if (keybindInput) keybindInput.value = localStorage.getItem('micKeybind') || '';
+
+        const thresholdRow = document.getElementById('mic-threshold-row');
+        if (thresholdRow) thresholdRow.classList.toggle('hidden', micMode !== 'voice-activity');
+        const threshold = parseFloat(localStorage.getItem('micThreshold')) || 0.03;
+        const thresholdInput = document.getElementById('settings-mic-threshold');
+        if (thresholdInput) thresholdInput.value = String(threshold);
+        this._updateMicThresholdLabel(threshold);
+
         this.ui?.updateMicModeBadge?.(micMode);
+    }
+
+    _updateMicThresholdLabel(threshold) {
+        const label = document.getElementById('settings-mic-threshold-value');
+        if (!label) return;
+        label.textContent = threshold <= 0.02 ? 'High' : threshold <= 0.06 ? 'Medium' : 'Low';
     }
 
     _refreshAudio() {
