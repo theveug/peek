@@ -1006,6 +1006,13 @@ export class UIController {
             const tile = this.gridView?.querySelector(`[data-peer-id="${key}"]`);
             if (tile) tile.classList.toggle('status-talking', speaking);
         });
+        // Local user also gets the ring on their own top-bar avatar — you can't
+        // hear your own mic, so this is the only feedback that voice-activity
+        // mode is (or isn't) actually transmitting right now, useful for
+        // diagnosing a sensitivity threshold that's too high/low for the room.
+        if (peerId === this.selfPeerId) {
+            document.getElementById('topbar-identity-avatar')?.classList.toggle('status-talking', speaking);
+        }
     }
 
     _updateGridMicIcon(peerId, enabled) {
