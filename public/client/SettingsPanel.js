@@ -401,6 +401,38 @@ export class SettingsPanel {
         document.getElementById('settings-auto-accept-files')?.addEventListener('change', (e) => {
             localStorage.setItem('autoAcceptFiles', e.target.checked ? '1' : '0');
         });
+
+        // No confirm-before-destructive-action pattern exists elsewhere in the
+        // app to reuse (removing a saved room / kicking a peer both fire
+        // immediately) — this is a two-step "click again to confirm" button
+        // rather than a native confirm() dialog, to stay in the app's own
+        // visual language instead of a jarring native popup.
+        const clearBtn = document.getElementById('settings-clear-data');
+        if (clearBtn) {
+            const defaultLabel = clearBtn.textContent;
+            let confirming = false;
+            let resetTimer = null;
+
+            clearBtn.addEventListener('click', () => {
+                if (!confirming) {
+                    confirming = true;
+                    clearBtn.textContent = 'Click again to confirm';
+                    clearBtn.classList.add('confirming');
+                    resetTimer = setTimeout(() => {
+                        confirming = false;
+                        clearBtn.textContent = defaultLabel;
+                        clearBtn.classList.remove('confirming');
+                    }, 4000);
+                    return;
+                }
+
+                clearTimeout(resetTimer);
+                localStorage.clear();
+                clearBtn.textContent = 'Cleared — reloading...';
+                this.ui?.showToast?.('Local data cleared', 'info');
+                setTimeout(() => window.location.reload(), 600);
+            });
+        }
     }
 
     _refreshPrivacy() {

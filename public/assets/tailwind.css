@@ -2156,6 +2156,30 @@ body,
   transform: translateX(18px);
 }
 
+.settings-danger-btn {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: 9px;
+  background: transparent;
+  border: 1px solid var(--red);
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-danger-btn:hover {
+  background: var(--red);
+  color: #fff;
+}
+
+.settings-danger-btn.confirming {
+  background: var(--red);
+  color: #fff;
+}
+
 .settings-info-card {
   display: flex;
   align-items: flex-start;
