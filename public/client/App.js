@@ -6,7 +6,7 @@ import { initTheme } from './ThemeManager.js';
 import { SettingsPanel } from './SettingsPanel.js';
 import { QuickRoomSettings } from './QuickRoomSettings.js';
 import { InvitePopover } from './InvitePopover.js';
-import { SidebarIdentity } from './SidebarIdentity.js';
+import { TopbarIdentity } from './TopbarIdentity.js';
 
 initTheme();
 
@@ -587,8 +587,8 @@ document.getElementById('settings-button').addEventListener('click', () => setti
 // --- Quick room settings popover (status/file-trust/follow-speaker/quality) ---
 new QuickRoomSettings({ ui, peerManager, settingsPanel });
 
-// --- Members sidebar footer identity (redesign Phase 2c) ---
-new SidebarIdentity({ ui, peerManager, settingsPanel });
+// --- Top-bar identity status dropdown ---
+new TopbarIdentity({ peerManager });
 
 function updateMicUI(enabled) {
     document.getElementById('mic-off-icon').classList.toggle('hidden', enabled);

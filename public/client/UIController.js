@@ -583,12 +583,12 @@ export class UIController {
         const nickname = localStorage.getItem('nickname') || 'You';
         this._createParticipantCard(peerId, nickname, true);
 
-        const sidebarName = document.getElementById('sidebar-identity-name');
-        const sidebarAvatar = document.getElementById('sidebar-identity-avatar');
-        if (sidebarName) sidebarName.textContent = nickname;
-        if (sidebarAvatar) {
-            sidebarAvatar.textContent = this._avatarInitials(nickname);
-            sidebarAvatar.style.background = this._avatarSquareColor(peerId, true);
+        const topbarName = document.getElementById('topbar-identity-name');
+        const topbarAvatar = document.getElementById('topbar-identity-avatar');
+        if (topbarName) topbarName.textContent = nickname;
+        if (topbarAvatar) {
+            topbarAvatar.textContent = this._avatarInitials(nickname);
+            topbarAvatar.style.background = this._avatarSquareColor(peerId, true);
         }
     }
 
@@ -1013,11 +1013,6 @@ export class UIController {
             const identityAvatar = document.getElementById('topbar-identity-avatar');
             if (identityName) identityName.textContent = nickname;
             if (identityAvatar) identityAvatar.textContent = this._avatarInitials(nickname);
-
-            const sidebarName = document.getElementById('sidebar-identity-name');
-            const sidebarAvatar = document.getElementById('sidebar-identity-avatar');
-            if (sidebarName) sidebarName.textContent = nickname;
-            if (sidebarAvatar) sidebarAvatar.textContent = this._avatarInitials(nickname);
         }
 
         if (this._pendingJoinToasts && this._pendingJoinToasts.has(peerId)) {
@@ -1027,13 +1022,8 @@ export class UIController {
     }
 
     updateIdentityStatus(status) {
-        const dot = document.getElementById('topbar-identity-status');
-        if (dot) dot.className = `topbar-identity-status ${status === 'online' ? '' : status}`.trim();
-
-        const sidebarDot = document.getElementById('sidebar-status-dot');
-        const sidebarLabel = document.getElementById('sidebar-status-label');
-        if (sidebarDot) sidebarDot.className = `quick-status-dot ${status === 'online' ? '' : status}`.trim();
-        if (sidebarLabel) sidebarLabel.textContent = this._statusLabels[status] || 'Online';
+        const dot = document.getElementById('topbar-identity-status-dot');
+        if (dot) dot.className = `quick-status-dot ${status === 'online' ? '' : status}`.trim();
     }
 
     // --- Audio ---

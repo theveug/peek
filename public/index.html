@@ -180,7 +180,17 @@
                     <div class="topbar-identity" id="topbar-identity">
                         <span class="topbar-identity-avatar" id="topbar-identity-avatar">Y</span>
                         <span class="topbar-identity-name" id="topbar-identity-name">You</span>
-                        <span class="topbar-identity-status" id="topbar-identity-status"></span>
+                        <div class="quick-status-dropdown">
+                            <button type="button" id="topbar-identity-status-trigger" title="Set status" class="topbar-identity-status-trigger">
+                                <span class="quick-status-dot" id="topbar-identity-status-dot"></span>
+                                <span class="material-symbols-rounded quick-status-caret">expand_more</span>
+                            </button>
+                            <div id="topbar-identity-status-menu" class="quick-status-menu hidden">
+                                <button type="button" data-status="online" class="quick-status-option"><span class="quick-status-dot online"></span>Online</button>
+                                <button type="button" data-status="away" class="quick-status-option"><span class="quick-status-dot away"></span>Away</button>
+                                <button type="button" data-status="dnd" class="quick-status-option"><span class="quick-status-dot dnd"></span>Do Not Disturb</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -448,30 +458,6 @@
                             <span class="material-symbols-rounded">verified_user</span>Fully meshed
                         </div>
                         <div class="sidebar-trust-body">Everyone connected directly. No relay, no recording, nothing written down.</div>
-                    </div>
-
-                    <div class="sidebar-identity" id="sidebar-identity">
-                        <div class="relative shrink-0">
-                            <span class="sidebar-identity-avatar" id="sidebar-identity-avatar">Y</span>
-                        </div>
-                        <div class="sidebar-identity-info">
-                            <span class="sidebar-identity-name" id="sidebar-identity-name">You</span>
-                            <div class="quick-status-dropdown">
-                                <button type="button" id="sidebar-status-trigger" class="sidebar-status-trigger">
-                                    <span class="quick-status-dot" id="sidebar-status-dot"></span>
-                                    <span id="sidebar-status-label">Online</span>
-                                    <span class="material-symbols-rounded quick-status-caret">expand_more</span>
-                                </button>
-                                <div id="sidebar-status-menu" class="quick-status-menu hidden">
-                                    <button type="button" data-status="online" class="quick-status-option"><span class="quick-status-dot online"></span>Online</button>
-                                    <button type="button" data-status="away" class="quick-status-option"><span class="quick-status-dot away"></span>Away</button>
-                                    <button type="button" data-status="dnd" class="quick-status-option"><span class="quick-status-dot dnd"></span>Do Not Disturb</button>
-                                </div>
-                            </div>
-                        </div>
-                        <button id="sidebar-settings-button" title="Settings" class="sidebar-settings-btn">
-                            <span class="material-symbols-rounded">tune</span>
-                        </button>
                     </div>
                 </div>
             </div>
