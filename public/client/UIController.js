@@ -196,23 +196,45 @@ export class UIController {
         const view = this.focusedView;
         const vid = this.focusedVideo;
 
-        view.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const rect = vid.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+        // Some mice/drivers (smooth-scroll features in Logitech Options+, Razer
+        // Synapse, etc.) split one physical notch into a burst of many small
+        // 'wheel' events instead of firing a single one. Applying a fixed +/-10%
+        // per event compounds geometrically in that case (30 events * 1.1 is
+        // enormous), so accumulate deltaY across a frame and apply one zoom step
+        // sized to the total scroll magnitude instead of the event count.
+        let pendingDeltaY = 0;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+        let zoomRafId = null;
+
+        const applyPendingZoom = () => {
+            zoomRafId = null;
+            const deltaY = Math.max(-500, Math.min(500, pendingDeltaY));
+            pendingDeltaY = 0;
 
             const prevZoom = this.zoom;
-            const delta = e.deltaY > 0 ? 0.9 : 1.1;
-            this.zoom = Math.max(1, Math.min(10, this.zoom * delta));
+            const factor = Math.exp(-deltaY * 0.001);
+            this.zoom = Math.max(1, Math.min(10, this.zoom * factor));
 
             const scale = this.zoom / prevZoom;
-            this.panX = mouseX - scale * (mouseX - this.panX);
-            this.panY = mouseY - scale * (mouseY - this.panY);
+            this.panX = lastMouseX - scale * (lastMouseX - this.panX);
+            this.panY = lastMouseY - scale * (lastMouseY - this.panY);
 
             if (this.zoom <= 1) { this.panX = 0; this.panY = 0; this.zoom = 1; }
             this.clampPan();
             this.applyTransform();
+        };
+
+        view.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = vid.getBoundingClientRect();
+            lastMouseX = e.clientX - rect.left;
+            lastMouseY = e.clientY - rect.top;
+
+            pendingDeltaY += e.deltaY;
+            if (zoomRafId === null) {
+                zoomRafId = requestAnimationFrame(applyPendingZoom);
+            }
         }, { passive: false });
 
         view.addEventListener('mousedown', (e) => {
