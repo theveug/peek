@@ -14,7 +14,8 @@
     "test:version-banner": "node tests/version-banner.mjs",
     "test:file-consent": "node tests/file-consent.mjs",
     "test:active-speaker": "node tests/active-speaker-logic.mjs",
-    "test:mic-gate": "node tests/mic-gate-logic.mjs"
+    "test:mic-gate": "node tests/mic-gate-logic.mjs",
+    "test:password-leak": "node tests/room-password-leak.mjs"
   },
   "author": "",
   "license": "ISC",

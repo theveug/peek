@@ -377,6 +377,11 @@ document.getElementById('leave-room-button').addEventListener('click', () => {
     leavingRoom = true;
     clearTimeout(reconnectTimer);
     socket?.close();
+    // Don't let this room's password/creator-token survive into whatever room
+    // gets created/joined next in this tab — see lobby.html's create/join
+    // handlers for the matching set-or-clear fix on the other end of this bug.
+    sessionStorage.removeItem('roomPassword');
+    sessionStorage.removeItem('creatorToken');
     window.location.href = '/';
 });
 

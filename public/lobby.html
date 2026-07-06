@@ -378,8 +378,14 @@
                         body: JSON.stringify({ name: name || null, password: password || null, maxPeers }),
                     });
                     const { code, creatorToken } = await res.json();
+                    // Always set-or-clear, never leave a previous room's password
+                    // sitting in this flat, non-room-scoped sessionStorage key —
+                    // otherwise a later passwordless room silently inherits it via
+                    // the server's lazy-recreate-adopts-joiner's-password path.
                     if (password) {
                         sessionStorage.setItem('roomPassword', password);
+                    } else {
+                        sessionStorage.removeItem('roomPassword');
                     }
                     sessionStorage.setItem('creatorToken', creatorToken);
                     if (createSaveCheckbox.checked) {
@@ -428,7 +434,14 @@
                     else onNeedsPassword?.(result);
                     return false;
                 }
-                if (password) sessionStorage.setItem('roomPassword', password);
+                // Same reasoning as the create-room handler above: always
+                // set-or-clear so a stale password from a previously joined
+                // room can't leak into this one.
+                if (password) {
+                    sessionStorage.setItem('roomPassword', password);
+                } else {
+                    sessionStorage.removeItem('roomPassword');
+                }
                 window.location.href = '/' + code;
                 return true;
             }
