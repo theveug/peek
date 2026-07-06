@@ -292,7 +292,17 @@ function sendTypingStatus(typing) {
     peerManager.broadcastTyping(typing);
 }
 
+// Auto-grow the composer as you type multi-line/markdown messages, up to
+// .chat-composer-input's existing `max-height: 6em` — the textarea's default
+// overflow:auto takes over (internal scroll) once content exceeds that, so
+// there's nothing to clamp here beyond letting the CSS cap do its job.
+function autoGrowMessageInput() {
+    input.style.height = 'auto';
+    input.style.height = `${input.scrollHeight}px`;
+}
+
 input.addEventListener('input', () => {
+    autoGrowMessageInput();
     sendTypingStatus(true);
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => sendTypingStatus(false), 2000);
@@ -320,6 +330,7 @@ function sendMessage() {
         ui.addChatMessage('Me', text, messageId, reply, true);
         ui.clearReply();
         input.value = '';
+        autoGrowMessageInput();
     }
 
     if (pendingFiles.length) {
