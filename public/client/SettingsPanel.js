@@ -245,6 +245,14 @@ export class SettingsPanel {
             localStorage.setItem('soundVolume', e.target.value);
         });
 
+        const masterVolume = document.getElementById('settings-master-volume');
+        const masterVolumeValue = document.getElementById('settings-master-volume-value');
+        masterVolume?.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            if (masterVolumeValue) masterVolumeValue.textContent = `${Math.round(value * 100)}%`;
+            this.ui?.setMasterCallVolume(value);
+        });
+
         this.modal.querySelectorAll('#settings-mic-mode-picker button').forEach(btn => {
             btn.addEventListener('click', () => {
                 localStorage.setItem('micMode', btn.dataset.micMode);
@@ -306,6 +314,12 @@ export class SettingsPanel {
         const volumeValue = document.getElementById('settings-volume-value');
         if (volume) volume.value = vol;
         if (volumeValue) volumeValue.textContent = `${Math.round(vol * 100)}%`;
+
+        const masterVol = this.ui?.masterCallVolume ?? 1;
+        const masterVolume = document.getElementById('settings-master-volume');
+        const masterVolumeValue = document.getElementById('settings-master-volume-value');
+        if (masterVolume) masterVolume.value = String(masterVol);
+        if (masterVolumeValue) masterVolumeValue.textContent = `${Math.round(masterVol * 100)}%`;
 
         this._refreshMicMode();
     }

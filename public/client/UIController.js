@@ -36,6 +36,10 @@ export class UIController {
         // persisted: peerIds are freshly assigned every reconnect, so a
         // localStorage entry keyed by peerId would never be looked up again.
         this.peerVolumes = new Map();
+        // Overall call volume, multiplied with each peer's own volume. This one
+        // *is* persisted — it's a personal preference, not tied to any peer/session.
+        this.masterCallVolume = parseFloat(localStorage.getItem('masterCallVolume'));
+        if (Number.isNaN(this.masterCallVolume)) this.masterCallVolume = 1;
         this.setupZoom();
         this.setupPictureInPicture();
         this._createToastContainer();
@@ -1117,13 +1121,21 @@ export class UIController {
         const audio = document.getElementById(`audio-${audioKey}`);
         if (!audio) return;
         const basePeerId = audioKey.endsWith('-screen') ? audioKey.slice(0, -'-screen'.length) : audioKey;
-        audio.volume = this.peerVolumes.get(basePeerId) ?? 1;
+        audio.volume = this.masterCallVolume * (this.peerVolumes.get(basePeerId) ?? 1);
     }
 
     setPeerVolume(peerId, volume) {
         this.peerVolumes.set(peerId, volume);
         this._applyAudioVolume(peerId);
         this._applyAudioVolume(`${peerId}-screen`);
+    }
+
+    setMasterCallVolume(volume) {
+        this.masterCallVolume = volume;
+        localStorage.setItem('masterCallVolume', String(volume));
+        document.querySelectorAll('audio[id^="audio-"]').forEach(audio => {
+            this._applyAudioVolume(audio.id.slice('audio-'.length));
+        });
     }
 
     // --- Self-view PiPs ---

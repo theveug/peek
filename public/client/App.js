@@ -395,6 +395,31 @@ document.getElementById('deafen-toggle').addEventListener('click', () => {
     if (peerManager.peerId) ui.updateParticipantDeafen(peerManager.peerId, peerManager.deafened);
 });
 
+// Deafen-button volume popover — second surface for the same `masterCallVolume`
+// value the Settings panel controls, for in-call quick access. Not a second
+// data model: same ui.setMasterCallVolume()/localStorage key.
+const deafenVolumePopover = document.getElementById('deafen-volume-popover');
+const deafenVolumeSlider = document.getElementById('deafen-volume-slider');
+const deafenVolumeValue = document.getElementById('deafen-volume-value');
+document.getElementById('deafen-volume-caret').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (deafenVolumeSlider) deafenVolumeSlider.value = String(ui.masterCallVolume);
+    if (deafenVolumeValue) deafenVolumeValue.textContent = `${Math.round(ui.masterCallVolume * 100)}%`;
+    deafenVolumePopover.classList.toggle('hidden');
+});
+deafenVolumeSlider?.addEventListener('input', (e) => {
+    e.stopPropagation();
+    const value = parseFloat(e.target.value);
+    if (deafenVolumeValue) deafenVolumeValue.textContent = `${Math.round(value * 100)}%`;
+    ui.setMasterCallVolume(value);
+});
+deafenVolumeSlider?.addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', (e) => {
+    if (!deafenVolumePopover.contains(e.target) && e.target.id !== 'deafen-volume-caret') {
+        deafenVolumePopover.classList.add('hidden');
+    }
+});
+
 // Self-view placeholder on any focus loss (window blur or tab hidden)
 const handleFocusChange = () => {
     const blurred = document.hidden || !document.hasFocus();

@@ -1715,6 +1715,72 @@ body,
   margin: 0 2px;
 }
 
+.dock-btn-wrap {
+  display: flex;
+}
+
+.dock-caret {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--t2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dock-caret .material-symbols-rounded {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.dock-caret:hover {
+  color: var(--t1);
+}
+
+.dock-volume-popover {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  z-index: 70;
+  width: 190px;
+  color: var(--t2);
+}
+
+.dock-volume-popover.hidden {
+  display: none;
+}
+
+.dock-volume-popover input[type="range"] {
+  flex: 1;
+}
+
+.dock-volume-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--t2);
+  font-family: "Fira Code", ui-monospace, monospace;
+  width: 32px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
 .dock-leave-btn {
   height: 48px;
   border: none;
