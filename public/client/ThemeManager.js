@@ -27,9 +27,17 @@ function apply(theme) {
 }
 
 // Applies + persists a specific theme. Exported so both the lobby/room
-// #theme-toggle button and the Settings panel's Dark/Light picker can set an
-// explicit value, not just flip between the two.
+// #theme-toggle button and the Settings panel's System/Dark/Light picker can
+// set an explicit value, not just flip between the two. `'system'` is a
+// pseudo-value, not a stored one — it clears the explicit override instead,
+// so getEffectiveTheme() falls back to the OS preference and the live
+// prefers-color-scheme listener in initTheme() resumes following it.
 export function setTheme(theme) {
+    if (theme === 'system') {
+        localStorage.removeItem('theme');
+        apply(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        return;
+    }
     apply(theme);
     localStorage.setItem('theme', theme);
 }

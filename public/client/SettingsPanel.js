@@ -164,7 +164,13 @@ export class SettingsPanel {
     }
 
     _refreshAppearance() {
-        const current = getEffectiveTheme();
+        // getEffectiveTheme() always resolves to 'dark'/'light' (it's what
+        // actually gets painted) — but the picker also needs to distinguish
+        // "explicitly light" from "currently resolves to light via the OS,"
+        // so the System button highlights correctly instead of never lighting
+        // up. No explicit localStorage['theme'] means the user is following
+        // the system preference.
+        const current = localStorage.getItem('theme') || 'system';
         this.modal.querySelectorAll('#settings-theme-picker button').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.theme === current);
         });
