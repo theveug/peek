@@ -150,24 +150,11 @@ body.light {
   background: var(--surface-elevated);
   color: var(--color-foreground);
   border: 1px solid var(--color-separator);
-  border-left: 3px solid var(--color-muted);
+  border-left: 3px solid #3b82f6;
   font-size: 0.8125rem;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
   animation: toast-in 0.3s ease-out;
   pointer-events: auto;
-}
-
-.toast-join {
-  border-left-color: #22c55e;
-}
-.toast-leave {
-  border-left-color: #ef4444;
-}
-.toast-stream {
-  border-left-color: #6366f1;
-}
-.toast-info {
-  border-left-color: #3b82f6;
 }
 
 .toast-icon {
@@ -778,6 +765,44 @@ a.link-preview:hover {
 
 .chat-image-preview img:hover {
   opacity: 0.9;
+}
+
+/* ===== Chat system messages (join/leave/room events, inline in log) ===== */
+.chat-system-message {
+  display: flex;
+  justify-content: center;
+  padding: 0.25rem 1rem;
+}
+
+.chat-system-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--color-separator);
+  color: var(--color-muted);
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+
+.chat-system-icon {
+  display: flex;
+  opacity: 0.7;
+}
+
+.chat-system-join .chat-system-icon {
+  color: #22c55e;
+}
+.chat-system-leave .chat-system-icon {
+  color: #ef4444;
+}
+.chat-system-stream .chat-system-icon {
+  color: #6366f1;
+}
+.chat-system-info .chat-system-icon {
+  color: #3b82f6;
 }
 
 /* ===== Chat avatar ===== */

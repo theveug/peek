@@ -28,7 +28,7 @@ export class UIController {
         this.panX = 0;
         this.panY = 0;
         this.isPanning = false;
-        this.chat = new ChatUI({ getNickname: (id) => this._peerNickname(id) });
+        this.chat = new ChatUI({ getNickname: (id) => this._peerNickname(id), avatarInitials: (name) => this._avatarInitials(name) });
         this._sharedFiles = [];
         this.maxPeers = 6;
         this.roomName = null;
@@ -138,6 +138,7 @@ export class UIController {
     set _onReaction(fn) { this.chat._onReaction = fn; }
     set onPollVote(fn) { this.chat.onPollVote = fn; }
     addChatMessage(...a) { return this.chat.addChatMessage(...a); }
+    addSystemMessage(...a) { return this.chat.addSystemMessage(...a); }
     addPollMessage(...a) { return this.chat.addPollMessage(...a); }
     updatePollVote(...a) { return this.chat.updatePollVote(...a); }
     addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, blob) {
@@ -172,20 +173,18 @@ export class UIController {
         return name ? name.textContent : peerId.substring(0, 8);
     }
 
-    showToast(message, type = 'info') {
+    // Only for purely local, non-room-event feedback (clipboard confirmations,
+    // permission/hardware errors) — anything else peers would care about goes
+    // through addSystemMessage() into the chat log instead, see CLAUDE.md.
+    showToast(message) {
         const container = document.getElementById('toast-container');
         if (!container) return;
 
-        const icons = {
-            join: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M10 2a.75.75 0 0 1 .75.75v5.59l1.95-2.1a.75.75 0 1 1 1.1 1.02l-3.25 3.5a.75.75 0 0 1-1.1 0L6.2 7.26a.75.75 0 1 1 1.1-1.02l1.95 2.1V2.75A.75.75 0 0 1 10 2Z" /><path d="M5.273 4.5a1.25 1.25 0 0 0-1.205.918l-1.523 5.52c-.006.02-.01.041-.015.062H6a1 1 0 0 1 .894.553l.448.894a1 1 0 0 0 .894.553h3.438a1 1 0 0 0 .86-.49l.606-1.02A1 1 0 0 1 14 11h3.47a1.318 1.318 0 0 0-.015-.062l-1.523-5.52a1.25 1.25 0 0 0-1.205-.918h-9.454Z" /></svg>',
-            leave: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25Z" clip-rule="evenodd" /><path fill-rule="evenodd" d="M19 10a.75.75 0 0 0-.75-.75H8.704l1.048-.943a.75.75 0 1 0-1.004-1.114l-2.5 2.25a.75.75 0 0 0 0 1.114l2.5 2.25a.75.75 0 1 0 1.004-1.114l-1.048-.943h9.546A.75.75 0 0 0 19 10Z" clip-rule="evenodd" /></svg>',
-            stream: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M1 4.75C1 3.784 1.784 3 2.75 3h14.5c.966 0 1.75.784 1.75 1.75v10.515a1.75 1.75 0 0 1-1.75 1.75h-1.5v-1.5h1.5a.25.25 0 0 0 .25-.25V4.75a.25.25 0 0 0-.25-.25H2.75a.25.25 0 0 0-.25.25v10.515c0 .138.112.25.25.25h1.5v1.5h-1.5A1.75 1.75 0 0 1 1 15.265V4.75Z" /><path d="M10 7.292a.625.625 0 0 1 .625.625v1.958h1.958a.625.625 0 1 1 0 1.25h-1.958v1.958a.625.625 0 1 1-1.25 0v-1.958H7.417a.625.625 0 1 1 0-1.25h1.958V7.917A.625.625 0 0 1 10 7.292Z" /></svg>',
-            info: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clip-rule="evenodd" /></svg>',
-        };
+        const icon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clip-rule="evenodd" /></svg>';
 
         const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
-        toast.innerHTML = `<span class="toast-icon">${icons[type] || icons.info}</span><span class="toast-text">${escapeHtml(message)}</span>`;
+        toast.className = 'toast';
+        toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-text">${escapeHtml(message)}</span>`;
         container.appendChild(toast);
 
         while (container.children.length > 5) {
@@ -310,7 +309,7 @@ export class UIController {
                 await this.focusedVideo.requestPictureInPicture();
             }
         } catch (err) {
-            this.showToast('Picture-in-picture is unavailable right now', 'info');
+            this.showToast('Picture-in-picture is unavailable right now');
         }
     }
 
@@ -412,7 +411,7 @@ export class UIController {
                 const isCam = key.endsWith('-cam');
                 return this._peerNickname(isCam ? key.slice(0, -4) : key);
             });
-            this.showToast(`Paused ${nicknames.join(', ')} to save bandwidth (max ${this.maxWatchedTiles} watching)`, 'info');
+            this.addSystemMessage(`Paused ${nicknames.join(', ')} to save bandwidth (max ${this.maxWatchedTiles} watching)`, 'stream');
         }
 
         return evicted;
@@ -571,7 +570,7 @@ export class UIController {
         setTimeout(() => {
             if (this._pendingJoinToasts.has(peerId)) {
                 this._pendingJoinToasts.delete(peerId);
-                this.showToast(`${this._peerNickname(peerId)} joined`, 'join');
+                this.addSystemMessage(`${this._peerNickname(peerId)} joined`, 'join');
             }
         }, 2000);
     }
@@ -582,7 +581,7 @@ export class UIController {
         this.removeAudio(peerId);
         this.removeParticipant(peerId);
         this.chat.updateTypingIndicator(peerId, false);
-        this.showToast(`${name} left`, 'leave');
+        this.addSystemMessage(`${name} left`, 'leave');
     }
 
     addSelf(peerId) {
@@ -1089,7 +1088,7 @@ export class UIController {
 
         if (this._pendingJoinToasts && this._pendingJoinToasts.has(peerId)) {
             this._pendingJoinToasts.delete(peerId);
-            this.showToast(`${nickname} joined`, 'join');
+            this.addSystemMessage(`${nickname} joined`, 'join');
         }
     }
 

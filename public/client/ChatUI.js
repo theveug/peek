@@ -2,8 +2,9 @@ import { playSound } from './SoundPlayer.js';
 import { escapeHtml } from './escapeHtml.js';
 
 export class ChatUI {
-    constructor({ getNickname }) {
+    constructor({ getNickname, avatarInitials }) {
         this._getNickname = getNickname;
+        this._avatarInitials = avatarInitials || ((name) => name.charAt(0).toUpperCase());
         this.maxMessages = 100;
         this._typingPeers = new Set();
         this._reactions = new Map();
@@ -350,12 +351,42 @@ export class ChatUI {
         if (el) el.remove();
     }
 
+    _systemIcons = {
+        join: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path d="M10 2a.75.75 0 0 1 .75.75v5.59l1.95-2.1a.75.75 0 1 1 1.1 1.02l-3.25 3.5a.75.75 0 0 1-1.1 0L6.2 7.26a.75.75 0 1 1 1.1-1.02l1.95 2.1V2.75A.75.75 0 0 1 10 2Z" /><path d="M5.273 4.5a1.25 1.25 0 0 0-1.205.918l-1.523 5.52c-.006.02-.01.041-.015.062H6a1 1 0 0 1 .894.553l.448.894a1 1 0 0 0 .894.553h3.438a1 1 0 0 0 .86-.49l.606-1.02A1 1 0 0 1 14 11h3.47a1.318 1.318 0 0 0-.015-.062l-1.523-5.52a1.25 1.25 0 0 0-1.205-.918h-9.454Z" /></svg>',
+        leave: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25Z" clip-rule="evenodd" /><path fill-rule="evenodd" d="M19 10a.75.75 0 0 0-.75-.75H8.704l1.048-.943a.75.75 0 1 0-1.004-1.114l-2.5 2.25a.75.75 0 0 0 0 1.114l2.5 2.25a.75.75 0 1 0 1.004-1.114l-1.048-.943h9.546A.75.75 0 0 0 19 10Z" clip-rule="evenodd" /></svg>',
+        stream: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path d="M1 4.75C1 3.784 1.784 3 2.75 3h14.5c.966 0 1.75.784 1.75 1.75v10.515a1.75 1.75 0 0 1-1.75 1.75h-1.5v-1.5h1.5a.25.25 0 0 0 .25-.25V4.75a.25.25 0 0 0-.25-.25H2.75a.25.25 0 0 0-.25.25v10.515c0 .138.112.25.25.25h1.5v1.5h-1.5A1.75 1.75 0 0 1 1 15.265V4.75Z" /><path d="M10 7.292a.625.625 0 0 1 .625.625v1.958h1.958a.625.625 0 1 1 0 1.25h-1.958v1.958a.625.625 0 1 1-1.25 0v-1.958H7.417a.625.625 0 1 1 0-1.25h1.958V7.917A.625.625 0 0 1 10 7.292Z" /></svg>',
+        info: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clip-rule="evenodd" /></svg>',
+    };
+
+    // Renders a room event (join/leave, moderator action, quality change, blocked
+    // file, etc.) as a centered pill inline in the log, Discord-style, instead of
+    // a toast overlay — so it's visible in scrollback and even if the chat panel
+    // was closed when it happened, not just for the 4s a toast is on screen.
+    addSystemMessage(text, type = 'info') {
+        const chatLog = document.getElementById('chat-log');
+        const el = document.createElement('div');
+        el.className = 'chat-system-message';
+        el.innerHTML = `<span class="chat-system-pill chat-system-${type}"><span class="chat-system-icon">${this._systemIcons[type] || this._systemIcons.info}</span><span>${escapeHtml(text)}</span></span>`;
+        chatLog.appendChild(el);
+
+        while (chatLog.children.length > this.maxMessages) {
+            chatLog.removeChild(chatLog.firstChild);
+        }
+
+        requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' }));
+
+        if (!document.hasFocus() || this._isChatViewClosed()) {
+            const indicator = document.getElementById('new-message-indicator');
+            if (indicator) indicator.classList.remove('hidden');
+        }
+    }
+
     addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl) {
         const chatLog = document.getElementById('chat-log');
         const msgContainer = document.createElement('div');
 
         const isSelf = sender === 'Me';
-        const initial = isSelf ? (localStorage.getItem('nickname') || 'Me').charAt(0).toUpperCase() : sender.charAt(0).toUpperCase();
+        const initial = this._avatarInitials(isSelf ? (localStorage.getItem('nickname') || 'Me') : sender);
         const color = isSelf ? '#22c55e' : this._colorForName(sender);
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const sizeStr = this._formatFileSize(fileSize);
@@ -448,7 +479,7 @@ export class ChatUI {
 
         const raw = DOMPurify.sanitize(marked.parse(text));
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const initial = isSelf ? (localStorage.getItem('nickname') || 'Me').charAt(0).toUpperCase() : sender.charAt(0).toUpperCase();
+        const initial = this._avatarInitials(isSelf ? (localStorage.getItem('nickname') || 'Me') : sender);
         const color = isSelf ? '#22c55e' : this._colorForName(sender);
 
         let replyHtml = '';

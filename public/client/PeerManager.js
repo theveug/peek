@@ -141,7 +141,7 @@ export class PeerManager {
             case 'force-stop-stream':
                 if (this.isSharing) this.stopSharing();
                 if (this.camStream) this.stopCam();
-                this.ui.showToast('The room moderator stopped your stream to save bandwidth', 'info');
+                this.ui.addSystemMessage('The room moderator stopped your stream to save bandwidth', 'stream');
                 // Button icon state (share/cam toggles) is owned by App.js's click
                 // handlers, not by stopSharing()/stopCam() themselves — this callback
                 // lets it stay in sync when the stop is triggered remotely instead.
@@ -357,9 +357,9 @@ export class PeerManager {
 
         if (!this.stream && !this.camStream) return;
         if (tier) {
-            this.ui.showToast(`Lowered stream quality (room has ${Object.keys(this.peers).length + 1} participants)`, 'info');
+            this.ui.addSystemMessage(`Lowered stream quality (room has ${Object.keys(this.peers).length + 1} participants)`, 'stream');
         } else if (hadCap) {
-            this.ui.showToast('Stream quality restored', 'info');
+            this.ui.addSystemMessage('Stream quality restored', 'stream');
         }
     }
 
@@ -799,12 +799,12 @@ export class PeerManager {
             if (msg.type === 'file-offer') {
                 const fileSize = Number(msg.fileSize);
                 if (!this._isFileAllowed(msg.fileName)) {
-                    this.ui.showToast(`Blocked incoming file: ${msg.fileName}`, 'leave');
+                    this.ui.addSystemMessage(`Blocked incoming file: ${msg.fileName}`, 'leave');
                     this._respondToOffer(peerId, msg.fileId, false);
                     return;
                 }
                 if (!Number.isFinite(fileSize) || fileSize < 0 || fileSize > this._maxFileSize) {
-                    this.ui.showToast(`Blocked incoming file: ${msg.fileName} (too large)`, 'leave');
+                    this.ui.addSystemMessage(`Blocked incoming file: ${msg.fileName} (too large)`, 'leave');
                     this._respondToOffer(peerId, msg.fileId, false);
                     return;
                 }
@@ -869,7 +869,7 @@ export class PeerManager {
             if (t.receivedBytes > t.fileSize + 65536) {
                 delete this.incomingTransfers[activeId];
                 this.ui.removeFileProgress(activeId);
-                this.ui.showToast(`Blocked incoming file: ${t.fileName} (exceeded declared size)`, 'leave');
+                this.ui.addSystemMessage(`Blocked incoming file: ${t.fileName} (exceeded declared size)`, 'leave');
                 return;
             }
             t.chunks.push(data);
@@ -950,12 +950,12 @@ export class PeerManager {
 
     async sendFileToAll(file) {
         if (!this._isFileAllowed(file.name)) {
-            this.ui.showToast(`Blocked: .${file.name.split('.').pop()} files are not allowed`, 'leave');
+            this.ui.addSystemMessage(`Blocked: .${file.name.split('.').pop()} files are not allowed`, 'leave');
             return;
         }
 
         if (file.size > this._maxFileSize) {
-            this.ui.showToast(`File too large (max 500 MB)`, 'leave');
+            this.ui.addSystemMessage(`File too large (max 500 MB)`, 'leave');
             return;
         }
 
@@ -1155,7 +1155,7 @@ export class PeerManager {
             return false;
         }
         if (!navigator.mediaDevices?.getUserMedia) {
-            this.ui.showToast('Camera requires a secure connection (HTTPS)', 'info');
+            this.ui.showToast('Camera requires a secure connection (HTTPS)');
             return false;
         }
 
@@ -1189,7 +1189,7 @@ export class PeerManager {
             const msg = err.name === 'NotAllowedError' ? 'Camera permission denied'
                 : err.name === 'NotFoundError' ? 'No camera found on this device'
                 : 'Could not access camera';
-            this.ui.showToast(msg, 'info');
+            this.ui.showToast(msg);
             return false;
         }
     }

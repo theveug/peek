@@ -55,11 +55,11 @@ export class InvitePopover {
     _wireCopyButtons() {
         document.getElementById('invite-copy-code')?.addEventListener('click', () => {
             navigator.clipboard.writeText(this.roomCode);
-            this.ui.showToast('Room code copied', 'info');
+            this.ui.showToast('Room code copied');
         });
         document.getElementById('invite-copy-link')?.addEventListener('click', () => {
             navigator.clipboard.writeText(`${location.origin}/${this.roomCode}`);
-            this.ui.showToast('Invite link copied', 'info');
+            this.ui.showToast('Invite link copied');
         });
     }
 }
