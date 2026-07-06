@@ -32,6 +32,10 @@ export class UIController {
         this._sharedFiles = [];
         this.maxPeers = 6;
         this.roomName = null;
+        // Local-only playback volume per remote peer (0-1, default 1). Not
+        // persisted: peerIds are freshly assigned every reconnect, so a
+        // localStorage entry keyed by peerId would never be looked up again.
+        this.peerVolumes = new Map();
         this.setupZoom();
         this.setupPictureInPicture();
         this._createToastContainer();
@@ -701,6 +705,10 @@ export class UIController {
         micIcon.innerHTML = this._micOffSvg();
         rightCol.appendChild(micIcon);
 
+        if (!isSelf) {
+            rightCol.appendChild(this._buildVolumeControl(peerId));
+        }
+
         card.appendChild(avatarWrap);
         card.appendChild(info);
         card.appendChild(rightCol);
@@ -786,6 +794,58 @@ export class UIController {
         return wrap;
     }
 
+    // Local playback volume for this one peer — everyone's own preference, so
+    // (unlike _buildModeratorMenu) this is never gated behind moderator status.
+    _buildVolumeControl(peerId) {
+        const wrap = document.createElement('div');
+        wrap.className = 'participant-volume-menu relative flex-shrink-0';
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'participant-volume-btn';
+        btn.title = 'Adjust their volume';
+        btn.innerHTML = '<span class="material-symbols-rounded">volume_up</span>';
+
+        const popover = document.createElement('div');
+        popover.className = 'participant-volume-popover hidden';
+
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = '0';
+        slider.max = '1';
+        slider.step = '0.05';
+        slider.value = String(this.peerVolumes.get(peerId) ?? 1);
+
+        const valueLabel = document.createElement('span');
+        valueLabel.className = 'participant-volume-value';
+        valueLabel.textContent = `${Math.round(slider.value * 100)}%`;
+
+        slider.addEventListener('input', (e) => {
+            e.stopPropagation();
+            const volume = parseFloat(slider.value);
+            valueLabel.textContent = `${Math.round(volume * 100)}%`;
+            this.setPeerVolume(peerId, volume);
+        });
+        slider.addEventListener('click', (e) => e.stopPropagation());
+
+        popover.appendChild(slider);
+        popover.appendChild(valueLabel);
+
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.participant-volume-popover').forEach(p => { if (p !== popover) p.classList.add('hidden'); });
+            popover.classList.toggle('hidden');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!wrap.contains(e.target)) popover.classList.add('hidden');
+        });
+
+        wrap.appendChild(btn);
+        wrap.appendChild(popover);
+        return wrap;
+    }
+
     updateParticipantStatus(peerId, status) {
         let el = document.getElementById(`participant-${peerId}`);
         if (!el) return;
@@ -848,6 +908,7 @@ export class UIController {
         const container = document.getElementById('participants');
         if (container) container.innerHTML = '';
         this.selfPeerId = null;
+        this.peerVolumes.clear();
         this._updateMemberCount();
     }
 
@@ -1038,6 +1099,7 @@ export class UIController {
         }
         audio.srcObject = new MediaStream([track]);
         audio.muted = !document.getElementById('deafen-off-icon') || document.getElementById('deafen-off-icon').classList.contains('hidden');
+        this._applyAudioVolume(peerId);
     }
 
     removeAudio(peerId) {
@@ -1046,6 +1108,22 @@ export class UIController {
             audio.srcObject = null;
             audio.remove();
         }
+    }
+
+    // `audioKey` is the id passed to addAudio/removeAudio — either a bare
+    // peerId (mic) or `${peerId}-screen` (screen-share audio). Both share one
+    // per-person volume, so strip the suffix to look it up.
+    _applyAudioVolume(audioKey) {
+        const audio = document.getElementById(`audio-${audioKey}`);
+        if (!audio) return;
+        const basePeerId = audioKey.endsWith('-screen') ? audioKey.slice(0, -'-screen'.length) : audioKey;
+        audio.volume = this.peerVolumes.get(basePeerId) ?? 1;
+    }
+
+    setPeerVolume(peerId, volume) {
+        this.peerVolumes.set(peerId, volume);
+        this._applyAudioVolume(peerId);
+        this._applyAudioVolume(`${peerId}-screen`);
     }
 
     // --- Self-view PiPs ---
