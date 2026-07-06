@@ -38,11 +38,13 @@ export class SettingsPanel {
         if (!this.modal) return;
         this._refreshAll();
         this.modal.classList.remove('hidden');
+        this._startMicMeter();
     }
 
     close() {
         if (!this.modal) return;
         this.modal.classList.add('hidden');
+        this._stopMicMeter();
     }
 
     // --- Nav ---
@@ -316,7 +318,56 @@ export class SettingsPanel {
         if (thresholdInput) thresholdInput.value = String(threshold);
         this._updateMicThresholdLabel(threshold);
 
+        const meterRow = document.getElementById('mic-meter-row');
+        if (meterRow) meterRow.classList.toggle('hidden', micMode !== 'voice-activity');
+
         this.ui?.updateMicModeBadge?.(micMode);
+    }
+
+    // Live mic-level meter + threshold marker, shown alongside the sensitivity
+    // slider (voice-activity mode only) so tuning it isn't guesswork — speak
+    // and watch where your level actually sits relative to the line. Runs for
+    // as long as the Settings panel is open (cheap: one interval, one DOM
+    // write), not just while the Audio & Mic section is the active tab.
+    _startMicMeter() {
+        this._stopMicMeter();
+        if (!this.peerManager) return;
+        this._micMeterInterval = setInterval(() => this._updateMicMeter(), 100);
+        this._updateMicMeter();
+    }
+
+    _stopMicMeter() {
+        if (this._micMeterInterval) {
+            clearInterval(this._micMeterInterval);
+            this._micMeterInterval = null;
+        }
+    }
+
+    _updateMicMeter() {
+        const fill = document.getElementById('mic-meter-fill');
+        const thresholdLine = document.getElementById('mic-meter-threshold-line');
+        const hint = document.getElementById('mic-meter-hint');
+        if (!fill) return;
+
+        // Rough ceiling for a normal speaking voice's RMS level on this
+        // analyser (see PeerManager._localMicLevel) — not a hard limit, just
+        // what maps to a "full" bar for a readable meter.
+        const METER_MAX = 0.3;
+        const threshold = parseFloat(localStorage.getItem('micThreshold')) || 0.03;
+        if (thresholdLine) thresholdLine.style.left = `${Math.min(1, threshold / METER_MAX) * 100}%`;
+
+        const hasLiveMic = !!this.peerManager?.micStream && this.peerManager.micEnabled;
+        if (!hasLiveMic) {
+            fill.style.width = '0%';
+            fill.classList.remove('mic-meter-fill-active');
+            if (hint) hint.textContent = 'Turn on your mic to see live levels while you tune this.';
+            return;
+        }
+
+        const { level, speaking } = this.peerManager.pollSelfMicActivity();
+        fill.style.width = `${Math.min(1, level / METER_MAX) * 100}%`;
+        fill.classList.toggle('mic-meter-fill-active', speaking);
+        if (hint) hint.textContent = "Speak normally — the bar should clear the vertical line while talking and settle below it at rest.";
     }
 
     _updateMicThresholdLabel(threshold) {

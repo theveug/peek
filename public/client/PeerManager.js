@@ -403,6 +403,25 @@ export class PeerManager {
         this._statsInterval = null;
     }
 
+    // Public entry point for the Settings panel's live mic-level meter (see
+    // SettingsPanel._startMicMeter) — lets someone test/tune their sensitivity
+    // threshold before anyone else has joined. _pollActiveSpeaker's regular
+    // 200ms loop only runs once there's at least one peer connection
+    // (createPeerConnection's `Object.keys(this.peers).length === 0` check), so
+    // testing solo needs its own call into the same real detection function
+    // rather than just reading stale/never-populated `_speakingState`. Reuses
+    // the exact production algorithm (not a reimplementation) so the meter
+    // matches what would actually happen once someone's in the room — if a
+    // call *is* already in progress, this runs alongside the regular poll
+    // harmlessly (same deterministic math over the same signal, just sampled
+    // at a different cadence while Settings happens to be open).
+    pollSelfMicActivity() {
+        if (!this.peerId) return { level: 0, speaking: false };
+        const level = this._localMicLevel();
+        const speaking = this._updateSpeakingStates({ [this.peerId]: level }, Date.now())[this.peerId];
+        return { level, speaking };
+    }
+
     // RMS level (roughly 0-1) of the local mic, via a Web Audio analyser on micStream.
     // Recreated whenever micStream itself changes (e.g. mic toggled off then on again).
     _localMicLevel() {

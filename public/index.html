@@ -679,6 +679,14 @@
                                 <input id="settings-mic-threshold" type="range" min="0.01" max="0.1" step="0.01" class="w-full" />
                                 <p class="text-[10px] text-muted mt-1">Only transmits while you're speaking above this level — lower is more sensitive.</p>
                             </div>
+                            <div id="mic-meter-row" class="settings-field hidden">
+                                <label class="settings-label">Mic level</label>
+                                <div class="mic-meter">
+                                    <div class="mic-meter-fill" id="mic-meter-fill"></div>
+                                    <div class="mic-meter-threshold-line" id="mic-meter-threshold-line"></div>
+                                </div>
+                                <p class="text-[10px] text-muted mt-1" id="mic-meter-hint">Speak normally — the bar should clear the vertical line while talking and settle below it at rest.</p>
+                            </div>
                         </div>
 
                         <!-- Privacy & P2P -->
