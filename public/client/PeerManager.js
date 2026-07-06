@@ -149,10 +149,14 @@ export class PeerManager {
                 break;
 
             case 'peer-joined':
+                // Only the "larger" peerId initiates the WebRTC offer (avoids both
+                // sides racing to offer at once) — but the join notification/card
+                // must fire for every existing peer regardless of who initiates,
+                // or whichever side loses this comparison never sees it.
                 if (this.peerId > peerId) {
                     this.initiateConnection(peerId);
-                    this.ui.addPeer(peerId);
                 }
+                this.ui.addPeer(peerId);
                 this.broadcastMicStatus();
                 this.broadcastDeafenStatus();
                 this.broadcastNickname();
