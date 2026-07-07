@@ -35,6 +35,7 @@ export class PeerManager {
         this.incomingTransfers = {};
         this._offeredFiles = {};
         this._pendingFileOffers = {};
+        this._filePeerProgress = {};
         this.camStream = null;
         this.camEnabled = false;
         this.peerCamStreamIds = {};
@@ -967,56 +968,66 @@ export class PeerManager {
         const peerIds = Object.keys(this.dataChannels).filter(pid => this.dataChannels[pid]?.readyState === 'open');
         if (peerIds.length === 0) return;
 
-        const offer = { type: 'file-offer', fileId, fileName: file.name, fileSize: file.size, fileType: file.type };
-        const responses = await Promise.all(peerIds.map(pid => {
-            const awaited = this._awaitOfferResponse(pid, fileId);
-            this.dataChannels[pid].send(JSON.stringify(offer));
-            return awaited;
-        }));
-        const acceptedPeerIds = peerIds.filter((_, i) => responses[i]);
-
-        // Local echo happens regardless of whether anyone accepted.
+        // Local echo happens regardless of whether anyone accepts.
         const safeType = this._safeMimeType(file.name);
         const blob = new Blob([file], { type: safeType });
         const url = URL.createObjectURL(blob);
         this.ui.addFileMessage('Me', fileId, file.name, file.size, safeType, url, blob);
 
-        if (acceptedPeerIds.length === 0) return;
+        const offer = { type: 'file-offer', fileId, fileName: file.name, fileSize: file.size, fileType: file.type };
+        // Each peer's offer/accept/transfer runs independently, not gathered behind
+        // a single Promise.all — an AFK peer sitting on their accept/decline prompt
+        // (up to the 60s timeout in _awaitOfferResponse) must not hold up delivery
+        // to peers who already accepted.
+        this._filePeerProgress[fileId] = new Map();
+        Promise.all(peerIds.map(pid => this._sendFileToPeer(pid, file, fileId, offer))).then(() => {
+            delete this._filePeerProgress[fileId];
+            this.ui.removeFileProgress(fileId);
+        });
+    }
+
+    async _sendFileToPeer(pid, file, fileId, offer) {
+        const awaited = this._awaitOfferResponse(pid, fileId);
+        this.dataChannels[pid]?.send(JSON.stringify(offer));
+        const accepted = await awaited;
+        if (!accepted) return;
+
+        const dc = this.dataChannels[pid];
+        if (!dc || dc.readyState !== 'open') return;
 
         const CHUNK_SIZE = 16384;
         const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-
-        for (const pid of acceptedPeerIds) {
-            this.dataChannels[pid]?.send(JSON.stringify({ type: 'file-start', fileId, totalChunks }));
-        }
-
-        this.ui.updateFileProgress(fileId, 0, 'upload', file.name);
+        dc.send(JSON.stringify({ type: 'file-start', fileId, totalChunks }));
 
         for (let i = 0; i < totalChunks; i++) {
+            if (dc.readyState !== 'open') return;
             const start = i * CHUNK_SIZE;
             const buffer = await file.slice(start, start + CHUNK_SIZE).arrayBuffer();
 
-            for (const pid of acceptedPeerIds) {
-                const dc = this.dataChannels[pid];
-                if (!dc || dc.readyState !== 'open') continue;
-
-                while (dc.bufferedAmount > 1024 * 1024) {
-                    await new Promise(r => {
-                        dc.bufferedAmountLowThreshold = 256 * 1024;
-                        dc.onbufferedamountlow = () => { dc.onbufferedamountlow = null; r(); };
-                    });
-                }
-                dc.send(buffer);
+            while (dc.bufferedAmount > 1024 * 1024) {
+                await new Promise(r => {
+                    dc.bufferedAmountLowThreshold = 256 * 1024;
+                    dc.onbufferedamountlow = () => { dc.onbufferedamountlow = null; r(); };
+                });
             }
+            dc.send(buffer);
 
-            this.ui.updateFileProgress(fileId, (i + 1) / totalChunks, 'upload', file.name);
+            this._filePeerProgress[fileId]?.set(pid, (i + 1) / totalChunks);
+            this._reportUploadProgress(fileId, file.name);
         }
 
-        for (const pid of acceptedPeerIds) {
-            this.dataChannels[pid]?.send(JSON.stringify({ type: 'file-end', fileId }));
-        }
+        this._filePeerProgress[fileId]?.delete(pid);
+        dc.send(JSON.stringify({ type: 'file-end', fileId }));
+    }
 
-        this.ui.removeFileProgress(fileId);
+    // With multiple peers accepting at different times / uploading at different
+    // rates (each connection's own bufferedAmount backpressure), one shared
+    // progress bar can only show one number — report the least-advanced peer
+    // still in flight, since that's the one still holding up "done".
+    _reportUploadProgress(fileId, fileName) {
+        const map = this._filePeerProgress[fileId];
+        if (!map || map.size === 0) return;
+        this.ui.updateFileProgress(fileId, Math.min(...map.values()), 'upload', fileName);
     }
 
     broadcastChat(text, nickname, messageId, replyTo) {
