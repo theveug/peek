@@ -62,6 +62,24 @@ export class DebugPanel {
             </div>
         `;
 
+        // Mic gate — the ring (UIController.setSpeaking) and the actual
+        // transmission gate (_reconcileMicGate) are computed from the same
+        // value in the same tick and should never disagree. If they do, this
+        // section plus each peer's live sender-track check below (further
+        // down) pinpoints exactly where: gate says X but the sender's real
+        // track state says Y.
+        if (pm._micGateState) {
+            const g = pm._micGateState;
+            const gateColor = g.shouldTransmit ? '#0f0' : '#f44';
+            html += `<div style="margin-bottom:8px; border-top:1px solid #333; padding-top:4px;">
+                <span style="color:#fff;">Mic Gate:</span><br>
+                <span style="color:#888;">mode:</span> ${g.micMode}
+                <span style="color:#888;">enabled:</span> ${g.micEnabled ? '<span style="color:#0f0;">yes</span>' : '<span style="color:#f44;">no</span>'}
+                <span style="color:#888;">speaking:</span> ${g.speakingLocally ? '<span style="color:#0f0;">yes</span>' : '<span style="color:#888;">no</span>'}<br>
+                <span style="color:#888;">should transmit:</span> <span style="color:${gateColor};">${g.shouldTransmit}</span>
+            </div>`;
+        }
+
         // ICE servers
         html += `<div style="margin-bottom:8px; border-top:1px solid #333; padding-top:4px;">
             <span style="color:#fff;">ICE Servers:</span><br>`;
@@ -105,13 +123,27 @@ export class DebugPanel {
                 'disconnected': '#f80', 'failed': '#f44', 'closed': '#f44'
             }[iceState] || '#888';
 
+            // The ground truth the gate section above should match: is this
+            // peer's actual outbound mic RTCRtpSender carrying a live track
+            // right now, or was it replaceTrack(null)'d? A "should transmit:
+            // true" above with "mic sender: NULL" here is the exact
+            // divergence a "ring says speaking, no audio arrives" report
+            // describes — proof the gate computed one thing but a stale/
+            // stuck sender reference (e.g. left over across a reconnect)
+            // never actually got reconciled to it.
+            const micSender = pm.senders[id]?.['mic-audio'];
+            const micSenderState = !micSender ? '<span style="color:#888;">no sender</span>'
+                : micSender.track ? '<span style="color:#0f0;">live</span>'
+                : '<span style="color:#f44;">NULL (not transmitting)</span>';
+
             html += `
                 <div style="margin:4px 0; padding:4px; background:rgba(255,255,255,0.05); border-radius:3px;">
                     <span style="color:#0ff;">${id.substring(0, 8)}...</span><br>
                     <span style="color:#888;">conn:</span> <span style="color:${connColor};">${connState}</span>
                     <span style="color:#888;">ice:</span> <span style="color:${iceColor};">${iceState}</span><br>
                     <span style="color:#888;">gather:</span> ${iceGatherState}
-                    <span style="color:#888;">signal:</span> ${sigState}
+                    <span style="color:#888;">signal:</span> ${sigState}<br>
+                    <span style="color:#888;">mic sender:</span> ${micSenderState}
                     ${await this._describeConnectionStats(pc)}
                 </div>`;
         }

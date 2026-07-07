@@ -600,6 +600,10 @@ export class PeerManager {
     _reconcileMicGate(speakingLocally) {
         const micMode = (typeof localStorage !== 'undefined' && localStorage.getItem('micMode')) || 'toggle';
         const shouldTransmit = this.micEnabled && (micMode !== 'voice-activity' || speakingLocally);
+        // Exposed for DebugPanel — lets a "ring says speaking but no audio
+        // arrives" report be diagnosed from what this function actually
+        // computed, rather than only what the ring displayed.
+        this._micGateState = { micMode, micEnabled: this.micEnabled, speakingLocally, shouldTransmit };
 
         // Reconciled unconditionally (not just on a state change) so a sender
         // added mid-gate — e.g. a new peer joining while voice-activity has the
