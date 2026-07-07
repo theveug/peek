@@ -526,6 +526,9 @@ if (mobileBackdrop) {
     mobileBackdrop.addEventListener('click', closeMobilePanels);
 }
 
+document.getElementById('chat-mobile-close')?.addEventListener('click', closeMobilePanels);
+document.getElementById('members-mobile-close')?.addEventListener('click', closeMobilePanels);
+
 const chatButton = document.getElementById('togglechat');
 chatButton.addEventListener('click', () => {
     const chatBox = document.getElementById('chat');

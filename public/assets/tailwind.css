@@ -858,6 +858,34 @@ a.link-preview:hover {
   color: var(--accentText);
 }
 
+/* Desktop closes/collapses these panels via the edge tabs (.chat-tab/.members-tab),
+   which sit inside #videos's own stacking context (z-index:61) — fine on desktop
+   since the panel itself never renders above #videos there. On mobile the panel
+   becomes a position:fixed drawer at z-index:80 (see the mobile media query below),
+   which paints over #videos's entire subtree regardless of the tab's own z-index
+   (a nested stacking context can't outrank its ancestor's stacking level), hiding
+   the tab the moment the drawer it's supposed to close is open. This in-header
+   close button is the mobile-only escape hatch — hidden here, shown in that
+   media query. */
+.mobile-panel-close {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--t3);
+  cursor: pointer;
+}
+
+.mobile-panel-close:hover {
+  background: var(--bg5);
+  color: var(--t1);
+}
+
 .chat-composer {
   display: flex;
   align-items: center;
@@ -2586,6 +2614,13 @@ body,
   .panel-tab {
     width: 26px;
     height: 64px;
+  }
+
+  /* The edge tabs (.chat-tab/.members-tab) are unreachable while their drawer
+     is open on mobile (see .mobile-panel-close above) — this in-header button
+     is the actual close affordance in that state. */
+  .mobile-panel-close {
+    display: flex;
   }
 
   /* No resize handle exists on mobile at all (hidden above), so there's no
