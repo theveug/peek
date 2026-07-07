@@ -1277,7 +1277,12 @@ export class UIController {
         this.updateLayout();
     }
 
-    removeStream(peerId) {
+    removeStream(peerId, silent = false) {
+        // A full peer disconnect (PeerManager.removePeer) calls this as blanket
+        // cleanup for streams that may never have existed, and already plays its
+        // own 'peerLeft' sound — hence the silent flag and the hadStream guard,
+        // so one leave can't queue phantom streamDown sounds on top.
+        const hadStream = !!this.streams[peerId];
         delete this.streams[peerId];
         this.watchedTiles.delete(peerId);
         this._watchSentState.delete(peerId);
@@ -1288,7 +1293,7 @@ export class UIController {
             const viewId = peerId === 'me' ? 'self-view' : 'self-cam-view';
             const selfView = document.getElementById(viewId);
             if (selfView) {
-                if (peerId === 'me') playSound('streamDown');
+                if (peerId === 'me' && !silent) playSound('streamDown');
                 selfView.remove();
             }
             this._updateSelfViewPositions();
@@ -1297,7 +1302,7 @@ export class UIController {
             if (peerId === 'me') this.updateLayout();
             return;
         } else {
-            playSound('streamDown');
+            if (hadStream && !silent) playSound('streamDown');
 
             if (this.focusedPeerId === peerId) {
                 this.focusedPeerId = null;

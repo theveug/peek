@@ -1170,8 +1170,12 @@ export class PeerManager {
         delete this.peerCamStreamIds[peerId];
         delete this.peerScreenStreamIds[peerId];
         delete this.senders[peerId];
-        this.ui.removeStream(peerId);
-        this.ui.removeStream(peerId + '-cam');
+        // silent: this is blanket cleanup on a full disconnect — the 'peer-left'
+        // handler plays the single peerLeft sound, and the 'init' reconnect sweep
+        // should make no noise at all. Without it, every leave queued two phantom
+        // streamDown sounds (screen + cam) even for peers who never streamed.
+        this.ui.removeStream(peerId, true);
+        this.ui.removeStream(peerId + '-cam', true);
         this.ui.removeAudio(peerId + '-screen');
     }
 
