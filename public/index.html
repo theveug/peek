@@ -701,6 +701,14 @@
                             <p class="text-[10px] text-muted mt-1">Only transmits while you're speaking above this level
                                 — lower is more sensitive.</p>
                         </div>
+                        <div id="mic-hold-time-row" class="settings-field hidden">
+                            <label for="settings-mic-hold-time" class="settings-label">Mic hold time — <span
+                                    id="settings-mic-hold-time-value">0.4s</span></label>
+                            <input id="settings-mic-hold-time" type="range" min="150" max="1500" step="50"
+                                class="w-full" />
+                            <p class="text-[10px] text-muted mt-1">How long transmission stays open after you stop
+                                speaking — raise this if pauses between words or sentences get cut off.</p>
+                        </div>
                         <div id="mic-meter-row" class="settings-field hidden">
                             <label class="settings-label">Mic level</label>
                             <div class="mic-meter">

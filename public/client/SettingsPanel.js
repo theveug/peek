@@ -274,6 +274,12 @@ export class SettingsPanel {
             this._updateMicThresholdLabel(parseFloat(e.target.value));
         });
 
+        const micHoldTime = document.getElementById('settings-mic-hold-time');
+        micHoldTime?.addEventListener('input', (e) => {
+            localStorage.setItem('micHoldTime', e.target.value);
+            this._updateMicHoldTimeLabel(parseFloat(e.target.value));
+        });
+
         const keybindInput = document.getElementById('settings-keybind');
         if (keybindInput) {
             keybindInput.addEventListener('click', () => {
@@ -323,6 +329,13 @@ export class SettingsPanel {
         const thresholdInput = document.getElementById('settings-mic-threshold');
         if (thresholdInput) thresholdInput.value = String(threshold);
         this._updateMicThresholdLabel(threshold);
+
+        const holdTimeRow = document.getElementById('mic-hold-time-row');
+        if (holdTimeRow) holdTimeRow.classList.toggle('hidden', micMode !== 'voice-activity');
+        const holdTime = parseFloat(localStorage.getItem('micHoldTime')) || 400;
+        const holdTimeInput = document.getElementById('settings-mic-hold-time');
+        if (holdTimeInput) holdTimeInput.value = String(holdTime);
+        this._updateMicHoldTimeLabel(holdTime);
 
         const meterRow = document.getElementById('mic-meter-row');
         if (meterRow) meterRow.classList.toggle('hidden', micMode !== 'voice-activity');
@@ -380,6 +393,12 @@ export class SettingsPanel {
         const label = document.getElementById('settings-mic-threshold-value');
         if (!label) return;
         label.textContent = threshold <= 0.02 ? 'High' : threshold <= 0.06 ? 'Medium' : 'Low';
+    }
+
+    _updateMicHoldTimeLabel(ms) {
+        const label = document.getElementById('settings-mic-hold-time-value');
+        if (!label) return;
+        label.textContent = `${(ms / 1000).toFixed(2).replace(/0$/, '')}s`;
     }
 
     _refreshAudio() {

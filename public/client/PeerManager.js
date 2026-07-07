@@ -537,7 +537,13 @@ export class PeerManager {
         // everyone else's speaking-ring looks on this client — a harmless,
         // local-only side effect).
         const MARGIN = parseFloat(typeof localStorage !== 'undefined' ? localStorage.getItem('micThreshold') : null) || 0.03;
-        const RELEASE_MS = 400;
+        // User-adjustable via Settings' "Mic hold time" slider (voice-activity mode
+        // only) — how long the gate stays open after the last loud sample before
+        // closing again. Naturally speech-paced talkers (pauses mid-sentence while
+        // thinking) need this longer than the 400ms default, or the gate closes
+        // mid-sentence and has to re-detect speech on the next word, clipping both
+        // the tail of the pause and the onset of what follows.
+        const RELEASE_MS = parseFloat(typeof localStorage !== 'undefined' ? localStorage.getItem('micHoldTime') : null) || 400;
         const FLOOR_ADAPT_UP = 0.02;
         const FLOOR_ADAPT_DOWN = 0.2;
 
