@@ -391,12 +391,30 @@ function updateCamUI(enabled) {
     document.getElementById('cam-off-icon').classList.toggle('hidden', enabled);
     document.getElementById('cam-on-icon').classList.toggle('hidden', !enabled);
     document.getElementById('cam-toggle').title = enabled ? 'Turn off Camera' : 'Turn on Camera';
+    document.getElementById('switch-cam-button').style.display = (enabled && hasMultipleCameras) ? '' : 'none';
 }
 
 document.getElementById('cam-toggle').addEventListener('click', async () => {
     const enabled = await peerManager.toggleCam();
     updateCamUI(enabled);
 });
+
+document.getElementById('switch-cam-button').addEventListener('click', () => {
+    peerManager.switchCamera();
+});
+
+// getDisplayMedia (screen share) isn't implemented in any mobile browser (iOS WebKit
+// or Android) — hide the button entirely rather than let it silently no-op on click.
+if (!navigator.mediaDevices?.getDisplayMedia) {
+    document.getElementById('share-toggle').style.display = 'none';
+}
+
+// Only worth offering camera switching if the device actually has more than one.
+let hasMultipleCameras = false;
+navigator.mediaDevices?.enumerateDevices?.().then(devices => {
+    hasMultipleCameras = devices.filter(d => d.kind === 'videoinput').length > 1;
+    updateCamUI(peerManager.camEnabled);
+}).catch(() => {});
 
 peerManager.onForceStopped = () => {
     updateShareButton();

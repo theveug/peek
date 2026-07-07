@@ -38,6 +38,7 @@ export class PeerManager {
         this._filePeerProgress = {};
         this.camStream = null;
         this.camEnabled = false;
+        this._camFacingMode = 'user';
         this.peerCamStreamIds = {};
         this._lastQualityTierKey = null;
         this.peerScreenStreamIds = {};
@@ -1183,7 +1184,11 @@ export class PeerManager {
         }
 
         try {
-            this.camStream = await navigator.mediaDevices.getUserMedia({ video: this._resolveQuality('cam'), audio: false });
+            this._camFacingMode = 'user';
+            this.camStream = await navigator.mediaDevices.getUserMedia({
+                video: { ...this._resolveQuality('cam'), facingMode: { ideal: this._camFacingMode } },
+                audio: false,
+            });
             this.camEnabled = true;
 
             this.camStream.getVideoTracks()[0].onended = () => {
@@ -1232,6 +1237,42 @@ export class PeerManager {
         this.camEnabled = false;
         this.ui.removeStream('me-cam');
         this.send('webcam-stop', null, {});
+    }
+
+    // Flips between front/back camera without renegotiating — swaps the outbound
+    // track via replaceTrack() on each existing sender, same mechanism the
+    // watch/unwatch pause system and mic-gate use for track swaps without SDP churn.
+    async switchCamera() {
+        if (!this.camStream) return;
+        const nextFacingMode = this._camFacingMode === 'environment' ? 'user' : 'environment';
+
+        try {
+            const newStream = await navigator.mediaDevices.getUserMedia({
+                video: { ...this._resolveQuality('cam'), facingMode: { ideal: nextFacingMode } },
+                audio: false,
+            });
+            const newTrack = newStream.getVideoTracks()[0];
+
+            this.camStream.getVideoTracks()[0].stop();
+            this._camFacingMode = nextFacingMode;
+            this.camStream = newStream;
+
+            newTrack.onended = () => {
+                this.stopCam();
+                document.getElementById('cam-on-icon')?.classList.add('hidden');
+                document.getElementById('cam-off-icon')?.classList.remove('hidden');
+            };
+
+            for (const [peerId, pc] of Object.entries(this.peers)) {
+                const sender = this.senders[peerId]?.['cam-video'];
+                if (sender) await sender.replaceTrack(newTrack);
+            }
+
+            this.ui.addStream('me-cam', this.camStream);
+        } catch (err) {
+            console.warn('Switch camera failed:', err);
+            this.ui.showToast('Could not switch camera');
+        }
     }
 
     broadcastCamStreamId() {
