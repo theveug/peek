@@ -62,24 +62,30 @@ async function main() {
         await page.goto(`${BASE_URL}/${code}`);
         await page.waitForSelector('#chat', { state: 'attached' });
 
-        // --- Panel toggle tabs: attached to panel edges, vertically centered ---
-        assert(await page.isVisible('#togglechat'), 'chat tab should be visible');
-        assert(await page.isVisible('#toggle-members'), 'members tab should be visible');
+        // --- Panel edge tabs (2026-07-08 redesign): reopen-only affordances ---
+        // On desktop the edge tabs are hidden while their panel is open — closing
+        // happens via the in-header close button; the tab only appears (via
+        // body:has(#chat.hidden)) once the panel is closed, to reopen it.
+        assert(!(await page.isVisible('#togglechat')), 'chat tab should be hidden while the chat panel is open');
+        assert(!(await page.isVisible('#toggle-members')), 'members tab should be hidden while the members panel is open');
 
+        await page.click('#chat-close-btn');
+        assert(!(await page.isVisible('#chat-log')), 'chat panel should hide after clicking its header close button');
+        await page.waitForSelector('#togglechat', { state: 'visible', timeout: 2000 });
         await page.click('#togglechat');
-        assert(!(await page.isVisible('#chat-log')), 'chat panel should hide after clicking its tab');
-        await page.click('#togglechat');
-        assert(await page.isVisible('#chat-log'), 'chat panel should reopen after clicking its tab again');
+        assert(await page.isVisible('#chat-log'), 'chat panel should reopen after clicking its edge tab');
+        assert(!(await page.isVisible('#togglechat')), 'chat tab should hide again once the panel is reopened');
 
-        await page.click('#toggle-members');
+        await page.click('#members-close-btn');
         assert(
             await page.$eval('#members-sidebar', (el) => el.classList.contains('collapsed')),
-            'members panel should collapse after clicking its tab'
+            'members panel should collapse after clicking its header close button'
         );
+        await page.waitForSelector('#toggle-members', { state: 'visible', timeout: 2000 });
         await page.click('#toggle-members');
         assert(
             !(await page.$eval('#members-sidebar', (el) => el.classList.contains('collapsed'))),
-            'members panel should reopen after clicking its tab again'
+            'members panel should reopen after clicking its edge tab'
         );
 
         // --- Screen share button: monitor icon, stop button appears once sharing ---

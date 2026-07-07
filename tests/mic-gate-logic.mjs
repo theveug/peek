@@ -59,7 +59,18 @@ function makeFakeSender() {
 
     localStorage.setItem('micMode', 'voice-activity');
     pm._reconcileMicGate(true); // even if "speaking" were somehow true
-    assert(senderA._calls.at(-1) === liveTrack, 'manual mute leaves the sender attached (existing .muted-via-track.enabled path handles silence, not the gate)');
+    // Since the "gate every mode" change (track.enabled = false still encodes and
+    // transmits silence), manual mute must close the RTP sender too, not just
+    // disable the track — regardless of the speaking signal.
+    assert(senderA._calls.at(-1) === null, 'manual mute closes the sender in every mode (a disabled track still transmits silence otherwise)');
+
+    localStorage.setItem('micMode', 'toggle');
+    pm._reconcileMicGate(false);
+    assert(senderA._calls.at(-1) === null, 'manual mute closes the sender in toggle mode too');
+
+    pm.micEnabled = true;
+    pm._reconcileMicGate(false);
+    assert(senderA._calls.at(-1) === liveTrack, 'unmuting reopens the sender on the next tick');
 })();
 
 (function testNewSenderJoiningMidGateGetsReconciled() {

@@ -1128,11 +1128,16 @@ export class PeerManager {
             this._addTrackedStream(pc, from, this.camStream, 'cam');
         }
 
-        if (this.micStream) {
-            const hasAudioSender = pc.getSenders().some(s => s.track && s.track.kind === 'audio');
-            if (!hasAudioSender) {
-                this._addTrackedStream(pc, from, this.micStream, 'mic');
-            }
+        // Consult the senders map, NOT pc.getSenders() track kinds — a mic sender
+        // gated closed by _reconcileMicGate (muted, or silent in voice-activity
+        // mode) has .track === null, so a live-track check misses it and re-adds
+        // the mic. The duplicate transceiver (created after setRemoteDescription)
+        // can't be negotiated in the answer, and it overwrites senders[from]
+        // ['mic-audio'] — leaving the gate driving a dead sender while the real
+        // one is stranded at replaceTrack(null): mic permanently silent to that
+        // peer even though the local speaking ring still lights up.
+        if (this.micStream && !this.senders[from]?.['mic-audio']) {
+            this._addTrackedStream(pc, from, this.micStream, 'mic');
         }
 
         const answer = await pc.createAnswer();
@@ -1170,15 +1175,14 @@ export class PeerManager {
         this.ui.removeAudio(peerId + '-screen');
     }
 
+    // Called when a REMOTE peer stops their screen share ('stop-sharing') — their
+    // tracks end on our receivers on their own, so the only cleanup needed here is
+    // the video tile. This must never touch pc.getSenders(): those are OUR outbound
+    // tracks (mic/cam/screen) to that peer, and a removeTrack() on them silently
+    // stops our audio/video toward the ex-sharer with no renegotiation and no error
+    // (the next negotiation then locks the transceiver receive-only, killing the
+    // mic to that peer permanently — the "they can't hear me anymore" bug).
     removePeerStream(peerId) {
-        const pc = this.peers[peerId];
-        if (pc) {
-            pc.getSenders().forEach(sender => {
-                if (sender.track) {
-                    pc.removeTrack(sender);
-                }
-            });
-        }
         this.ui.removeStream(peerId);
     }
 

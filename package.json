@@ -15,6 +15,7 @@
     "test:file-consent": "node tests/file-consent.mjs",
     "test:active-speaker": "node tests/active-speaker-logic.mjs",
     "test:mic-gate": "node tests/mic-gate-logic.mjs",
+    "test:audio-senders": "node tests/audio-sender-lifecycle.mjs",
     "test:password-leak": "node tests/room-password-leak.mjs",
     "test:offline": "node tests/offline-selfhost.mjs"
   },
