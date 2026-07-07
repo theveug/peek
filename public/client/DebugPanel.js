@@ -42,7 +42,7 @@ export class DebugPanel {
         this.socket = socket;
     }
 
-    update() {
+    async update() {
         const ws = this.socket;
         const pm = this.peerManager;
 
@@ -86,7 +86,7 @@ export class DebugPanel {
             html += `<span style="color:#666;">No peers connected</span><br>`;
         }
 
-        peerIds.forEach(id => {
+        for (const id of peerIds) {
             const pc = pm.peers[id];
             const connState = pc.connectionState || 'unknown';
             const iceState = pc.iceConnectionState || 'unknown';
@@ -112,8 +112,9 @@ export class DebugPanel {
                     <span style="color:#888;">ice:</span> <span style="color:${iceColor};">${iceState}</span><br>
                     <span style="color:#888;">gather:</span> ${iceGatherState}
                     <span style="color:#888;">signal:</span> ${sigState}
+                    ${await this._describeConnectionStats(pc)}
                 </div>`;
-        });
+        }
 
         html += `</div>`;
 
@@ -132,5 +133,49 @@ export class DebugPanel {
         }
 
         this.panel.innerHTML = html;
+    }
+
+    // Surfaces the ICE path actually in use (host/srflx/relay — i.e. whether
+    // TURN is relaying) plus per-track audio flow, since "can't hear one
+    // direction of audio" bugs are otherwise invisible without opening
+    // chrome://webrtc-internals mid-call. Added after a real report of one
+    // peer's mic audio silently not reaching the other while screen sharing,
+    // which self-resolved once the other peer also started a share —
+    // consistent with a borderline ICE candidate pair, not an app-level bug,
+    // but unconfirmed without stats captured at the moment it happens.
+    async _describeConnectionStats(pc) {
+        let stats;
+        try {
+            stats = await pc.getStats();
+        } catch {
+            return '';
+        }
+
+        const candidates = {};
+        let pair = null;
+        stats.forEach((r) => {
+            if (r.type === 'local-candidate' || r.type === 'remote-candidate') candidates[r.id] = r;
+            if (r.type === 'candidate-pair' && (r.nominated || r.selected) && r.state === 'succeeded') pair = r;
+        });
+
+        let pairHtml = '<span style="color:#888;">path:</span> <span style="color:#f44;">none selected</span>';
+        if (pair) {
+            const local = candidates[pair.localCandidateId];
+            const remote = candidates[pair.remoteCandidateId];
+            const relayed = local?.candidateType === 'relay' || remote?.candidateType === 'relay';
+            pairHtml = `<span style="color:#888;">path:</span> <span style="color:${relayed ? '#ff0' : '#0f0'};">${local?.candidateType || '?'}&harr;${remote?.candidateType || '?'}</span>${relayed ? ' <span style="color:#ff0;">(TURN)</span>' : ''}`;
+        }
+
+        const audioLines = [];
+        stats.forEach((r) => {
+            if (r.type === 'outbound-rtp' && r.kind === 'audio') {
+                audioLines.push(`<span style="color:#888;">mic out:</span> ${(r.bytesSent / 1024).toFixed(1)}KB`);
+            }
+            if (r.type === 'inbound-rtp' && r.kind === 'audio') {
+                audioLines.push(`<span style="color:#888;">audio in (${r.trackIdentifier?.slice(0, 6) || '?'}):</span> ${(r.bytesReceived / 1024).toFixed(1)}KB, lost ${r.packetsLost ?? '?'}`);
+            }
+        });
+
+        return `<br>${pairHtml}${audioLines.length ? '<br>' + audioLines.join('<br>') : ''}`;
     }
 }
