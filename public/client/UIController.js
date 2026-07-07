@@ -29,6 +29,14 @@ export class UIController {
         this.panY = 0;
         this.isPanning = false;
         this.chat = new ChatUI({ getNickname: (id) => this._peerNickname(id), avatarInitials: (name) => this._avatarInitials(name) });
+        // A dragged self-view PiP's saved left/top can end up off-screen after the
+        // window shrinks (e.g. undocking to a smaller monitor) — reclamp on resize.
+        window.addEventListener('resize', () => {
+            ['self-view', 'self-cam-view'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el?.dataset.dragged) this._reclampDraggedPip(el, id);
+            });
+        });
         this._sharedFiles = [];
         this.maxPeers = 6;
         this.roomName = null;
@@ -1149,14 +1157,83 @@ export class UIController {
     _updateSelfViewPositions() {
         const screenView = document.getElementById('self-view');
         const camView = document.getElementById('self-cam-view');
+        // A manually-dragged PiP (dataset.dragged) keeps its own explicit
+        // left/top — don't snap it back into the auto right-edge stacking.
         if (screenView && camView) {
-            screenView.style.right = '170px';
-            camView.style.right = '10px';
-        } else if (screenView) {
+            if (!screenView.dataset.dragged) screenView.style.right = '170px';
+            if (!camView.dataset.dragged) camView.style.right = '10px';
+        } else if (screenView && !screenView.dataset.dragged) {
             screenView.style.right = '10px';
-        } else if (camView) {
+        } else if (camView && !camView.dataset.dragged) {
             camView.style.right = '10px';
         }
+    }
+
+    _reclampDraggedPip(el, storageKey) {
+        const maxLeft = Math.max(0, window.innerWidth - el.offsetWidth);
+        const maxTop = Math.max(0, window.innerHeight - el.offsetHeight);
+        const left = Math.min(Math.max(parseFloat(el.style.left) || 0, 0), maxLeft);
+        const top = Math.min(Math.max(parseFloat(el.style.top) || 0, 0), maxTop);
+        el.style.left = `${left}px`;
+        el.style.top = `${top}px`;
+        localStorage.setItem(`pipPosition:${storageKey}`, JSON.stringify({ left, top }));
+    }
+
+    // Drag-to-reposition for the self-view PiPs (Discord-style). Position is
+    // remembered per PiP (`pipPosition:${storageKey}`) across stream stop/start
+    // and page reloads, since it's a personal layout preference, not tied to any
+    // one stream instance.
+    _makeDraggable(el, storageKey) {
+        el.style.cursor = 'grab';
+        el.style.touchAction = 'none'; // prevent touch-drag from also scrolling the page
+        let offsetX = 0;
+        let offsetY = 0;
+
+        const clamp = (left, top) => {
+            const maxLeft = Math.max(0, window.innerWidth - el.offsetWidth);
+            const maxTop = Math.max(0, window.innerHeight - el.offsetHeight);
+            return [Math.min(Math.max(left, 0), maxLeft), Math.min(Math.max(top, 0), maxTop)];
+        };
+
+        const applyPosition = (left, top) => {
+            const [clampedLeft, clampedTop] = clamp(left, top);
+            el.style.left = `${clampedLeft}px`;
+            el.style.top = `${clampedTop}px`;
+            el.style.right = 'auto';
+            el.style.bottom = 'auto';
+            el.dataset.dragged = 'true';
+        };
+
+        const saved = localStorage.getItem(`pipPosition:${storageKey}`);
+        if (saved) {
+            try {
+                const { left, top } = JSON.parse(saved);
+                if (Number.isFinite(left) && Number.isFinite(top)) applyPosition(left, top);
+            } catch {}
+        }
+
+        el.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            const rect = el.getBoundingClientRect();
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+            applyPosition(rect.left, rect.top);
+            el.setPointerCapture(e.pointerId);
+            el.style.cursor = 'grabbing';
+        });
+
+        el.addEventListener('pointermove', (e) => {
+            if (!el.hasPointerCapture?.(e.pointerId)) return;
+            applyPosition(e.clientX - offsetX, e.clientY - offsetY);
+        });
+
+        el.addEventListener('pointerup', (e) => {
+            if (!el.hasPointerCapture?.(e.pointerId)) return;
+            el.releasePointerCapture(e.pointerId);
+            el.style.cursor = 'grab';
+            const rect = el.getBoundingClientRect();
+            localStorage.setItem(`pipPosition:${storageKey}`, JSON.stringify({ left: rect.left, top: rect.top }));
+        });
     }
 
     addStream(peerId, stream) {
@@ -1176,6 +1253,7 @@ export class UIController {
                 selfView.srcObject = stream;
                 selfView.style.cssText = 'position:fixed; bottom:10px; width:150px; border:2px solid #ccc; z-index:1000; border-radius:6px; object-fit:cover;';
                 this.container.appendChild(selfView);
+                this._makeDraggable(selfView, viewId);
             }
             this._updateSelfViewPositions();
             if (peerId === 'me') playSound('streamUp');
