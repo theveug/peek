@@ -862,11 +862,11 @@ a.link-preview:hover {
   display: flex;
   align-items: center;
   gap: 9px;
-  margin: 0 12px 4px;
+  /* margin: 0 12px 4px; */
   background: var(--input);
   border: 1px solid var(--border);
-  border-radius: 13px;
-  padding: 7px 8px 7px 11px;
+  /* border-radius: 13px; */
+  padding: 12px 8px 12px 6px;
 }
 
 .chat-composer-input {
@@ -919,6 +919,53 @@ a.link-preview:hover {
 .chat-composer-send .material-symbols-rounded {
   font-size: 18px;
   line-height: 1;
+}
+
+/* "+" dropup for the composer's attach-file/create-poll actions (2026-07-08) —
+   used to be two permanent buttons flanking the textarea, eating width that
+   could go to the message input; now a single button with these two folded
+   into a small menu that opens upward (the composer sits at the bottom of the
+   panel, so a normal downward dropdown would run off-screen). */
+.composer-plus-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.composer-plus-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  min-width: 170px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  z-index: 30;
+}
+
+.composer-plus-menu.hidden {
+  display: none;
+}
+
+.composer-plus-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--t1);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.composer-plus-option:hover {
+  background: var(--bg4);
 }
 
 .chat-composer-hint {
@@ -1160,16 +1207,43 @@ body.light .panel-tab:hover {
   background: rgba(0, 0, 0, 0.06);
 }
 
+/* left:0/right:0 sits flush against #videos's own edge, but #videos's actual
+   edge starts 4px in from the panel it's supposedly attached to — the
+   4px-wide .chat-resize-handle/.members-resize-handle sibling sits in between,
+   pushing #videos over and leaving a visible gap. Pull the tab that same 4px
+   back over the handle so it reads as attached to the panel, not floating
+   next to it. Requires #videos to out-stack the handle (see its z-index rule
+   below) or the handle would win pointer events in the now-overlapping strip. */
 .chat-tab {
-  left: 0;
+  left: -4px;
   border-radius: 0 10px 10px 0;
   border-left: none !important;
 }
 
 .members-tab {
-  right: 0;
+  right: -4px;
   border-radius: 10px 0 0 10px;
   border-right: none !important;
+}
+
+/* The resize handle itself disappears (display:none) once its panel is
+   hidden/collapsed, so #videos's edge moves back out flush with no gap left
+   to compensate for — zero the offset back out in that state. */
+body:has(#chat.hidden) .chat-tab {
+  left: 0;
+}
+
+body:has(#members-sidebar.collapsed) .members-tab {
+  right: 0;
+}
+
+/* #videos has no z-index of its own (position:relative via a Tailwind
+   utility class, not this stylesheet), so its children — including the tabs
+   above, now intentionally overlapping the resize handles by 4px — would
+   otherwise lose the resize handles' own higher z-index:60 and never receive
+   the tab's click. */
+#videos {
+  z-index: 61;
 }
 
 /* ===== Participant card ===== */
@@ -1993,7 +2067,9 @@ body,
   width: 0%;
   background: var(--accent);
   border-radius: 999px;
-  transition: width 0.08s linear, background-color 0.1s linear;
+  transition:
+    width 0.08s linear,
+    background-color 0.1s linear;
 }
 
 .mic-meter-fill-active {
@@ -2192,7 +2268,9 @@ body,
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .settings-danger-btn:hover {
@@ -2508,6 +2586,16 @@ body,
   .panel-tab {
     width: 26px;
     height: 64px;
+  }
+
+  /* No resize handle exists on mobile at all (hidden above), so there's no
+     4px gap to pull the tabs back over here. */
+  .chat-tab {
+    left: 0;
+  }
+
+  .members-tab {
+    right: 0;
   }
 
   /* Chat panel as left drawer overlay */
@@ -3210,10 +3298,15 @@ body,
   }
 }
 
-.topbar-latency-wrap {
+.topbar-signal-wrap {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.topbar-signal-icon {
+  display: flex;
+  align-items: center;
 }
 
 .topbar-invite-btn {
@@ -3259,11 +3352,32 @@ body,
   color: var(--t1);
 }
 
+/* The whole avatar+name area is the single status/settings dropdown trigger
+   (2026-07-08 redesign — this used to be a plain non-interactive div with its
+   own separate caret-only status trigger nested inside it, duplicating the
+   status dropdown that also lived in the room-settings popover). */
 .topbar-identity {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  padding: 4px 8px 4px 4px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.topbar-identity:hover {
+  background: var(--bg3);
+}
+
+.topbar-identity-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
 }
 
 .topbar-identity-avatar {
@@ -3277,8 +3391,30 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
   flex-shrink: 0;
+}
+
+/* Same corner-badge treatment as .participant-status-dot in the members list,
+   sized for the smaller 30px topbar avatar. Ring color matches the topbar's
+   own background (--bg2) rather than --participant-border so it still reads
+   as a cutout against this specific surface. */
+.topbar-identity-status-dot {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid var(--bg2);
+  background: var(--green);
+}
+
+.topbar-identity-status-dot.away {
+  background: var(--amber);
+}
+
+.topbar-identity-status-dot.dnd {
+  background: var(--red);
 }
 
 .topbar-identity-name {
@@ -3288,26 +3424,22 @@ body,
   white-space: nowrap;
 }
 
-.topbar-identity-status-trigger {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0;
-  border: none;
-  background: transparent;
+.topbar-identity-caret {
+  font-size: 18px;
   color: var(--t3);
-  cursor: pointer;
 }
 
-.topbar-identity-status-trigger .quick-status-caret {
-  font-size: 16px;
-}
-
-.topbar-identity-status-trigger + .quick-status-menu {
+.topbar-identity + .quick-status-menu {
   top: calc(100% + 8px);
   left: auto;
-  right: -12px;
-  width: 170px;
+  right: 0;
+  width: 190px;
+}
+
+.quick-status-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 2px;
 }
 
 /* ===== Invite popover ===== */
@@ -3346,7 +3478,7 @@ body,
     display: none;
   }
 
-  .topbar-latency-wrap,
+  .topbar-signal-wrap,
   .topbar-peer-pill,
   #quick-settings-button {
     display: none !important;

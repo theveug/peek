@@ -192,6 +192,34 @@ if (fileAttachBtn && fileInput) {
     });
 }
 
+// Composer "+" dropup — folds attach-file/create-poll into one menu instead of
+// two permanent buttons flanking the textarea. The two actions' own click
+// handlers (above, and in the poll IIFE below) are unchanged; this only owns
+// opening/closing the menu around them.
+(function initComposerPlusMenu() {
+    const btn = document.getElementById('composer-plus-btn');
+    const menu = document.getElementById('composer-plus-menu');
+    if (!btn || !menu) return;
+
+    const close = () => menu.classList.add('hidden');
+
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu.classList.toggle('hidden');
+    });
+    menu.querySelectorAll('button').forEach(option => {
+        option.addEventListener('click', close);
+    });
+    document.addEventListener('click', (e) => {
+        if (menu.classList.contains('hidden')) return;
+        if (menu.contains(e.target) || e.target === btn) return;
+        close();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !menu.classList.contains('hidden')) close();
+    });
+})();
+
 document.getElementById('files-dropzone-card')?.addEventListener('click', () => fileInput?.click());
 
 document.addEventListener('paste', (e) => {
@@ -308,9 +336,18 @@ input.addEventListener('input', () => {
     typingTimer = setTimeout(() => sendTypingStatus(false), 2000);
 });
 
+// Discord-style: Enter inside an unclosed ``` fence inserts a newline instead
+// of sending, since a fenced code block is the one case where you actually
+// want multiple lines without reaching for Shift+Enter every time.
+function isInsideOpenCodeFence(text, caretPos) {
+    const fenceCount = (text.slice(0, caretPos).match(/```/g) || []).length;
+    return fenceCount % 2 === 1;
+}
+
 // Handle enter + shift logic
 input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
+        if (isInsideOpenCodeFence(input.value, input.selectionStart)) return;
         e.preventDefault();
         sendMessage();
     }
@@ -622,14 +659,16 @@ window.addEventListener('resize', () => {
 });
 
 // --- Settings panel (redesign Phase 3 — see public/client/SettingsPanel.js) ---
+// The standalone gear button that used to open this directly is gone
+// (2026-07-08) — it's now reached via the top-bar identity dropdown's
+// "Settings" item, see TopbarIdentity.js.
 const settingsPanel = new SettingsPanel({ ui, peerManager });
-document.getElementById('settings-button').addEventListener('click', () => settingsPanel.open());
 
-// --- Quick room settings popover (status/file-trust/follow-speaker/quality) ---
-new QuickRoomSettings({ ui, peerManager, settingsPanel });
+// --- Quick room settings popover (file-trust/follow-speaker/quality) ---
+new QuickRoomSettings({ ui, peerManager });
 
-// --- Top-bar identity status dropdown ---
-new TopbarIdentity({ peerManager });
+// --- Top-bar identity dropdown (status + Settings) ---
+new TopbarIdentity({ peerManager, settingsPanel });
 
 function updateMicUI(enabled) {
     document.getElementById('mic-off-icon').classList.toggle('hidden', enabled);

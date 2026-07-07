@@ -80,7 +80,10 @@ async function main() {
         console.log('CASE 2 - decline blocks delivery: PASS');
 
         // --- Case 3: auto-accept toggle — no prompt, file arrives directly ---
-        await pageB.click('#settings-button');
+        // Settings is reached via the top-bar identity dropdown, not a standalone
+        // gear button (removed 2026-07-08 — see TopbarIdentity.js).
+        await pageB.click('#topbar-identity');
+        await pageB.click('#topbar-identity-settings');
         await pageB.click('[data-settings-section="privacy"]');
         await pageB.check('#settings-auto-accept-files');
         await pageB.click('#close-settings');

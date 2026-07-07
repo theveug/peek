@@ -979,15 +979,20 @@ export class UIController {
         });
     }
 
-    updateMeshLatency(ms) {
-        const wrap = document.getElementById('topbar-latency-wrap');
-        const valueEl = document.getElementById('topbar-latency');
-        if (!wrap || !valueEl) return;
+    // Replaces the old "Xms · mesh" text with the same colored signal-bars icon
+    // used per-participant in the members list (_signalBarsSvg) — tier is the
+    // worst connection quality across all mesh peers, ms is only for the tooltip.
+    updateMeshSignal(ms, tier) {
+        const wrap = document.getElementById('topbar-signal-wrap');
+        const icon = document.getElementById('topbar-signal-icon');
+        if (!wrap || !icon) return;
         if (ms === null) {
             wrap.classList.add('hidden');
             return;
         }
-        valueEl.textContent = Math.round(ms);
+        const labels = { excellent: 'Excellent', good: 'Good', fair: 'Fair', poor: 'Poor', unknown: 'Unknown' };
+        icon.innerHTML = this._signalBarsSvg(tier);
+        icon.title = `${Math.round(ms)}ms · mesh · ${labels[tier] || 'Unknown'}`;
         wrap.classList.remove('hidden');
     }
 
@@ -1102,7 +1107,7 @@ export class UIController {
 
     updateIdentityStatus(status) {
         const dot = document.getElementById('topbar-identity-status-dot');
-        if (dot) dot.className = `quick-status-dot ${status === 'online' ? '' : status}`.trim();
+        if (dot) dot.className = `topbar-identity-status-dot ${status === 'online' ? '' : status}`.trim();
     }
 
     // --- Audio ---

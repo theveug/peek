@@ -377,8 +377,14 @@ export class PeerManager {
         return 'excellent';
     }
 
+    // Worse-is-first ranking so the topbar's own signal icon reflects whichever
+    // mesh connection is currently the weakest link, not just an average that
+    // could mask one bad peer among several good ones.
+    _qualityRank = { excellent: 0, good: 1, fair: 2, poor: 3, unknown: 0 };
+
     async _pollConnectionStats() {
         const rttSamples = [];
+        let worstTier = 'unknown';
         for (const [peerId, pc] of Object.entries(this.peers)) {
             try {
                 const stats = await pc.getStats();
@@ -394,12 +400,14 @@ export class PeerManager {
                 });
                 const total = packetsReceived + packetsLost;
                 const lossRate = total > 0 ? packetsLost / total : 0;
-                this.ui.updateConnectionQuality(peerId, this._connectionQualityFromStats(rtt, lossRate));
+                const tier = this._connectionQualityFromStats(rtt, lossRate);
+                this.ui.updateConnectionQuality(peerId, tier);
                 if (rtt !== null) rttSamples.push(rtt * 1000);
+                if (this._qualityRank[tier] >= this._qualityRank[worstTier]) worstTier = tier;
             } catch (_) {}
         }
         const avgMs = rttSamples.length ? rttSamples.reduce((a, b) => a + b, 0) / rttSamples.length : null;
-        this.ui.updateMeshLatency?.(avgMs);
+        this.ui.updateMeshSignal?.(avgMs, worstTier);
     }
 
     _startStatsPolling() {
