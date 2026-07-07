@@ -858,8 +858,15 @@ a.link-preview:hover {
   color: var(--accentText);
 }
 
-.mobile-panel-close {
-  display: none;
+/* Closes the panel from inside its own header — the edge tabs (.chat-tab/
+   .members-tab below) are now reserved for *opening* a closed panel only
+   (hidden while it's open, desktop rule further down), so this is the only
+   close affordance once a panel is open. Always visible: it's already scoped
+   to only ever render while its panel is open (the panel's own .hidden/
+   .collapsed state removes the whole header from layout), so no extra
+   show/hide logic is needed here. */
+.panel-close-btn {
+  display: flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
@@ -872,7 +879,7 @@ a.link-preview:hover {
   cursor: pointer;
 }
 
-.mobile-panel-close:hover {
+.panel-close-btn:hover {
   background: var(--bg5);
   color: var(--t1);
 }
@@ -1212,9 +1219,14 @@ a.link-preview:hover {
   z-index: 20;
   color: var(--color-muted);
   cursor: pointer;
-  background: var(--bg3);
+  /* Matches .chat-panel/.members-panel's own background (--bg2) — using --bg3
+     here (a visibly lighter shade) plus a drop shadow made the tab read as a
+     separate floating chip near the panel rather than a notch that's part of
+     it, even once the -4px pull below sits it at zero visual gap. The seam
+     side already drops its border (chat-tab's border-left/members-tab's
+     border-right are `none`), so matching the fill is what was missing. */
+  background: var(--bg2);
   border: 1px solid var(--border);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .panel-tab:hover {
@@ -1243,6 +1255,29 @@ body.light .panel-tab:hover {
   right: -4px;
   border-radius: 10px 0 0 10px;
   border-right: none !important;
+}
+
+/* Desktop only (mobile's tabs stay governed by the .mobile-open drawer rules
+   further down, untouched) — the edge tab is now reserved for *opening* a
+   closed/collapsed panel, not for closing an open one. .panel-close-btn
+   inside the panel's own header is the close affordance instead, so there's
+   no floating-tab-over-an-open-panel case left to make look "attached". */
+@media (min-width: 768px) {
+  .chat-tab {
+    display: none;
+  }
+
+  body:has(#chat.hidden) .chat-tab {
+    display: flex;
+  }
+
+  .members-tab {
+    display: none;
+  }
+
+  body:has(#members-sidebar.collapsed) .members-tab {
+    display: flex;
+  }
 }
 
 /* The resize handle itself disappears (display:none) once its panel is
@@ -2605,13 +2640,6 @@ body,
   .panel-tab {
     width: 26px;
     height: 64px;
-  }
-
-  /* The edge tabs (.chat-tab/.members-tab) are unreachable while their drawer
-     is open on mobile (see .mobile-panel-close above) — this in-header button
-     is the actual close affordance in that state. */
-  .mobile-panel-close {
-    display: flex;
   }
 
   /* No resize handle exists on mobile at all (hidden above), so there's no

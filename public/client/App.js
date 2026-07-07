@@ -526,8 +526,16 @@ if (mobileBackdrop) {
     mobileBackdrop.addEventListener('click', closeMobilePanels);
 }
 
-document.getElementById('chat-mobile-close')?.addEventListener('click', closeMobilePanels);
-document.getElementById('members-mobile-close')?.addEventListener('click', closeMobilePanels);
+// Reuses the exact open/close toggle logic (mobile drawer + desktop
+// hidden/collapsed) already wired to the edge tabs below, rather than
+// duplicating it — these buttons only ever render while the panel is open,
+// so "toggle" always means "close" here.
+document.getElementById('chat-close-btn')?.addEventListener('click', () => {
+    document.getElementById('togglechat')?.click();
+});
+document.getElementById('members-close-btn')?.addEventListener('click', () => {
+    document.getElementById('toggle-members')?.click();
+});
 
 const chatButton = document.getElementById('togglechat');
 chatButton.addEventListener('click', () => {
