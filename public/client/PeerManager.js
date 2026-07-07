@@ -580,19 +580,20 @@ export class PeerManager {
         if (speaker && this.onActiveSpeakerChange) this.onActiveSpeakerChange(speaker);
     }
 
-    // Voice-activity mode gates actual transmission on the speaking signal
-    // above, rather than only driving the cosmetic speaking-ring — so the mic
-    // isn't "locked open" the moment it's toggled on. Uses replaceTrack(null)
-    // on each connection's mic sender (the same pause primitive
-    // setSenderPaused uses for video) rather than track.enabled, since the
-    // track is shared with _localMicLevel()'s analyser — disabling the track
-    // itself would silence that too and the gate could never reopen.
-    // Outside voice-activity mode (or while muted via the mic toggle), always
-    // reconciles back to the live track, so switching mic modes can't leave a
-    // sender stuck gated closed from a prior voice-activity session.
+    // Gates actual transmission for every mic mode, not just voice-activity —
+    // toggleMic() only ever flips track.enabled (see its comment), which mutes
+    // *content* but never stops the RTP sender: a disabled track still gets
+    // encoded and sent as continuous silence, so push-to-talk/push-to-mute
+    // were transmitting the whole time regardless of whether the key was held
+    // (confirmed via DebugPanel's per-track byte counters climbing with the
+    // key untouched). Uses replaceTrack(null) on each connection's mic sender
+    // (the same pause primitive setSenderPaused uses for video) rather than
+    // track.enabled, since the track is shared with _localMicLevel()'s
+    // analyser — disabling the track itself would silence that too and the
+    // gate could never reopen.
     _reconcileMicGate(speakingLocally) {
         const micMode = (typeof localStorage !== 'undefined' && localStorage.getItem('micMode')) || 'toggle';
-        const shouldTransmit = micMode !== 'voice-activity' || !this.micEnabled || speakingLocally;
+        const shouldTransmit = this.micEnabled && (micMode !== 'voice-activity' || speakingLocally);
 
         // Reconciled unconditionally (not just on a state change) so a sender
         // added mid-gate — e.g. a new peer joining while voice-activity has the
