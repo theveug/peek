@@ -37,6 +37,7 @@ Living backlog for Peek. Check this at the start of a session for pending work; 
 ## Polish
 
 - [ ] **Keyboard shortcuts panel** — `?` or `F1` overlay listing available shortcuts.
+- [ ] **Caption attached to its file as one chat message (2026-07-08)** — today a caption typed alongside a pending attachment goes out as a normal chat message immediately followed by the separate file message(s) (`App.js`'s `sendMessage()` flushes `ui.getPendingFiles()` after sending the text — see "Pending attachments" in `CLAUDE.md`). Discord-style would be one combined bubble: caption text + embedded file card(s). Needs the caption to ride along in the `file-offer` metadata (peer-controlled → `escapeHtml`/DOMPurify on receive, same as chat text) and a combined render path in `ChatUI` covering both the offer card and the completed-transfer message. The immediate symptom (two `newMessage` sounds back to back on the receiving end) was already fixed 2026-07-08 with a 1.5s sliding cooldown in `ChatUI._playMessageSound()` — this item is purely the visual/structural merge.
 
 ## New feature ideas (brainstorm — 2026-07-04)
 

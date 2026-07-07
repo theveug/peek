@@ -412,8 +412,20 @@ export class ChatUI {
         if (!isSelf && (!document.hasFocus() || this._isChatViewClosed())) {
             const indicator = document.getElementById('new-message-indicator');
             if (indicator) indicator.classList.remove('hidden');
-            playSound('newMessage');
+            this._playMessageSound();
         }
+    }
+
+    // A caption + its file (or a multi-file drop) arrive as separate messages
+    // back to back — without this cooldown each one queues its own newMessage
+    // sound. Sliding window: the timestamp updates even when the sound is
+    // skipped, so a continuous burst pings once, not once per 1.5s.
+    _lastMessageSoundAt = -Infinity;
+
+    _playMessageSound() {
+        const now = Date.now();
+        if (now - this._lastMessageSoundAt > 1500) playSound('newMessage');
+        this._lastMessageSoundAt = now;
     }
 
     _imageUrlPattern = /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?.*)?$/i;
@@ -540,7 +552,7 @@ export class ChatUI {
 
         if (isFromOther && (!tabFocused || this._isChatViewClosed())) {
             newMessageIndicator.classList.remove('hidden');
-            playSound('newMessage');
+            this._playMessageSound();
         } else {
             newMessageIndicator.classList.add('hidden');
         }
