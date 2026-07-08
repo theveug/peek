@@ -54,6 +54,7 @@ export class UIController {
         if (Number.isNaN(this.masterCallVolume)) this.masterCallVolume = 1;
         this.setupZoom();
         this.setupPictureInPicture();
+        this.setupFocusControls();
         this._createToastContainer();
         this._initFilesTab();
     }
@@ -364,6 +365,7 @@ export class UIController {
         this.applyTransform();
         this.setViewMode('focus');
         this._updateFocusMeta(peerId);
+        this._renderFocusWatchState();
     }
 
     _updateFocusMeta(peerId) {
@@ -371,18 +373,50 @@ export class UIController {
         const actualPeerId = isCam ? peerId.slice(0, -4) : peerId;
         const nickname = this._peerNickname(actualPeerId);
 
-        const nameEl = document.getElementById('focus-sharing-name');
-        if (nameEl) nameEl.textContent = nickname;
-
-        const caption = document.getElementById('focus-quality-caption');
+        const captionText = document.getElementById('focus-caption-text');
         const video = this.focusedVideo;
         const updateCaption = () => {
-            if (!caption) return;
+            if (!captionText) return;
             const { videoWidth: w, videoHeight: h } = video;
-            caption.textContent = w && h ? `${nickname} · ${w}x${h}` : nickname;
+            captionText.textContent = w && h ? `${nickname} · ${w}x${h}` : nickname;
         };
         updateCaption();
         video.onloadedmetadata = updateCaption;
+    }
+
+    // Toggles the focused pane between the live video (+ caption/icon-button
+    // overlay) and the same "paused · click to watch" placeholder grid tiles use,
+    // based on whether the focused peer's stream is currently watched. Driven by
+    // the focus stop/resume controls below and re-applied on every updateLayout()
+    // pass so it can't drift out of sync with watchedTiles.
+    _renderFocusWatchState() {
+        const paused = !!this.focusedPeerId && !this.watchedTiles.has(this.focusedPeerId);
+        const overlay = document.getElementById('focus-paused-overlay');
+        if (overlay) overlay.style.display = paused ? 'flex' : 'none';
+        this.focusedVideo.style.visibility = paused ? 'hidden' : 'visible';
+        const caption = document.getElementById('focus-quality-caption');
+        if (caption) caption.style.display = paused ? 'none' : 'flex';
+        const btnGroup = document.getElementById('focus-icon-btn-group');
+        if (btnGroup) btnGroup.style.display = paused ? 'none' : 'flex';
+    }
+
+    // Wires the focus view's "stop watching" button and the paused-overlay's
+    // click-to-resume — separate from setupPictureInPicture() since PiP is
+    // feature-gated (may not exist) while these controls always do.
+    setupFocusControls() {
+        document.getElementById('focus-stop-button')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!this.focusedPeerId) return;
+            this._unwatchTile(this.focusedPeerId);
+            this._renderFocusWatchState();
+        });
+
+        document.getElementById('focus-paused-overlay')?.addEventListener('click', () => {
+            if (!this.focusedPeerId) return;
+            this._watchTile(this.focusedPeerId);
+            this.focusedVideo.srcObject = this.streams[this.focusedPeerId];
+            this._renderFocusWatchState();
+        });
     }
 
     // Called from PeerManager's active-speaker detection. Opt-in (localStorage
@@ -524,8 +558,8 @@ export class UIController {
             const stopBtn = document.createElement('button');
             stopBtn.type = 'button';
             stopBtn.title = 'Stop watching';
-            stopBtn.className = 'absolute top-2 right-2 text-xs text-white/80 bg-black/40 hover:bg-black/60 px-2 py-0.5 rounded-full transition-colors';
-            stopBtn.textContent = 'Stop watching';
+            stopBtn.className = 'grid-tile-stop-btn';
+            stopBtn.innerHTML = '<span class="material-symbols-rounded">close</span>';
             stopBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this._unwatchTile(peerId);
@@ -1438,6 +1472,7 @@ export class UIController {
             this.focusedView.style.display = 'flex';
             this.gridView.style.display = 'none';
             this._updateFocusMeta(this.focusedPeerId);
+            this._renderFocusWatchState();
         }
     }
 

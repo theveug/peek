@@ -292,14 +292,23 @@
                 <div id="focused-view" class="flex-grow w-full relative overflow-hidden" style="display:none;">
                     <video id="focused-video" autoplay playsinline muted
                         class="absolute inset-0 w-full h-full object-contain" style="transform-origin: 0 0;"></video>
-                    <div id="focus-sharing-pill" class="focus-sharing-pill">
+                    <div id="focus-quality-caption" class="focus-quality-caption">
                         <span class="focus-sharing-dot"></span>
-                        <span id="focus-sharing-name"></span> is sharing
+                        <span id="focus-caption-text"></span>
                     </div>
-                    <div id="focus-quality-caption" class="focus-quality-caption"></div>
-                    <button id="pip-button" type="button" title="Picture-in-picture" class="focus-icon-btn">
-                        <span class="material-symbols-rounded">picture_in_picture_alt</span>
-                    </button>
+                    <div id="focus-icon-btn-group" class="focus-icon-btn-group">
+                        <button id="focus-stop-button" type="button" title="Stop watching" class="focus-icon-btn focus-icon-btn-danger">
+                            <span class="material-symbols-rounded">close</span>
+                        </button>
+                        <button id="pip-button" type="button" title="Picture-in-picture" class="focus-icon-btn">
+                            <span class="material-symbols-rounded">picture_in_picture_alt</span>
+                        </button>
+                    </div>
+                    <div id="focus-paused-overlay" class="grid-tile-paused-overlay" style="display:none;" title="Click to resume watching">
+                        <span class="grid-tile-play-circle"><span class="material-symbols-rounded">play_arrow</span></span>
+                        <span class="grid-tile-paused-hint">Click to watch</span>
+                        <span class="grid-tile-paused-sub">stream paused · saving bandwidth</span>
+                    </div>
                 </div>
                 <div id="grid-view" class="flex-grow w-full min-h-0 gap-1 p-1 overflow-hidden" style="display:none;">
                 </div>

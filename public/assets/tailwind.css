@@ -1701,7 +1701,9 @@ body,
 }
 
 .grid-tile-name {
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.45);
+  padding: 4px 9px;
+  border-radius: 7px;
 }
 
 .grid-tile-mic svg {
@@ -1709,9 +1711,11 @@ body,
   height: 14px;
 }
 
+/* Bottom-right (not top-right) so it never collides with .grid-tile-stop-btn,
+   which owns the top-right corner. */
 .grid-tile-badge {
   position: absolute;
-  top: 10px;
+  bottom: 10px;
   right: 10px;
   display: flex;
   align-items: center;
@@ -1726,6 +1730,33 @@ body,
 
 .grid-tile-badge .material-symbols-rounded {
   font-size: 13px;
+  line-height: 1;
+}
+
+.grid-tile-stop-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--red);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.grid-tile-stop-btn:hover {
+  background: var(--red);
+  color: #fff;
+}
+
+.grid-tile-stop-btn .material-symbols-rounded {
+  font-size: 16px;
   line-height: 1;
 }
 
@@ -1770,22 +1801,6 @@ body,
 }
 
 /* --- Focus view --- */
-.focus-sharing-pill {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  background: var(--accent);
-  color: var(--accentText);
-  border-radius: 9px;
-  padding: 6px 11px;
-  font-size: 12px;
-  font-weight: 700;
-  z-index: 2;
-}
-
 .focus-sharing-dot {
   width: 7px;
   height: 7px;
@@ -1804,23 +1819,35 @@ body,
   }
 }
 
+/* Single bottom-left pill (name + live dot + resolution) — replaces the old
+   two-piece top accent banner + bottom caption, which duplicated the name
+   and read as cluttered next to the grid tiles' single bottom-left label. */
 .focus-quality-caption {
   position: absolute;
   bottom: 14px;
   left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-family: "Fira Code", ui-monospace, monospace;
   font-size: 11.5px;
   color: rgba(255, 255, 255, 0.85);
-  background: rgba(0, 0, 0, 0.4);
-  padding: 3px 9px;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 5px 10px;
   border-radius: 7px;
   z-index: 2;
 }
 
-.focus-icon-btn {
+.focus-icon-btn-group {
   position: absolute;
   top: 14px;
   right: 14px;
+  display: flex;
+  gap: 8px;
+  z-index: 2;
+}
+
+.focus-icon-btn {
   width: 38px;
   height: 38px;
   border: none;
@@ -1831,12 +1858,20 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2;
 }
 
 .focus-icon-btn .material-symbols-rounded {
   font-size: 20px;
   line-height: 1;
+}
+
+.focus-icon-btn-danger {
+  color: var(--red);
+}
+
+.focus-icon-btn-danger:hover {
+  background: var(--red);
+  color: #fff;
 }
 
 /* --- Controls dock --- */
