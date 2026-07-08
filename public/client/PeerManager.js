@@ -119,6 +119,10 @@ export class PeerManager {
                 this.ui.addSelf(peerId);
                 peers.forEach(id => {
                     this.ui.addParticipant(id);
+                    // Same reasoning as 'peer-joined' below: register the connection
+                    // synchronously for both sides, not just the initiator, so
+                    // this.peers stays an accurate room-size count from the start.
+                    if (!this.peers[id]) this.createPeerConnection(id);
                     if (this.peerId > id) {
                         this.initiateConnection(id);
                     }
@@ -155,6 +159,16 @@ export class PeerManager {
                 // sides racing to offer at once) — but the join notification/card
                 // must fire for every existing peer regardless of who initiates,
                 // or whichever side loses this comparison never sees it.
+                //
+                // The connection itself (this.peers[peerId]) must exist synchronously
+                // right here regardless of who initiates, not just on the offering
+                // side — _qualityTier() below counts Object.keys(this.peers).length,
+                // and on the non-initiating side that entry otherwise wouldn't appear
+                // until the offer actually arrives (an async round-trip later), making
+                // every quality-tier recalculation on that side undercount by one for
+                // this peer until the *next* join/leave event corrects it.
+                // initiateConnection() reuses this entry instead of creating a second one.
+                if (!this.peers[peerId]) this.createPeerConnection(peerId);
                 if (this.peerId > peerId) {
                     this.initiateConnection(peerId);
                 }
@@ -345,8 +359,17 @@ export class PeerManager {
         const constraints = {};
         if (cappedRes !== 'source') {
             const [width, height] = cappedRes.split('x').map(Number);
-            constraints.width = { max: width };
-            constraints.height = { max: height };
+            // `ideal` alongside `max` matters, not just belt-and-suspenders: a bare
+            // number (like frameRate below) is treated as `ideal` by the constraint
+            // algorithm, but a `{ max }`-only dict has no ideal, so the browser only
+            // changes the current resolution when it's needed to satisfy that max —
+            // it never climbs back up once a smaller room's cap lifts. `cappedRes` is
+            // already the tier-clamped target, so it's safe to also request it as the
+            // ideal: this made the 2026-07-09 quality-tier-verify test's "room shrinks
+            // back down" case fail (fps recovered since it was already ideal-based,
+            // resolution silently stayed capped).
+            constraints.width = { max: width, ideal: width };
+            constraints.height = { max: height, ideal: height };
         }
         constraints.frameRate = cappedFps;
         return constraints;
@@ -1096,7 +1119,7 @@ export class PeerManager {
     }
 
     initiateConnection(peerId) {
-        const pc = this.createPeerConnection(peerId);
+        const pc = this.peers[peerId] || this.createPeerConnection(peerId);
 
         if (this.stream) {
             this._addTrackedStream(pc, peerId, this.stream, 'screen');
