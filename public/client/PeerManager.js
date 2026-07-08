@@ -36,6 +36,9 @@ export class PeerManager {
         this._offeredFiles = {};
         this._pendingFileOffers = {};
         this._filePeerProgress = {};
+        // Per-peer chain of accepted file transfers still awaiting their actual
+        // chunk stream — see _sendFileToPeer for why this must be serialized.
+        this._sendQueues = {};
         this.camStream = null;
         this.camEnabled = false;
         this._camFacingMode = 'user';
@@ -1076,6 +1079,25 @@ export class PeerManager {
         const accepted = await awaited;
         if (!accepted) return;
 
+        // Binary WebRTC messages carry no fileId of their own — the receiver can
+        // only tell one file's chunks apart from another's by assuming at most one
+        // transfer is in flight per sender at a time (see the binary branch of
+        // handleDataChannelMessage). Sending a caption+files batch (or just two
+        // drops close together) fires every file's offer/accept near-simultaneously,
+        // so without this queue two accepted files' chunk loops would interleave on
+        // the same connection and get demuxed into the wrong incomingTransfers entry
+        // on the other end — corrupting both and often tripping the declared-size
+        // guard. Chaining behind this peer's previous transfer only delays *when*
+        // the next file's bytes start going out; it doesn't affect other peers,
+        // preserving the existing "one AFK/declining peer can't block another peer"
+        // guarantee below.
+        const prevInQueue = this._sendQueues[pid] || Promise.resolve();
+        const thisTransfer = prevInQueue.then(() => this._streamFileToPeer(pid, file, fileId, offer.groupId));
+        this._sendQueues[pid] = thisTransfer.catch(() => {});
+        return thisTransfer;
+    }
+
+    async _streamFileToPeer(pid, file, fileId, groupId) {
         const dc = this.dataChannels[pid];
         if (!dc || dc.readyState !== 'open') return;
 
@@ -1097,7 +1119,7 @@ export class PeerManager {
             dc.send(buffer);
 
             this._filePeerProgress[fileId]?.set(pid, (i + 1) / totalChunks);
-            this._reportUploadProgress(fileId, file.name, offer.groupId);
+            this._reportUploadProgress(fileId, file.name, groupId);
         }
 
         this._filePeerProgress[fileId]?.delete(pid);
@@ -1234,6 +1256,7 @@ export class PeerManager {
         delete this.peerCamStreamIds[peerId];
         delete this.peerScreenStreamIds[peerId];
         delete this.senders[peerId];
+        delete this._sendQueues[peerId];
         // silent: this is blanket cleanup on a full disconnect — the 'peer-left'
         // handler plays the single peerLeft sound, and the 'init' reconnect sweep
         // should make no noise at all. Without it, every leave queued two phantom

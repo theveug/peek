@@ -20,7 +20,8 @@
     "test:password-leak": "node tests/room-password-leak.mjs",
     "test:offline": "node tests/offline-selfhost.mjs",
     "test:quality-tiers": "node tests/quality-tier-verify.mjs",
-    "test:caption-file-group": "node tests/caption-file-group.mjs"
+    "test:caption-file-group": "node tests/caption-file-group.mjs",
+    "test:file-transfer-concurrency": "node tests/file-transfer-concurrency.mjs"
   },
   "author": "",
   "license": "ISC",
