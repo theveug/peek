@@ -310,45 +310,128 @@ export class ChatUI {
         return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
     }
 
-    showFileOffer(sender, fileId, fileName, fileSize, onAccept, onDecline) {
-        const chatLog = document.getElementById('chat-log');
-        const el = document.createElement('div');
-        el.id = `file-offer-${fileId}`;
-        el.className = 'file-offer';
-        const sizeStr = this._formatFileSize(fileSize);
-        el.innerHTML = `<div class="file-offer-info"><span class="file-offer-sender">${escapeHtml(sender)}</span> wants to send <span class="file-offer-name">${escapeHtml(fileName)}</span> <span class="file-offer-size">(${sizeStr})</span></div><div class="file-offer-actions"><button type="button" class="file-offer-accept">Accept</button><button type="button" class="file-offer-decline">Decline</button></div>`;
-        chatLog.appendChild(el);
-        requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' }));
+    // --- Grouped file messages (caption + one or more attached files as one
+    // bubble, Discord-style) ---
+    //
+    // One groupId (generated once per Send action — see PeerManager.sendFilesWithCaption)
+    // covers 1+ files that each still negotiate their own independent offer/accept/
+    // transfer over the wire (an AFK peer on one file must never block another) —
+    // ensureFileGroup() just gives them one shared header+caption bubble to render
+    // into, keyed by groupId, with a slot per fileId that starts as an offer prompt
+    // or progress bar and ends up replaced by the finished file card in place.
+    _fileGroups = {};
 
-        el.querySelector('.file-offer-accept').addEventListener('click', () => {
-            el.remove();
+    // Idempotent: only the first file-offer (or the sender's own first file) for a
+    // given groupId actually creates the bubble; later files in the same batch find
+    // it already there and just add their own slot.
+    ensureFileGroup(sender, groupInfo) {
+        const { groupId, caption, replyTo, messageId } = groupInfo;
+        if (this._fileGroups[groupId]) return;
+
+        const chatLog = document.getElementById('chat-log');
+        const msgContainer = document.createElement('div');
+        if (messageId) msgContainer.dataset.messageId = messageId;
+
+        const isSelf = sender === 'Me';
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const initial = this._avatarInitials(isSelf ? (localStorage.getItem('nickname') || 'Me') : sender);
+        const color = isSelf ? '#22c55e' : this._colorForName(sender);
+
+        const replyHtml = this._replyQuoteHtml(replyTo);
+        // Same markdown pipeline as a plain chat message — a caption is peer-controlled
+        // text just like any other, so it gets the identical marked+DOMPurify treatment.
+        const captionHtml = caption
+            ? `<div class="chat-markdown chat-body prose ml-7">${DOMPurify.sanitize(marked.parse(caption))}</div>`
+            : '';
+        // Reactions/reply-quoting only make sense when there's an actual caption to
+        // react to or quote — a files-only group matches plain file messages'
+        // existing lack of either, not a new gap.
+        const reactionBarHtml = caption ? '<div class="reaction-bar ml-7"></div>' : '';
+
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}${captionHtml}<div class="chat-file-group ml-7"></div>${reactionBarHtml}</div>`;
+
+        this._wireReplyQuote(msgContainer);
+        if (caption) {
+            this._finalizeMarkdownBody(msgContainer);
+            if (messageId) this._setupEmojiPicker(msgContainer.querySelector('.chat-message'), messageId);
+        }
+
+        chatLog.appendChild(msgContainer);
+        while (chatLog.children.length > this.maxMessages) {
+            chatLog.removeChild(chatLog.firstChild);
+        }
+        this._scrollIfAtBottom(chatLog);
+
+        this._fileGroups[groupId] = { el: msgContainer, slotsEl: msgContainer.querySelector('.chat-file-group') };
+
+        // A caption is real message content arriving now — notify like any other
+        // chat message. A files-only group (no caption) keeps the existing
+        // file-offer behavior of staying silent until a transfer actually completes.
+        if (caption) {
+            if (!isSelf && (!document.hasFocus() || this._isChatViewClosed())) {
+                document.getElementById('new-message-indicator')?.classList.remove('hidden');
+                this._playMessageSound();
+            } else if (isSelf) {
+                document.getElementById('new-message-indicator')?.classList.add('hidden');
+            }
+        }
+    }
+
+    // Each file within a group gets its own slot: a content area (offer prompt →
+    // cleared on accept/decline → final file card) and a separate progress area, so
+    // an upload/download progress bar can appear and disappear without ever
+    // clobbering a content area that (for the sender's own instant local echo) may
+    // already hold the finished file card.
+    _fileSlot(groupId, fileId) {
+        const group = this._fileGroups[groupId];
+        if (!group) return null;
+        let slot = group.slotsEl.querySelector(`[data-file-id="${CSS.escape(fileId)}"]`);
+        if (!slot) {
+            slot = document.createElement('div');
+            slot.className = 'chat-file-slot';
+            slot.dataset.fileId = fileId;
+            slot.innerHTML = '<div class="chat-file-slot-content"></div><div class="chat-file-slot-progress"></div>';
+            group.slotsEl.appendChild(slot);
+        }
+        return slot;
+    }
+
+    showFileOffer(sender, fileId, fileName, fileSize, onAccept, onDecline, groupId) {
+        const slot = this._fileSlot(groupId, fileId);
+        if (!slot) return;
+        const content = slot.querySelector('.chat-file-slot-content');
+        const sizeStr = this._formatFileSize(fileSize);
+        content.innerHTML = `<div class="file-offer"><div class="file-offer-info">Wants to send <span class="file-offer-name">${escapeHtml(fileName)}</span> <span class="file-offer-size">(${sizeStr})</span></div><div class="file-offer-actions"><button type="button" class="file-offer-accept">Accept</button><button type="button" class="file-offer-decline">Decline</button></div></div>`;
+        this._scrollIfAtBottom(document.getElementById('chat-log'));
+
+        content.querySelector('.file-offer-accept').addEventListener('click', () => {
+            content.innerHTML = '';
             onAccept();
         });
-        el.querySelector('.file-offer-decline').addEventListener('click', () => {
-            el.remove();
+        content.querySelector('.file-offer-decline').addEventListener('click', () => {
+            content.innerHTML = '<span class="file-offer-declined">Declined</span>';
             onDecline();
         });
     }
 
-    updateFileProgress(fileId, progress, direction, fileName) {
-        let el = document.getElementById(`file-progress-${fileId}`);
-        if (!el) {
-            el = document.createElement('div');
-            el.id = `file-progress-${fileId}`;
-            el.className = 'file-progress';
+    updateFileProgress(fileId, progress, direction, fileName, groupId) {
+        const slot = this._fileSlot(groupId, fileId);
+        if (!slot) return;
+        const progressEl = slot.querySelector('.chat-file-slot-progress');
+        let fill = progressEl.querySelector('.file-progress-fill');
+        if (!fill) {
             const label = direction === 'upload' ? 'Sending' : 'Receiving';
-            el.innerHTML = `<span class="file-progress-label">${label}: ${escapeHtml(fileName)}</span><div class="file-progress-track"><div class="file-progress-fill"></div></div>`;
-            const chatLog = document.getElementById('chat-log');
-            chatLog.appendChild(el);
-            requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight }));
+            progressEl.innerHTML = `<div class="file-progress"><span class="file-progress-label">${label}: ${escapeHtml(fileName)}</span><div class="file-progress-track"><div class="file-progress-fill"></div></div></div>`;
+            fill = progressEl.querySelector('.file-progress-fill');
+            this._scrollIfAtBottom(document.getElementById('chat-log'));
         }
-        const fill = el.querySelector('.file-progress-fill');
-        if (fill) fill.style.width = (progress * 100) + '%';
+        fill.style.width = (progress * 100) + '%';
     }
 
-    removeFileProgress(fileId) {
-        const el = document.getElementById(`file-progress-${fileId}`);
-        if (el) el.remove();
+    removeFileProgress(fileId, groupId) {
+        const slot = this._fileSlot(groupId, fileId);
+        if (!slot) return;
+        slot.querySelector('.chat-file-slot-progress').innerHTML = '';
     }
 
     _systemIcons = {
@@ -381,37 +464,25 @@ export class ChatUI {
         }
     }
 
-    addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl) {
-        const chatLog = document.getElementById('chat-log');
-        const msgContainer = document.createElement('div');
+    addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, groupId) {
+        const slot = this._fileSlot(groupId, fileId);
+        if (!slot) return;
+        const content = slot.querySelector('.chat-file-slot-content');
 
-        const isSelf = sender === 'Me';
-        const initial = this._avatarInitials(isSelf ? (localStorage.getItem('nickname') || 'Me') : sender);
-        const color = isSelf ? '#22c55e' : this._colorForName(sender);
-        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const sizeStr = this._formatFileSize(fileSize);
         const isImage = /^image\//i.test(fileType);
-
         const safeFileName = escapeHtml(fileName);
-        let fileContent;
+
         if (isImage) {
-            fileContent = `<div class="chat-image-preview"><a href="${blobUrl}" target="_blank" rel="noopener"><img src="${blobUrl}" alt="${safeFileName}" /></a><a href="${blobUrl}" download="${safeFileName}" class="file-card-download chat-image-download" title="Download">&#x2B73;</a></div>`;
+            content.innerHTML = `<div class="chat-image-preview"><a href="${blobUrl}" target="_blank" rel="noopener"><img src="${blobUrl}" alt="${safeFileName}" /></a><a href="${blobUrl}" download="${safeFileName}" class="file-card-download chat-image-download" title="Download">&#x2B73;</a></div>`;
         } else {
-            fileContent = `<div class="file-card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-muted"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" /></svg><div class="file-card-info"><span class="file-card-name">${safeFileName}</span><span class="file-card-size">${sizeStr}</span></div><a href="${blobUrl}" download="${safeFileName}" class="file-card-download" title="Download">&#x2B73;</a></div>`;
+            content.innerHTML = `<div class="file-card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-muted"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" /></svg><div class="file-card-info"><span class="file-card-name">${safeFileName}</span><span class="file-card-size">${sizeStr}</span></div><a href="${blobUrl}" download="${safeFileName}" class="file-card-download" title="Download">&#x2B73;</a></div>`;
         }
 
-        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="ml-7">${fileContent}</div></div>`;
-        chatLog.appendChild(msgContainer);
+        this._scrollIfAtBottom(document.getElementById('chat-log'));
 
-        while (chatLog.children.length > this.maxMessages) {
-            chatLog.removeChild(chatLog.firstChild);
-        }
-
-        requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' }));
-
-        if (!isSelf && (!document.hasFocus() || this._isChatViewClosed())) {
-            const indicator = document.getElementById('new-message-indicator');
-            if (indicator) indicator.classList.remove('hidden');
+        if (sender !== 'Me' && (!document.hasFocus() || this._isChatViewClosed())) {
+            document.getElementById('new-message-indicator')?.classList.remove('hidden');
             this._playMessageSound();
         }
     }
@@ -493,27 +564,11 @@ export class ChatUI {
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const initial = this._avatarInitials(isSelf ? (localStorage.getItem('nickname') || 'Me') : sender);
         const color = isSelf ? '#22c55e' : this._colorForName(sender);
-
-        let replyHtml = '';
-        if (replyData && replyData.sender && replyData.text) {
-            const rColor = replyData.sender === 'Me' ? '#22c55e' : this._colorForName(replyData.sender);
-            const rText = escapeHtml(replyData.text.length > 80 ? replyData.text.substring(0, 80) + '...' : replyData.text);
-            replyHtml = `<div class="chat-reply-quote ml-7" data-reply-to="${escapeHtml(replyData.messageId || '')}"><span class="chat-reply-sender" style="color:${rColor}">${escapeHtml(replyData.sender)}</span> ${rText}</div>`;
-        }
+        const replyHtml = this._replyQuoteHtml(replyData);
 
         msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}<div class="chat-markdown chat-body prose ml-7">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
 
-        const replyQuote = msgContainer.querySelector('.chat-reply-quote');
-        if (replyQuote) {
-            replyQuote.addEventListener('click', () => {
-                const target = document.querySelector(`[data-message-id="${CSS.escape(replyQuote.dataset.replyTo)}"]`);
-                if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    target.querySelector('.chat-message')?.classList.add('chat-message-highlight');
-                    setTimeout(() => target.querySelector('.chat-message')?.classList.remove('chat-message-highlight'), 1500);
-                }
-            });
-        }
+        this._wireReplyQuote(msgContainer);
 
         const msg = msgContainer.querySelector('.chat-message');
         this._setupEmojiPicker(msg, messageId);
@@ -523,6 +578,48 @@ export class ChatUI {
             chatLog.removeChild(chatLog.firstChild);
         }
 
+        this._finalizeMarkdownBody(msgContainer);
+
+        const newMessageIndicator = document.getElementById('new-message-indicator');
+        const tabFocused = document.hasFocus();
+        const isFromOther = sender !== 'Me';
+
+        if (isFromOther && (!tabFocused || this._isChatViewClosed())) {
+            newMessageIndicator.classList.remove('hidden');
+            this._playMessageSound();
+        } else {
+            newMessageIndicator.classList.add('hidden');
+        }
+
+        this._scrollIfAtBottom(chatLog);
+    }
+
+    // Shared by addChatMessage and ensureFileGroup's caption — the reply-quote
+    // block rendered above a message body, and its click-to-scroll-to-original wiring.
+    _replyQuoteHtml(replyData) {
+        if (!replyData || !replyData.sender || !replyData.text) return '';
+        const rColor = replyData.sender === 'Me' ? '#22c55e' : this._colorForName(replyData.sender);
+        const rText = escapeHtml(replyData.text.length > 80 ? replyData.text.substring(0, 80) + '...' : replyData.text);
+        return `<div class="chat-reply-quote ml-7" data-reply-to="${escapeHtml(replyData.messageId || '')}"><span class="chat-reply-sender" style="color:${rColor}">${escapeHtml(replyData.sender)}</span> ${rText}</div>`;
+    }
+
+    _wireReplyQuote(msgContainer) {
+        const replyQuote = msgContainer.querySelector('.chat-reply-quote');
+        if (!replyQuote) return;
+        replyQuote.addEventListener('click', () => {
+            const target = document.querySelector(`[data-message-id="${CSS.escape(replyQuote.dataset.replyTo)}"]`);
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                target.querySelector('.chat-message')?.classList.add('chat-message-highlight');
+                setTimeout(() => target.querySelector('.chat-message')?.classList.remove('chat-message-highlight'), 1500);
+            }
+        });
+    }
+
+    // Post-processing shared by any rendered markdown body (chat text or a file
+    // group's caption): syntax highlighting + a copy button on code fences, and
+    // link-preview expansion.
+    _finalizeMarkdownBody(msgContainer) {
         msgContainer.querySelectorAll('pre code').forEach((block) => {
             hljs.highlightElement(block);
 
@@ -545,25 +642,17 @@ export class ChatUI {
         });
 
         this._processLinkPreviews(msgContainer);
+    }
 
-        const newMessageIndicator = document.getElementById('new-message-indicator');
-        const tabFocused = document.hasFocus();
-        const isFromOther = sender !== 'Me';
-
-        if (isFromOther && (!tabFocused || this._isChatViewClosed())) {
-            newMessageIndicator.classList.remove('hidden');
-            this._playMessageSound();
-        } else {
-            newMessageIndicator.classList.add('hidden');
-        }
-
+    // Shared by addChatMessage and the grouped file-message renderers — only
+    // auto-scrolls if the user was already at (or near) the bottom, so a message
+    // arriving while they've scrolled up to read history doesn't yank them back down.
+    _scrollIfAtBottom(chatLog) {
         const chatInput = document.getElementById('chat-input');
         const threshold = chatInput.scrollHeight + 50;
         const isAtBottom = (chatLog.scrollTop + chatLog.clientHeight) >= (chatLog.scrollHeight - threshold);
         if (isAtBottom) {
-            requestAnimationFrame(() => {
-                chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' });
-            });
+            requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' }));
         }
     }
 }

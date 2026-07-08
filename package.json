@@ -19,7 +19,8 @@
     "test:audio-senders": "node tests/audio-sender-lifecycle.mjs",
     "test:password-leak": "node tests/room-password-leak.mjs",
     "test:offline": "node tests/offline-selfhost.mjs",
-    "test:quality-tiers": "node tests/quality-tier-verify.mjs"
+    "test:quality-tiers": "node tests/quality-tier-verify.mjs",
+    "test:caption-file-group": "node tests/caption-file-group.mjs"
   },
   "author": "",
   "license": "ISC",

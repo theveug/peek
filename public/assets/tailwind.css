@@ -385,11 +385,6 @@ body:hover #controls {
   color: var(--color-muted);
 }
 
-.file-offer-sender {
-  font-weight: 600;
-  color: var(--color-foreground);
-}
-
 .file-offer-name {
   font-weight: 500;
   color: var(--color-foreground);
@@ -428,6 +423,33 @@ body:hover #controls {
 
 .file-offer-decline:hover {
   color: var(--color-foreground);
+}
+
+.file-offer-declined {
+  display: block;
+  padding: 0.25rem 0;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  font-style: italic;
+}
+
+/* A caption+files message's file(s): one shared header/caption above, one
+   slot per file below (see ChatUI.ensureFileGroup/_fileSlot). .file-offer and
+   .file-progress keep their standalone-bubble styling elsewhere (auto-accept
+   mode never shows an offer, and a lone no-caption file still renders through
+   this same group path) — here they're reset to sit flush inside the slot. */
+.chat-file-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.chat-file-group .file-offer {
+  margin: 0;
+}
+
+.chat-file-group .file-progress {
+  padding: 0.25rem 0 0;
 }
 
 /* ===== Reply ===== */

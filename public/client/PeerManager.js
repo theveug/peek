@@ -845,7 +845,23 @@ export class PeerManager {
                 return; // malformed message from a peer — drop, don't throw
             }
             if (msg.type === 'file-offer') {
+                // Checked first, before anything gets rendered: a blocked peer's
+                // offers (including their caption/groupId) must leave zero visible
+                // trace, same as their chat/reactions/typing/polls do.
+                if (this.ui.isBlocked(peerId)) {
+                    this._respondToOffer(peerId, msg.fileId, false);
+                    return;
+                }
+
                 const fileSize = Number(msg.fileSize);
+                const nickname = this.ui._peerNickname(peerId);
+                // Ensured here, before the allow/size checks below, so the caption
+                // (and any of the batch's other, allowed files) still renders even
+                // when this particular file gets bounced.
+                this.ui.ensureFileGroup(nickname, {
+                    groupId: msg.groupId, caption: msg.caption, replyTo: msg.replyTo, messageId: msg.messageId,
+                });
+
                 if (!this._isFileAllowed(msg.fileName)) {
                     this.ui.addSystemMessage(`Blocked incoming file: ${msg.fileName}`, 'leave');
                     this._respondToOffer(peerId, msg.fileId, false);
@@ -857,22 +873,18 @@ export class PeerManager {
                     return;
                 }
 
-                if (this.ui.isBlocked(peerId)) {
-                    this._respondToOffer(peerId, msg.fileId, false);
-                    return;
-                }
-
                 this._offeredFiles[msg.fileId] = {
                     fileName: msg.fileName, fileSize, fileType: this._safeMimeType(msg.fileName), from: peerId,
+                    groupId: msg.groupId,
                 };
 
                 if (this._autoAcceptFiles()) {
                     this._respondToOffer(peerId, msg.fileId, true);
                 } else {
-                    const nickname = this.ui._peerNickname(peerId);
                     this.ui.showFileOffer(nickname, msg.fileId, msg.fileName, fileSize,
                         () => this._respondToOffer(peerId, msg.fileId, true),
-                        () => this._respondToOffer(peerId, msg.fileId, false));
+                        () => this._respondToOffer(peerId, msg.fileId, false),
+                        msg.groupId);
                 }
             } else if (msg.type === 'file-accept' || msg.type === 'file-decline') {
                 const key = `${msg.fileId}:${peerId}`;
@@ -885,16 +897,17 @@ export class PeerManager {
                 this.incomingTransfers[msg.fileId] = {
                     fileName: offer.fileName, fileSize: offer.fileSize, fileType: offer.fileType,
                     totalChunks: msg.totalChunks, chunks: [], received: 0, receivedBytes: 0, from: peerId,
+                    groupId: offer.groupId,
                 };
-                this.ui.updateFileProgress(msg.fileId, 0, 'download', offer.fileName);
+                this.ui.updateFileProgress(msg.fileId, 0, 'download', offer.fileName, offer.groupId);
             } else if (msg.type === 'file-end') {
                 const t = this.incomingTransfers[msg.fileId];
                 if (!t) return;
                 const blob = new Blob(t.chunks, { type: t.fileType });
                 const url = URL.createObjectURL(blob);
                 const nickname = this.ui._peerNickname(peerId);
-                this.ui.removeFileProgress(msg.fileId);
-                this.ui.addFileMessage(nickname, msg.fileId, t.fileName, t.fileSize, t.fileType, url, blob);
+                this.ui.removeFileProgress(msg.fileId, t.groupId);
+                this.ui.addFileMessage(nickname, msg.fileId, t.fileName, t.fileSize, t.fileType, url, blob, t.groupId);
                 delete this.incomingTransfers[msg.fileId];
             } else if (msg.type === 'poll-create') {
                 if (this.ui.isBlocked(peerId)) return;
@@ -926,14 +939,14 @@ export class PeerManager {
             t.receivedBytes += data.byteLength ?? data.size ?? 0;
             if (t.receivedBytes > t.fileSize + 65536) {
                 delete this.incomingTransfers[activeId];
-                this.ui.removeFileProgress(activeId);
+                this.ui.removeFileProgress(activeId, t.groupId);
                 this.ui.addSystemMessage(`Blocked incoming file: ${t.fileName} (exceeded declared size)`, 'leave');
                 return;
             }
             t.chunks.push(data);
             t.received++;
             const progress = t.totalChunks > 0 ? t.received / t.totalChunks : 0;
-            this.ui.updateFileProgress(activeId, progress, 'download', t.fileName);
+            this.ui.updateFileProgress(activeId, progress, 'download', t.fileName, t.groupId);
         }
     }
 
@@ -1006,7 +1019,21 @@ export class PeerManager {
         });
     }
 
-    async sendFileToAll(file) {
+    // Entry point for the composer's Send button: one or more staged files plus an
+    // optional caption, all rendered as one bubble (see ChatUI.ensureFileGroup).
+    // Each file still gets its own independent per-peer offer/accept/transfer
+    // (sendFileToAll below) — grouping is purely a rendering concern, not a
+    // transport one, so one AFK peer or one blocked/oversized file can never hold
+    // up any other file in the batch.
+    async sendFilesWithCaption(files, caption, replyTo, messageId) {
+        const groupId = 'grp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 8);
+        const group = { groupId, caption: caption || null, replyTo: replyTo || null, messageId };
+        for (const file of files) {
+            await this.sendFileToAll(file, group);
+        }
+    }
+
+    async sendFileToAll(file, group) {
         if (!this._isFileAllowed(file.name)) {
             this.ui.addSystemMessage(`Blocked: .${file.name.split('.').pop()} files are not allowed`, 'leave');
             return;
@@ -1025,9 +1052,13 @@ export class PeerManager {
         const safeType = this._safeMimeType(file.name);
         const blob = new Blob([file], { type: safeType });
         const url = URL.createObjectURL(blob);
-        this.ui.addFileMessage('Me', fileId, file.name, file.size, safeType, url, blob);
+        this.ui.ensureFileGroup('Me', group);
+        this.ui.addFileMessage('Me', fileId, file.name, file.size, safeType, url, blob, group.groupId);
 
-        const offer = { type: 'file-offer', fileId, fileName: file.name, fileSize: file.size, fileType: file.type };
+        const offer = {
+            type: 'file-offer', fileId, fileName: file.name, fileSize: file.size, fileType: file.type,
+            groupId: group.groupId, caption: group.caption, replyTo: group.replyTo, messageId: group.messageId,
+        };
         // Each peer's offer/accept/transfer runs independently, not gathered behind
         // a single Promise.all — an AFK peer sitting on their accept/decline prompt
         // (up to the 60s timeout in _awaitOfferResponse) must not hold up delivery
@@ -1035,7 +1066,7 @@ export class PeerManager {
         this._filePeerProgress[fileId] = new Map();
         Promise.all(peerIds.map(pid => this._sendFileToPeer(pid, file, fileId, offer))).then(() => {
             delete this._filePeerProgress[fileId];
-            this.ui.removeFileProgress(fileId);
+            this.ui.removeFileProgress(fileId, group.groupId);
         });
     }
 
@@ -1066,7 +1097,7 @@ export class PeerManager {
             dc.send(buffer);
 
             this._filePeerProgress[fileId]?.set(pid, (i + 1) / totalChunks);
-            this._reportUploadProgress(fileId, file.name);
+            this._reportUploadProgress(fileId, file.name, offer.groupId);
         }
 
         this._filePeerProgress[fileId]?.delete(pid);
@@ -1077,10 +1108,10 @@ export class PeerManager {
     // rates (each connection's own bufferedAmount backpressure), one shared
     // progress bar can only show one number — report the least-advanced peer
     // still in flight, since that's the one still holding up "done".
-    _reportUploadProgress(fileId, fileName) {
+    _reportUploadProgress(fileId, fileName, groupId) {
         const map = this._filePeerProgress[fileId];
         if (!map || map.size === 0) return;
-        this.ui.updateFileProgress(fileId, Math.min(...map.values()), 'upload', fileName);
+        this.ui.updateFileProgress(fileId, Math.min(...map.values()), 'upload', fileName, groupId);
     }
 
     broadcastChat(text, nickname, messageId, replyTo) {

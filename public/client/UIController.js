@@ -154,10 +154,11 @@ export class UIController {
     addSystemMessage(...a) { return this.chat.addSystemMessage(...a); }
     addPollMessage(...a) { return this.chat.addPollMessage(...a); }
     updatePollVote(...a) { return this.chat.updatePollVote(...a); }
-    addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, blob) {
-        this.chat.addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl);
+    addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, blob, groupId) {
+        this.chat.addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, groupId);
         if (blob) this._addFileToTab({ fileId, fileName, fileSize, fileType, blob, sender });
     }
+    ensureFileGroup(...a) { return this.chat.ensureFileGroup(...a); }
     showFileOffer(...a) { return this.chat.showFileOffer(...a); }
     updateFileProgress(...a) { return this.chat.updateFileProgress(...a); }
     removeFileProgress(...a) { return this.chat.removeFileProgress(...a); }

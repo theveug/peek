@@ -359,20 +359,25 @@ function sendMessage() {
     const text = input.value.trim();
     const nickname = (localStorage.getItem('nickname') || 'Anonymous').trim();
     const pendingFiles = ui.getPendingFiles();
+    const reply = ui.getReplyTo();
+    const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
 
-    if (text) {
-        const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
-        const reply = ui.getReplyTo();
+    // Files (with an optional caption) and a lone text message are mutually
+    // exclusive sends: a caption typed alongside staged attachments rides along
+    // in the file-offer metadata as one combined bubble instead of going out as
+    // its own separate chat message immediately followed by the file(s).
+    if (pendingFiles.length) {
+        ui.clearPendingFiles();
+        peerManager.sendFilesWithCaption(pendingFiles, text || null, reply || null, messageId);
+        ui.clearReply();
+        input.value = '';
+        autoGrowMessageInput();
+    } else if (text) {
         peerManager.broadcastChat(text, nickname, messageId, reply || null);
         ui.addChatMessage('Me', text, messageId, reply, true);
         ui.clearReply();
         input.value = '';
         autoGrowMessageInput();
-    }
-
-    if (pendingFiles.length) {
-        ui.clearPendingFiles();
-        (async () => { for (const f of pendingFiles) await peerManager.sendFileToAll(f); })();
     }
 
     clearTimeout(typingTimer);

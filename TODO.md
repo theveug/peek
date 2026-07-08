@@ -33,7 +33,6 @@ Living backlog for Peek. Check this at the start of a session for pending work; 
 ## Polish
 
 - [ ] **Keyboard shortcuts panel** — `?` or `F1` overlay listing available shortcuts.
-- [ ] **Caption attached to its file as one chat message (2026-07-08)** — today a caption typed alongside a pending attachment goes out as a normal chat message immediately followed by the separate file message(s) (`App.js`'s `sendMessage()` flushes `ui.getPendingFiles()` after sending the text — see "Pending attachments" in `CLAUDE.md`). Discord-style would be one combined bubble: caption text + embedded file card(s). Needs the caption to ride along in the `file-offer` metadata (peer-controlled → `escapeHtml`/DOMPurify on receive, same as chat text) and a combined render path in `ChatUI` covering both the offer card and the completed-transfer message. The immediate symptom (two `newMessage` sounds back to back on the receiving end) was already fixed 2026-07-08 with a 1.5s sliding cooldown in `ChatUI._playMessageSound()` — this item is purely the visual/structural merge.
 
 ## New feature ideas (brainstorm — 2026-07-04)
 
@@ -54,6 +53,7 @@ Not yet scoped/estimated — captured here so they don't get lost; move into a p
 - [ ] **Idle/away auto-detection** — auto-flip status to "away" after N minutes of no mouse/keyboard input; manual online/away/DND picker already exists, this just automates the away case.
 - [ ] **Collaborative whiteboard** — freestanding draw canvas (not just an overlay on a shared screen) synced via the existing data-channel broadcast pattern used for chat/reactions.
 - [ ] **Session recap export** — before a session ends, bundle the in-memory chat log + shared files into a single local download (zip), entirely client-side. Doesn't violate no-persistence since nothing is stored server-side or between sessions — just don't let the ephemeral data vanish without an explicit export option.
+- [ ] **Members sidebar has unused space at realistic room sizes (2026-07-09)** — the panel is sized for the max participant cap (12), but most rooms run far smaller, so the bottom half sits empty. No concrete feature picked yet (call-status/bandwidth stats was floated and set aside — felt more like a power-user/debug stat than something worth permanent sidebar space, see `DebugPanel.js`) — flagging the space itself as a future opportunity, not a specific design.
 
 ## Moderation
 
