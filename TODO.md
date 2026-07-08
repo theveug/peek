@@ -61,7 +61,6 @@ Not yet scoped/estimated — captured here so they don't get lost; move into a p
 
 ## Moderation
 
-- [ ] **Per-peer local block/mute** — client-side-only control on a participant's card that immediately stops decoding their video/audio/screen and hides anything they send, until unblocked. The better fit for "safety from other peers" versus requiring accept/decline on every A/V stream — unlike files, video/audio/screen-share consent-before-delivery would mean a wall of dialogs just to sit in a normal call, and doesn't add real judgment since you'd be accepting blind anyway. This gives per-peer control without that cost.
 - [ ] **Room rules: push-to-talk vs. open mic** — store a mode on the session (`SessionManager.js`), broadcast it to joining peers, client UI adapts (e.g. force push-to-talk binding, hide the open-mic toggle). Important caveat: because Peek is a P2P mesh with no media server in the middle, the server can't intercept or block audio packets — enforcement is "social"/UI-level (well-behaved clients respect the rule), not a hard security guarantee. A modified client could ignore it. Fine for well-intentioned rooms, just don't market it as airtight.
 
 ## Bigger features (post-Electron)

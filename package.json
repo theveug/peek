@@ -13,6 +13,7 @@
     "test:ui": "node tests/ui-smoke.mjs",
     "test:version-banner": "node tests/version-banner.mjs",
     "test:file-consent": "node tests/file-consent.mjs",
+    "test:peer-block": "node tests/peer-block.mjs",
     "test:active-speaker": "node tests/active-speaker-logic.mjs",
     "test:mic-gate": "node tests/mic-gate-logic.mjs",
     "test:audio-senders": "node tests/audio-sender-lifecycle.mjs",

@@ -1443,6 +1443,37 @@ body:has(#members-sidebar.collapsed) .members-tab {
   line-height: 1;
 }
 
+.participant-block-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--t3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.participant-block-btn:hover {
+  background: var(--bg4);
+  color: var(--t1);
+}
+
+.participant-block-btn .material-symbols-rounded {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.participant-block-btn.is-blocked {
+  color: var(--red);
+}
+
+.participant-card.is-blocked {
+  opacity: 0.55;
+}
+
 .participant-volume-popover {
   position: absolute;
   top: calc(100% + 4px);

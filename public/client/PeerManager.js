@@ -834,6 +834,11 @@ export class PeerManager {
                     return;
                 }
 
+                if (this.ui.isBlocked(peerId)) {
+                    this._respondToOffer(peerId, msg.fileId, false);
+                    return;
+                }
+
                 this._offeredFiles[msg.fileId] = {
                     fileName: msg.fileName, fileSize, fileType: this._safeMimeType(msg.fileName), from: peerId,
                 };
@@ -869,18 +874,23 @@ export class PeerManager {
                 this.ui.addFileMessage(nickname, msg.fileId, t.fileName, t.fileSize, t.fileType, url, blob);
                 delete this.incomingTransfers[msg.fileId];
             } else if (msg.type === 'poll-create') {
+                if (this.ui.isBlocked(peerId)) return;
                 const nickname = this.ui._peerNickname(peerId);
                 this.ui.addPollMessage(nickname, msg.pollId, msg.question, msg.options, this.peerId);
             } else if (msg.type === 'poll-vote') {
+                if (this.ui.isBlocked(peerId)) return;
                 // Use the connection's real peerId, not the sender-supplied voterId —
                 // trusting msg.voterId lets any peer cast/overwrite votes as someone else.
                 this.ui.updatePollVote(msg.pollId, msg.optionIndex, peerId);
             } else if (msg.type === 'chat') {
+                if (this.ui.isBlocked(peerId)) return;
                 this.ui.addChatMessage(this.ui._peerNickname(peerId), msg.text, msg.messageId, msg.replyTo || null);
                 this.ui.updateTypingIndicator(peerId, false);
             } else if (msg.type === 'reaction') {
+                if (this.ui.isBlocked(peerId)) return;
                 this.ui.addReaction(msg.messageId, msg.emoji, msg.nickname, peerId);
             } else if (msg.type === 'typing') {
+                if (this.ui.isBlocked(peerId)) return;
                 this.ui.updateTypingIndicator(peerId, msg.isTyping);
             }
         } else {

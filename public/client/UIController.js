@@ -44,6 +44,10 @@ export class UIController {
         // persisted: peerIds are freshly assigned every reconnect, so a
         // localStorage entry keyed by peerId would never be looked up again.
         this.peerVolumes = new Map();
+        // Local-only block list: hides a peer's video/audio/chat/reactions/files/polls
+        // until unblocked. Same non-persistence rationale as peerVolumes above — cleared
+        // in clearAllParticipants(), never written to localStorage.
+        this.blockedPeerIds = new Set();
         // Overall call volume, multiplied with each peer's own volume. This one
         // *is* persisted — it's a personal preference, not tied to any peer/session.
         this.masterCallVolume = parseFloat(localStorage.getItem('masterCallVolume'));
@@ -447,7 +451,7 @@ export class UIController {
 
     buildGrid() {
         this.gridView.innerHTML = '';
-        const remoteIds = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam');
+        const remoteIds = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam' && !this.isBlocked(id));
         const count = remoteIds.length;
         if (count === 0) return;
 
@@ -718,6 +722,7 @@ export class UIController {
 
         if (!isSelf) {
             rightCol.appendChild(this._buildVolumeControl(peerId));
+            rightCol.appendChild(this._buildBlockControl(peerId));
         }
 
         card.appendChild(avatarWrap);
@@ -857,6 +862,25 @@ export class UIController {
         return wrap;
     }
 
+    // Local-only block toggle — no popover needed, unlike volume/mod menus, since
+    // it's a single on/off action. Available to everyone (unlike the moderator
+    // menu), since blocking is a personal preference, not a permission.
+    _buildBlockControl(peerId) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'participant-block-btn';
+        btn.title = this.blockedPeerIds.has(peerId) ? 'Unblock' : 'Block';
+        btn.innerHTML = '<span class="material-symbols-rounded">block</span>';
+        if (this.blockedPeerIds.has(peerId)) btn.classList.add('is-blocked');
+
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.setBlocked(peerId, !this.blockedPeerIds.has(peerId));
+        });
+
+        return btn;
+    }
+
     updateParticipantStatus(peerId, status) {
         let el = document.getElementById(`participant-${peerId}`);
         if (!el) return;
@@ -920,6 +944,7 @@ export class UIController {
         if (container) container.innerHTML = '';
         this.selfPeerId = null;
         this.peerVolumes.clear();
+        this.blockedPeerIds.clear();
         this._updateMemberCount();
     }
 
@@ -1140,13 +1165,55 @@ export class UIController {
         const audio = document.getElementById(`audio-${audioKey}`);
         if (!audio) return;
         const basePeerId = audioKey.endsWith('-screen') ? audioKey.slice(0, -'-screen'.length) : audioKey;
-        audio.volume = this.masterCallVolume * (this.peerVolumes.get(basePeerId) ?? 1);
+        audio.volume = this.blockedPeerIds.has(basePeerId) ? 0 : this.masterCallVolume * (this.peerVolumes.get(basePeerId) ?? 1);
     }
 
     setPeerVolume(peerId, volume) {
         this.peerVolumes.set(peerId, volume);
         this._applyAudioVolume(peerId);
         this._applyAudioVolume(`${peerId}-screen`);
+    }
+
+    // `key` is a stream key, either a bare peerId (screen share) or `${peerId}-cam`
+    // (webcam) — strip the cam suffix so both map to the same block entry.
+    isBlocked(key) {
+        const basePeerId = key.endsWith('-cam') ? key.slice(0, -'-cam'.length) : key;
+        return this.blockedPeerIds.has(basePeerId);
+    }
+
+    // Single entry point for toggling a block — mirrors setSpeaking()'s style of
+    // querying the DOM fresh rather than caching element references, so any future
+    // second call site (e.g. a "block" action from a chat message) can just call
+    // this too instead of duplicating the video/audio/UI side effects.
+    setBlocked(peerId, blocked) {
+        if (blocked) {
+            this.blockedPeerIds.add(peerId);
+            // The grid/focus filters below will exclude this peer going forward, but
+            // any tile of theirs already marked "watched" needs an explicit unwatch —
+            // that's what actually signals unwatch-stream and stops their sender.
+            [peerId, `${peerId}-cam`].forEach(key => {
+                if (this.watchedTiles.has(key)) this._unwatchTile(key);
+            });
+            if (this.focusedPeerId === peerId) {
+                this.focusedPeerId = null;
+                this.focusedVideo.srcObject = null;
+            }
+        } else {
+            this.blockedPeerIds.delete(peerId);
+        }
+
+        this._applyAudioVolume(peerId);
+        this._applyAudioVolume(`${peerId}-screen`);
+
+        const card = document.getElementById(`participant-${peerId}`);
+        card?.classList.toggle('is-blocked', blocked);
+        const btn = card?.querySelector('.participant-block-btn');
+        if (btn) {
+            btn.classList.toggle('is-blocked', blocked);
+            btn.title = blocked ? 'Unblock' : 'Block';
+        }
+
+        this.updateLayout();
     }
 
     setMasterCallVolume(volume) {
@@ -1266,6 +1333,15 @@ export class UIController {
             return;
         }
 
+        // Stream is still recorded above (so unblocking can redisplay it instantly,
+        // no new ontrack needed) but a blocked peer never gets the streamUp sound,
+        // auto-focus, or an auto-watch — buildGrid()/updateLayout() filter them out
+        // of the grid/focus entirely.
+        if (this.isBlocked(peerId)) {
+            this.updateLayout();
+            return;
+        }
+
         playSound('streamUp');
 
         if (!this.focusedPeerId || !this.streams[this.focusedPeerId]) {
@@ -1307,7 +1383,7 @@ export class UIController {
             if (this.focusedPeerId === peerId) {
                 this.focusedPeerId = null;
                 this.focusedVideo.srcObject = null;
-                const remaining = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam');
+                const remaining = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam' && !this.isBlocked(id));
                 if (remaining.length > 0) {
                     this._watchTile(remaining[0]);
                     this.focusedPeerId = remaining[0];
@@ -1325,7 +1401,7 @@ export class UIController {
     // --- Layout ---
 
     updateLayout() {
-        const remoteStreams = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam');
+        const remoteStreams = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam' && !this.isBlocked(id));
         const spinner = document.getElementById('spinner');
         const stageHeader = document.getElementById('stage-header');
 
