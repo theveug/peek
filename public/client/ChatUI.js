@@ -412,17 +412,19 @@ export class ChatUI {
      * add their own slot via `_fileSlot`.
      * @param {string} sender
      * @param {{groupId: string, caption: string|null, replyTo: object|null, messageId: string|null}} groupInfo
+     * @param {boolean} [isSelf=false] - passed explicitly by the caller (true only for the
+     *     local echo) — don't infer it from `sender === 'Me'`, or a remote peer who sets
+     *     their nickname to "Me" would render with the local user's own self-styling and
+     *     suppress the unread notification. Same rule as addChatMessage.
      * @returns {void}
      */
-    ensureFileGroup(sender, groupInfo) {
+    ensureFileGroup(sender, groupInfo, isSelf = false) {
         const { groupId, caption, replyTo, messageId } = groupInfo;
         if (this._fileGroups[groupId]) return;
 
         const chatLog = document.getElementById('chat-log');
         const msgContainer = document.createElement('div');
         if (messageId) msgContainer.dataset.messageId = messageId;
-
-        const isSelf = sender === 'Me';
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const initial = this._avatarInitials(isSelf ? (localStorage.getItem('nickname') || 'Me') : sender);
         const color = isSelf ? '#22c55e' : this._colorForName(sender);

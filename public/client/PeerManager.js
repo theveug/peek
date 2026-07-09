@@ -1072,7 +1072,7 @@ export class PeerManager {
                 // when this particular file gets bounced.
                 this.ui.ensureFileGroup(nickname, {
                     groupId: msg.groupId, caption: msg.caption, replyTo: msg.replyTo, messageId: msg.messageId,
-                });
+                }, false);
 
                 if (!this._isFileAllowed(msg.fileName)) {
                     this.ui.addSystemMessage(`Blocked incoming file: ${msg.fileName}`, 'leave');
@@ -1295,7 +1295,7 @@ export class PeerManager {
         const safeType = this._safeMimeType(file.name);
         const blob = new Blob([file], { type: safeType });
         const url = URL.createObjectURL(blob);
-        this.ui.ensureFileGroup('Me', group);
+        this.ui.ensureFileGroup('Me', group, true);
         this.ui.addFileMessage('Me', fileId, file.name, file.size, safeType, url, blob, group.groupId);
 
         const offer = {
