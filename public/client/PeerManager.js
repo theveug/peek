@@ -39,6 +39,8 @@ export class PeerManager {
         // by default, and on a LAN host candidates alone connect fine.
         this.iceServers = [];
         this.micStream = null;
+        this._rawMicStream = null;
+        this._noiseSuppressor = null;
         this.micEnabled = false;
         this.deafened = false;
         this.status = 'online';
@@ -792,7 +794,8 @@ export class PeerManager {
     async toggleMic() {
         if (!this.micStream) {
             try {
-                this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                this._rawMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                this.micStream = await this._applyNoiseSuppression(this._rawMicStream);
                 this.micEnabled = true;
 
                 for (const [peerId, pc] of Object.entries(this.peers)) {
@@ -1707,6 +1710,61 @@ export class PeerManager {
 
         this.ui.addStream('me-cam', this.camStream);
         if (oldStream && oldStream !== this._rawCamStream) {
+            oldStream.getTracks().forEach(t => t.stop());
+        }
+    }
+
+    /**
+     * No-op passthrough when noise suppression is off (zero cost for anyone who
+     * never touches the setting). Otherwise lazily loads NoiseSuppressor.js and
+     * runs the raw mic stream through it, falling back to the raw stream with a
+     * toast if the WASM/worklet fails to load (old browser, blocked CSP, etc.)
+     * rather than leaving the mic broken.
+     * @param {MediaStream} rawStream
+     * @returns {Promise<MediaStream>}
+     */
+    async _applyNoiseSuppression(rawStream) {
+        if (localStorage.getItem('noiseSuppression') !== '1') return rawStream;
+        try {
+            const { NoiseSuppressor } = await import('./NoiseSuppressor.js');
+            this._noiseSuppressor = new NoiseSuppressor();
+            return await this._noiseSuppressor.start(rawStream);
+        } catch (err) {
+            console.warn('Noise suppression unavailable, using raw mic stream:', err);
+            this.ui.showToast('Noise suppression unavailable — mic unfiltered');
+            this._noiseSuppressor = null;
+            return rawStream;
+        }
+    }
+
+    /**
+     * Toggles mic noise suppression on/off. If the mic is already on, swaps the
+     * processing pipeline live (new track via `replaceTrack` on every existing
+     * sender) without restarting the physical microphone. Preserves the
+     * previous track's mute (`enabled`) state across the swap -- a live toggle
+     * while muted must not un-mute the mic as a side effect.
+     * @param {boolean} enabled
+     * @returns {Promise<void>}
+     */
+    async setNoiseSuppression(enabled) {
+        localStorage.setItem('noiseSuppression', enabled ? '1' : '0');
+        if (!this.micEnabled || !this._rawMicStream) return;
+
+        const oldStream = this.micStream;
+        const wasTrackEnabled = oldStream?.getAudioTracks()[0]?.enabled ?? true;
+        this._noiseSuppressor?.stop();
+        this._noiseSuppressor = null;
+
+        this.micStream = await this._applyNoiseSuppression(this._rawMicStream);
+        const newTrack = this.micStream.getAudioTracks()[0];
+        newTrack.enabled = wasTrackEnabled;
+
+        for (const peerId of Object.keys(this.peers)) {
+            const sender = this.senders[peerId]?.['mic-audio'];
+            if (sender) await sender.replaceTrack(newTrack).catch(() => {});
+        }
+
+        if (oldStream && oldStream !== this._rawMicStream) {
             oldStream.getTracks().forEach(t => t.stop());
         }
     }

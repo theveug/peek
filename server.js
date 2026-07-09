@@ -109,10 +109,15 @@ if (TRUST_PROXY) {
 // background blur's self-hosted MediaPipe WASM) is a distinct, narrower CSP
 // Level 3 keyword — it only permits compiling/instantiating WebAssembly
 // modules, not JS eval()/Function() — 'unsafe-eval' remains deliberately absent.
+// worker-src (added 2026-07-10 for mic noise suppression's self-hosted RNNoise
+// WASM, loaded via audioContext.audioWorklet.addModule()) is explicit rather
+// than relying on its fallback to script-src, since AudioWorkletGlobalScope
+// runs in its own realm and the fallback chain is worth being unambiguous about.
 app.use((req, res, next) => {
     res.setHeader('Content-Security-Policy', [
         "default-src 'self'",
         "script-src 'self' 'wasm-unsafe-eval'",
+        "worker-src 'self'",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' blob: data:",
         "media-src 'self' blob:",

@@ -29,13 +29,6 @@ Living backlog for Peek. Check this at the start of a session for pending work; 
 
 Not yet scoped/estimated — captured here so they don't get lost; move into a proper section once someone picks one up.
 
-- [ ] **Mic noise suppression, RNNoise-based (opt-in)** — scoped 2026-07-08, not started. Not actual Krisp: that's a proprietary SDK/cloud service, wrong fit for this project's offline-first/no-third-party-server model (see the standing rule in `CLAUDE.md`'s Key conventions). RNNoise is the open-source equivalent (same family of ML denoiser behind Discord/Mumble's noise suppression), self-hosted like every other vendor dep, running entirely client-side on your own mic track before it's ever sent — no coordination with peers, no server involvement.
-  - Self-host a pinned RNNoise WASM build in `public/assets/vendor/`, same pattern as `marked`/`dompurify`/`jszip`/`highlight.js`.
-  - New `AudioWorkletProcessor` file running the WASM denoiser per audio frame.
-  - Rewire the mic pipeline in `PeerManager.js`: `micStream` → `AudioContext` → `AudioWorkletNode` (RNNoise) → `MediaStreamDestination`, then swap the cleaned track into whatever `RTCRtpSender`s currently carry the raw mic track — reuse the existing `_addTrackedStream`/`replaceTrack` machinery the voice-activity mic gate already uses (`senders[peerId]['mic-audio']`), so the gating logic doesn't need to change, just which track is live underneath it.
-  - New Settings toggle (Audio & Mic section) — opt-in, not default, since it's a constant CPU cost even while not speaking.
-  - Note: `getUserMedia({ audio: true })` at `PeerManager.js:631` has no explicit constraints today, so the browser's own (much weaker, non-ML) built-in noise suppression is likely already active by default — RNNoise would be a real upgrade over that, not a duplicate.
-  - Main open risk is real-world CPU cost of continuous WASM audio processing on modest hardware, not the wiring itself — measure before ever considering it as a default-on.
 - [ ] **Raise hand** — a lightweight broadcast signal (mirrors the existing typing/reaction broadcast pattern) + an icon on the participant card. Cheap once room-rules/push-to-talk moderation exists, but useful standalone too.
 - [ ] **Live captions (Web Speech API)** — client-side speech-to-text overlay on your own mic only; never leaves the browser, so it sidesteps the no-server-storage tension entirely. Real accessibility win.
 - [ ] **Collaborative whiteboard** — freestanding draw canvas (not just an overlay on a shared screen) synced via the existing data-channel broadcast pattern used for chat/reactions.

@@ -255,6 +255,10 @@ export class SettingsPanel {
             localStorage.setItem('muteSounds', e.target.checked ? '1' : '0');
         });
 
+        document.getElementById('settings-noise-suppression')?.addEventListener('change', (e) => {
+            this.peerManager?.setNoiseSuppression(e.target.checked);
+        });
+
         const volume = document.getElementById('settings-volume');
         const volumeValue = document.getElementById('settings-volume-value');
         volume?.addEventListener('input', (e) => {
@@ -413,6 +417,9 @@ export class SettingsPanel {
     _refreshAudio() {
         const mute = document.getElementById('settings-mute');
         if (mute) mute.checked = localStorage.getItem('muteSounds') === '1';
+
+        const noiseSuppression = document.getElementById('settings-noise-suppression');
+        if (noiseSuppression) noiseSuppression.checked = localStorage.getItem('noiseSuppression') === '1';
 
         const vol = localStorage.getItem('soundVolume') || '0.3';
         const volume = document.getElementById('settings-volume');
