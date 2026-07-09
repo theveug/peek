@@ -1358,7 +1358,7 @@ export class UIController {
                 selfView.autoplay = true;
                 selfView.playsInline = true;
                 selfView.srcObject = stream;
-                selfView.style.cssText = 'position:fixed; bottom:10px; width:150px; border:2px solid #ccc; z-index:1000; border-radius:6px; object-fit:cover;';
+                selfView.classList.add('self-view-pip');
                 this.container.appendChild(selfView);
                 this._makeDraggable(selfView, viewId);
             }

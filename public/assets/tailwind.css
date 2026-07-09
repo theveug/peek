@@ -2675,6 +2675,16 @@ body,
   }
 }
 
+.self-view-pip {
+  position: fixed;
+  bottom: 10px;
+  width: 150px;
+  border: 2px solid #ccc;
+  z-index: 1000;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
 /* ===== Mobile responsive ===== */
 @media (max-width: 767px) {
   /* Controls always visible, fixed to bottom of viewport on mobile */
@@ -2734,6 +2744,13 @@ body,
      4px gap to pull the tabs back over here. */
   .chat-tab {
     left: 0;
+  }
+
+  /* Self-view PiP (own cam/screen preview) at 150px eats a huge share of a
+     phone's much smaller viewport, especially in portrait where the video's
+     aspect ratio makes it tall as well as wide. Shrink it on mobile. */
+  .self-view-pip {
+    width: 90px;
   }
 
   .members-tab {

@@ -401,6 +401,17 @@ function updateCamUI(enabled) {
 
 document.getElementById('cam-toggle').addEventListener('click', async () => {
     const enabled = await peerManager.toggleCam();
+    // enumerateDevices() at page load (below) runs before camera permission has ever
+    // been granted — on mobile browsers (notably iOS Safari) device labels/count for a
+    // given media kind are withheld until that kind's permission is granted at least
+    // once, so the initial hasMultipleCameras check can undercount. Re-check now that
+    // getUserMedia({video}) has actually resolved and permission is confirmed granted.
+    if (enabled) {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            hasMultipleCameras = devices.filter(d => d.kind === 'videoinput').length > 1;
+        } catch { /* keep whatever the page-load check found */ }
+    }
     updateCamUI(enabled);
 });
 
