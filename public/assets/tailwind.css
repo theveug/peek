@@ -2720,9 +2720,15 @@ body,
     padding-bottom: 3.5rem;
   }
 
-  /* Prevent page scroll on mobile */
-  html,
-  body {
+  /* Prevent page scroll on mobile — scoped to the room page only (`#videos`
+     is the room stage, doesn't exist on the lobby). Both `html`/`body` carry
+     no page-identifying class (both are just `<body class="dark">`), and
+     without this scope the rule was global — on the lobby page it locked the
+     viewport in place with content taller than one screen, so mobile users
+     could only ever see whatever fit above the fold (hero + Create room
+     card) with no way to scroll to Join room / saved rooms / the footer. */
+  html:has(#videos),
+  body:has(#videos) {
     overflow: hidden !important;
     position: fixed !important;
     width: 100% !important;
