@@ -1,7 +1,19 @@
 import { playSound } from './SoundPlayer.js';
 import { escapeHtml } from './escapeHtml.js';
 
+/**
+ * Chat panel behavior: messages, typing indicators, reactions, polls,
+ * grouped file-transfer messages, and inline system messages (join/leave/
+ * room events). Owned and instantiated by `UIController`, which proxies
+ * its public methods so other callers never need to know ChatUI exists
+ * as a separate class.
+ */
 export class ChatUI {
+    /**
+     * @param {object} deps
+     * @param {() => string} deps.getNickname - resolves a peerId to its current display nickname.
+     * @param {(name: string) => string} [deps.avatarInitials] - derives avatar initials from a display name; defaults to just the first letter.
+     */
     constructor({ getNickname, avatarInitials }) {
         this._getNickname = getNickname;
         this._avatarInitials = avatarInitials || ((name) => name.charAt(0).toUpperCase());
@@ -14,6 +26,12 @@ export class ChatUI {
         this.onPollVote = null;
     }
 
+    /**
+     * Shows/hides the "X is typing" indicator for a peer.
+     * @param {string} peerId
+     * @param {boolean} isTyping
+     * @returns {void}
+     */
     updateTypingIndicator(peerId, isTyping) {
         if (isTyping) {
             this._typingPeers.add(peerId);
@@ -23,6 +41,7 @@ export class ChatUI {
         this._renderTypingIndicator();
     }
 
+    /** Repaints `#typing-indicator` from the current `_typingPeers` set. */
     _renderTypingIndicator() {
         const el = document.getElementById('typing-indicator');
         if (!el) return;
@@ -40,6 +59,14 @@ export class ChatUI {
         el.classList.remove('hidden');
     }
 
+    /**
+     * Begins composing a reply to an existing message — shows the reply
+     * preview above the composer; the next `addChatMessage`/send picks this up.
+     * @param {string} messageId
+     * @param {string} sender
+     * @param {string} text
+     * @returns {void}
+     */
     setReplyTo(messageId, sender, text) {
         this._replyTo = { messageId, sender, text };
         const preview = document.getElementById('reply-preview');
@@ -51,12 +78,14 @@ export class ChatUI {
         document.getElementById('message')?.focus();
     }
 
+    /** Cancels the in-progress reply and hides the reply preview. */
     clearReply() {
         this._replyTo = null;
         const preview = document.getElementById('reply-preview');
         if (preview) preview.classList.add('hidden');
     }
 
+    /** @returns {{messageId: string, sender: string, text: string}|null} the pending reply target, if any. */
     getReplyTo() {
         return this._replyTo;
     }
@@ -66,26 +95,37 @@ export class ChatUI {
 
     _pendingFiles = [];
 
+    /**
+     * Stages files for sending (drag/drop/paste/pick) as removable chips in
+     * the composer, rather than uploading immediately — actual sending
+     * happens on the next `sendMessage`/`sendFilesWithCaption` call.
+     * @param {File[]} files
+     * @returns {void}
+     */
     addPendingFiles(files) {
         for (const file of files) this._pendingFiles.push(file);
         this._renderPendingFiles();
         document.getElementById('message')?.focus();
     }
 
+    /** @returns {File[]} files currently staged in the composer, awaiting Send. */
     getPendingFiles() {
         return this._pendingFiles;
     }
 
+    /** Discards all staged attachments (called after a successful send). */
     clearPendingFiles() {
         this._pendingFiles = [];
         this._renderPendingFiles();
     }
 
+    /** Removes one staged attachment by index (the chip's × button). */
     _removePendingFile(index) {
         this._pendingFiles.splice(index, 1);
         this._renderPendingFiles();
     }
 
+    /** Repaints `#attachment-preview`'s chips from `_pendingFiles`. */
     _renderPendingFiles() {
         const preview = document.getElementById('attachment-preview');
         if (!preview) return;
@@ -134,6 +174,13 @@ export class ChatUI {
 
     _emojiSet = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
+    /**
+     * Attaches the hover action bar (Reply + React) to a rendered message
+     * element, including the emoji picker popover's open/close/pick wiring.
+     * @param {HTMLElement} msgEl
+     * @param {string} messageId
+     * @returns {void}
+     */
     _setupEmojiPicker(msgEl, messageId) {
         const actionBar = document.createElement('div');
         actionBar.className = 'msg-action-bar';
@@ -186,6 +233,15 @@ export class ChatUI {
         });
     }
 
+    /**
+     * Toggles one peer's reaction to a message on/off and repaints that
+     * message's reaction badges.
+     * @param {string} messageId
+     * @param {string} emoji
+     * @param {string} nickname - unused today, kept for call-site symmetry with other broadcasts.
+     * @param {string} fromPeerId - the reacting peer's ID (toggle key).
+     * @returns {void}
+     */
     addReaction(messageId, emoji, nickname, fromPeerId) {
         const msgEl = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
         if (!msgEl) return;
@@ -207,6 +263,7 @@ export class ChatUI {
         this._renderReactionBar(bar, messageId);
     }
 
+    /** Repaints one message's reaction-badge bar from `_reactions`. */
     _renderReactionBar(bar, messageId) {
         bar.innerHTML = '';
         const msgReactions = this._reactions.get(messageId);
@@ -225,6 +282,17 @@ export class ChatUI {
 
     // --- Polls ---
 
+    /**
+     * Renders a new poll card in the chat log and registers its local vote
+     * tally in `_polls`, keyed by the peer-supplied `pollId`.
+     * @param {string} sender
+     * @param {string} pollId
+     * @param {string} question
+     * @param {string[]} options
+     * @param {string} myPeerId - the local peer's ID, so this poll's future
+     *   `updatePollVote` calls know which vote is "mine" for the checkmark/disabled state.
+     * @returns {void}
+     */
     addPollMessage(sender, pollId, question, options, myPeerId) {
         const chatLog = document.getElementById('chat-log');
         const isSelf = sender === 'Me';
@@ -249,6 +317,14 @@ export class ChatUI {
         requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' }));
     }
 
+    /**
+     * Records (or re-records, replacing any prior vote from the same voter)
+     * one peer's poll vote and repaints that poll's option bars.
+     * @param {string} pollId
+     * @param {number} optionIndex - peer-supplied; bounds-checked against the poll's real option count before use.
+     * @param {string} voterId
+     * @returns {void}
+     */
     updatePollVote(pollId, optionIndex, voterId) {
         const poll = this._polls.get(pollId);
         if (!poll) return;
@@ -262,6 +338,7 @@ export class ChatUI {
         if (container) this._renderPollOptions(container, pollId);
     }
 
+    /** Repaints one poll's option bars (vote counts, fill %, my-vote checkmark) from `_polls`. */
     _renderPollOptions(container, pollId) {
         const poll = this._polls.get(pollId);
         if (!poll) return;
@@ -294,8 +371,11 @@ export class ChatUI {
         if (footerEl) footerEl.textContent = `${totalVotes} ${totalVotes === 1 ? 'vote' : 'votes'}`;
     }
 
-    // True when the chat panel isn't actually on screen for the local user —
-    // either collapsed via its tab (desktop) or the mobile drawer is closed.
+    /**
+     * True when the chat panel isn't actually on screen for the local user —
+     * either collapsed via its tab (desktop) or the mobile drawer is closed.
+     * @returns {boolean}
+     */
     _isChatViewClosed() {
         const chatPanel = document.getElementById('chat');
         if (!chatPanel) return false;
@@ -303,6 +383,7 @@ export class ChatUI {
         return chatPanel.classList.contains('hidden');
     }
 
+    /** @param {number} bytes @returns {string} human-readable size, e.g. "1.2 MB". */
     _formatFileSize(bytes) {
         if (bytes < 1024) return bytes + ' B';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -321,9 +402,16 @@ export class ChatUI {
     // or progress bar and ends up replaced by the finished file card in place.
     _fileGroups = {};
 
-    // Idempotent: only the first file-offer (or the sender's own first file) for a
-    // given groupId actually creates the bubble; later files in the same batch find
-    // it already there and just add their own slot.
+    /**
+     * Creates the shared header+caption bubble for a batch of files, if it
+     * doesn't already exist. Idempotent: only the first file-offer (or the
+     * sender's own first file) for a given groupId actually creates the
+     * bubble; later files in the same batch find it already there and just
+     * add their own slot via `_fileSlot`.
+     * @param {string} sender
+     * @param {{groupId: string, caption: string|null, replyTo: object|null, messageId: string|null}} groupInfo
+     * @returns {void}
+     */
     ensureFileGroup(sender, groupInfo) {
         const { groupId, caption, replyTo, messageId } = groupInfo;
         if (this._fileGroups[groupId]) return;
@@ -377,11 +465,17 @@ export class ChatUI {
         }
     }
 
-    // Each file within a group gets its own slot: a content area (offer prompt →
-    // cleared on accept/decline → final file card) and a separate progress area, so
-    // an upload/download progress bar can appear and disappear without ever
-    // clobbering a content area that (for the sender's own instant local echo) may
-    // already hold the finished file card.
+    /**
+     * Gets (creating if needed) one file's slot within its group bubble.
+     * Each file within a group gets its own slot: a content area (offer prompt →
+     * cleared on accept/decline → final file card) and a separate progress area, so
+     * an upload/download progress bar can appear and disappear without ever
+     * clobbering a content area that (for the sender's own instant local echo) may
+     * already hold the finished file card.
+     * @param {string} groupId
+     * @param {string} fileId
+     * @returns {HTMLElement|null} the slot element, or null if the group doesn't exist.
+     */
     _fileSlot(groupId, fileId) {
         const group = this._fileGroups[groupId];
         if (!group) return null;
@@ -396,6 +490,18 @@ export class ChatUI {
         return slot;
     }
 
+    /**
+     * Renders an inline Accept/Decline prompt for an incoming file offer
+     * into its slot.
+     * @param {string} sender
+     * @param {string} fileId
+     * @param {string} fileName
+     * @param {number} fileSize
+     * @param {() => void} onAccept
+     * @param {() => void} onDecline
+     * @param {string} groupId
+     * @returns {void}
+     */
     showFileOffer(sender, fileId, fileName, fileSize, onAccept, onDecline, groupId) {
         const slot = this._fileSlot(groupId, fileId);
         if (!slot) return;
@@ -414,6 +520,15 @@ export class ChatUI {
         });
     }
 
+    /**
+     * Updates (creating on first call) a file's upload/download progress bar.
+     * @param {string} fileId
+     * @param {number} progress - 0-1 fraction complete.
+     * @param {'upload'|'download'} direction
+     * @param {string} fileName
+     * @param {string} groupId
+     * @returns {void}
+     */
     updateFileProgress(fileId, progress, direction, fileName, groupId) {
         const slot = this._fileSlot(groupId, fileId);
         if (!slot) return;
@@ -428,6 +543,7 @@ export class ChatUI {
         fill.style.width = (progress * 100) + '%';
     }
 
+    /** Clears a file's progress bar (transfer finished, declined, or timed out). */
     removeFileProgress(fileId, groupId) {
         const slot = this._fileSlot(groupId, fileId);
         if (!slot) return;
@@ -441,10 +557,15 @@ export class ChatUI {
         info: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clip-rule="evenodd" /></svg>',
     };
 
-    // Renders a room event (join/leave, moderator action, quality change, blocked
-    // file, etc.) as a centered pill inline in the log, Discord-style, instead of
-    // a toast overlay — so it's visible in scrollback and even if the chat panel
-    // was closed when it happened, not just for the 4s a toast is on screen.
+    /**
+     * Renders a room event (join/leave, moderator action, quality change, blocked
+     * file, etc.) as a centered pill inline in the log, Discord-style, instead of
+     * a toast overlay — so it's visible in scrollback and even if the chat panel
+     * was closed when it happened, not just for the 4s a toast is on screen.
+     * @param {string} text
+     * @param {'join'|'leave'|'stream'|'info'} [type='info'] - only picks the icon+accent color.
+     * @returns {void}
+     */
     addSystemMessage(text, type = 'info') {
         const chatLog = document.getElementById('chat-log');
         const el = document.createElement('div');
@@ -464,6 +585,18 @@ export class ChatUI {
         }
     }
 
+    /**
+     * Renders a finished file transfer (image preview or download card)
+     * into its slot.
+     * @param {string} sender
+     * @param {string} fileId
+     * @param {string} fileName
+     * @param {number} fileSize
+     * @param {string} fileType - derived from the file extension, not trusted from the peer (see the file-transfer trust-boundary note in CLAUDE.md).
+     * @param {string} blobUrl
+     * @param {string} groupId
+     * @returns {void}
+     */
     addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, groupId) {
         const slot = this._fileSlot(groupId, fileId);
         if (!slot) return;
@@ -493,6 +626,7 @@ export class ChatUI {
     // skipped, so a continuous burst pings once, not once per 1.5s.
     _lastMessageSoundAt = -Infinity;
 
+    /** Plays the new-message sound, throttled to once per 1.5s. */
     _playMessageSound() {
         const now = Date.now();
         if (now - this._lastMessageSoundAt > 1500) playSound('newMessage');
@@ -501,6 +635,14 @@ export class ChatUI {
 
     _imageUrlPattern = /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?.*)?$/i;
 
+    /**
+     * Expands links in a rendered message body: image URLs get an inline
+     * preview thumbnail (capped at 5 per message), other links get a
+     * hostname badge. Also forces `target="_blank" rel="noopener noreferrer"`
+     * on every link.
+     * @param {HTMLElement} container
+     * @returns {void}
+     */
     _processLinkPreviews(container) {
         const links = container.querySelectorAll('.chat-markdown a[href]');
         let imageCount = 0;
@@ -543,6 +685,7 @@ export class ChatUI {
         '#06b6d4', '#3b82f6', '#a855f7', '#e11d48',
     ];
 
+    /** @param {string} name @returns {string} a deterministic avatar color hashed from the name. */
     _colorForName(name) {
         let hash = 0;
         for (let i = 0; i < name.length; i++) {
@@ -551,9 +694,18 @@ export class ChatUI {
         return this._chatAvatarColors[Math.abs(hash) % this._chatAvatarColors.length];
     }
 
-    // isSelf is passed explicitly by the caller (true only for the local echo) —
-    // don't infer it from `sender === 'Me'`, or a remote peer who sets their
-    // nickname to "Me" would render with the local user's own self-styling.
+    /**
+     * Renders a plain chat message (markdown, sanitized) into the log.
+     * isSelf is passed explicitly by the caller (true only for the local echo) —
+     * don't infer it from `sender === 'Me'`, or a remote peer who sets their
+     * nickname to "Me" would render with the local user's own self-styling.
+     * @param {string} sender
+     * @param {string} text - raw markdown; sanitized here via marked + DOMPurify before insertion.
+     * @param {string} [messageId] - generated if omitted.
+     * @param {{messageId: string, sender: string, text: string}|null} [replyData]
+     * @param {boolean} [isSelf=false]
+     * @returns {void}
+     */
     addChatMessage(sender, text, messageId, replyData, isSelf = false) {
         const chatLog = document.getElementById('chat-log');
         const msgContainer = document.createElement('div');
@@ -594,8 +746,12 @@ export class ChatUI {
         this._scrollIfAtBottom(chatLog);
     }
 
-    // Shared by addChatMessage and ensureFileGroup's caption — the reply-quote
-    // block rendered above a message body, and its click-to-scroll-to-original wiring.
+    /**
+     * Shared by addChatMessage and ensureFileGroup's caption — builds the
+     * reply-quote block HTML rendered above a message body.
+     * @param {{messageId: string, sender: string, text: string}|null} replyData
+     * @returns {string} HTML, or '' if there's no reply to render.
+     */
     _replyQuoteHtml(replyData) {
         if (!replyData || !replyData.sender || !replyData.text) return '';
         const rColor = replyData.sender === 'Me' ? '#22c55e' : this._colorForName(replyData.sender);
@@ -603,6 +759,7 @@ export class ChatUI {
         return `<div class="chat-reply-quote ml-7" data-reply-to="${escapeHtml(replyData.messageId || '')}"><span class="chat-reply-sender" style="color:${rColor}">${escapeHtml(replyData.sender)}</span> ${rText}</div>`;
     }
 
+    /** Wires a rendered reply-quote block's click-to-scroll-to-original + highlight. */
     _wireReplyQuote(msgContainer) {
         const replyQuote = msgContainer.querySelector('.chat-reply-quote');
         if (!replyQuote) return;
@@ -616,9 +773,13 @@ export class ChatUI {
         });
     }
 
-    // Post-processing shared by any rendered markdown body (chat text or a file
-    // group's caption): syntax highlighting + a copy button on code fences, and
-    // link-preview expansion.
+    /**
+     * Post-processing shared by any rendered markdown body (chat text or a file
+     * group's caption): syntax highlighting + a copy button on code fences, and
+     * link-preview expansion.
+     * @param {HTMLElement} msgContainer
+     * @returns {void}
+     */
     _finalizeMarkdownBody(msgContainer) {
         msgContainer.querySelectorAll('pre code').forEach((block) => {
             hljs.highlightElement(block);
@@ -644,9 +805,13 @@ export class ChatUI {
         this._processLinkPreviews(msgContainer);
     }
 
-    // Shared by addChatMessage and the grouped file-message renderers — only
-    // auto-scrolls if the user was already at (or near) the bottom, so a message
-    // arriving while they've scrolled up to read history doesn't yank them back down.
+    /**
+     * Shared by addChatMessage and the grouped file-message renderers — only
+     * auto-scrolls if the user was already at (or near) the bottom, so a message
+     * arriving while they've scrolled up to read history doesn't yank them back down.
+     * @param {HTMLElement} chatLog
+     * @returns {void}
+     */
     _scrollIfAtBottom(chatLog) {
         const chatInput = document.getElementById('chat-input');
         const threshold = chatInput.scrollHeight + 50;

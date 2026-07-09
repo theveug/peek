@@ -2,6 +2,14 @@ import { playSound } from './SoundPlayer.js';
 import { ChatUI } from './ChatUI.js';
 import { escapeHtml } from './escapeHtml.js';
 
+/**
+ * Owns everything DOM-facing for the room page: the video grid/focus stage,
+ * zoom/pan, watch-tile tracking (bandwidth-saving pause/resume), self-view
+ * PiPs, native picture-in-picture, participant cards (status/mic/signal/
+ * volume/block/moderator controls), toasts, the files tab, and layout. Owns
+ * a `ChatUI` instance and proxies its public methods so callers elsewhere
+ * (App.js, PeerManager) never need to know chat is a separate class.
+ */
 export class UIController {
     constructor() {
         this.container = document.getElementById('videos');
@@ -61,12 +69,14 @@ export class UIController {
 
     // --- Files tab ---
 
+    /** Wires the chat/files tab switcher and the "download all" button. */
     _initFilesTab() {
         document.getElementById('tab-chat').addEventListener('click', () => this._switchTab('chat'));
         document.getElementById('tab-files').addEventListener('click', () => this._switchTab('files'));
         document.getElementById('files-download-all').addEventListener('click', () => this._downloadAllFiles());
     }
 
+    /** @param {'chat'|'files'} tab */
     _switchTab(tab) {
         const toChat = tab === 'chat';
         document.getElementById('chat-tab-content').classList.toggle('hidden', !toChat);
@@ -75,6 +85,13 @@ export class UIController {
         document.getElementById('tab-files').classList.toggle('active', !toChat);
     }
 
+    /**
+     * Appends one finished file transfer to the Files tab's list (the tab
+     * persists every file shared during the session, independent of chat's
+     * message-count trimming).
+     * @param {{fileId: string, fileName: string, fileSize: number, fileType: string, blob: Blob, sender: string}} entry
+     * @returns {void}
+     */
     _addFileToTab(entry) {
         this._sharedFiles.push(entry);
         document.getElementById('files-empty-state').classList.add('hidden');
@@ -113,6 +130,7 @@ export class UIController {
         document.getElementById('files-list').appendChild(row);
     }
 
+    /** Zips (client-side, via JSZip) and downloads every file shared this session. */
     async _downloadAllFiles() {
         if (!this._sharedFiles.length || typeof JSZip === 'undefined') return;
         const zip = new JSZip();
@@ -139,6 +157,7 @@ export class UIController {
         URL.revokeObjectURL(url);
     }
 
+    /** @param {number} bytes @returns {string} human-readable size, e.g. "1.2 MB". */
     _formatFileSize(bytes) {
         if (bytes < 1024) return bytes + ' B';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -147,6 +166,7 @@ export class UIController {
     }
 
     // --- Chat proxies (keeps App.js / PeerManager call signatures unchanged) ---
+    // See ChatUI.js for each proxied method's actual documentation.
 
     set _onReaction(fn) { this.chat._onReaction = fn; }
     set onPollVote(fn) { this.chat.onPollVote = fn; }
@@ -154,6 +174,13 @@ export class UIController {
     addSystemMessage(...a) { return this.chat.addSystemMessage(...a); }
     addPollMessage(...a) { return this.chat.addPollMessage(...a); }
     updatePollVote(...a) { return this.chat.updatePollVote(...a); }
+
+    /**
+     * Proxies to `ChatUI.addFileMessage`, then also records the file in the
+     * Files tab (`_addFileToTab`) when a Blob is available — the one proxy
+     * here with extra behavior beyond forwarding, since the Files tab is a
+     * UIController concern, not ChatUI's.
+     */
     addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, blob, groupId) {
         this.chat.addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, groupId);
         if (blob) this._addFileToTab({ fileId, fileName, fileSize, fileType, blob, sender });
@@ -173,6 +200,7 @@ export class UIController {
 
     // --- Toast ---
 
+    /** Creates the fixed-position container new toasts are appended into. */
     _createToastContainer() {
         const c = document.createElement('div');
         c.id = 'toast-container';
@@ -180,6 +208,7 @@ export class UIController {
         document.body.appendChild(c);
     }
 
+    /** @param {string} peerId @returns {string} the peer's current display nickname, or a shortened peerId as a fallback. */
     _peerNickname(peerId) {
         const el = document.getElementById(`participant-${peerId}`);
         if (!el) return peerId.substring(0, 8);
@@ -187,9 +216,13 @@ export class UIController {
         return name ? name.textContent : peerId.substring(0, 8);
     }
 
-    // Only for purely local, non-room-event feedback (clipboard confirmations,
-    // permission/hardware errors) — anything else peers would care about goes
-    // through addSystemMessage() into the chat log instead, see CLAUDE.md.
+    /**
+     * Only for purely local, non-room-event feedback (clipboard confirmations,
+     * permission/hardware errors) — anything else peers would care about goes
+     * through addSystemMessage() into the chat log instead, see CLAUDE.md.
+     * @param {string} message
+     * @returns {void}
+     */
     showToast(message) {
         const container = document.getElementById('toast-container');
         if (!container) return;
@@ -213,6 +246,7 @@ export class UIController {
 
     // --- Zoom / pan (focused view) ---
 
+    /** Wires wheel-to-zoom, drag-to-pan, double-click-to-reset, and click-to-exit-zoom on the focused view. */
     setupZoom() {
         const view = this.focusedView;
         const vid = this.focusedVideo;
@@ -296,6 +330,7 @@ export class UIController {
 
     // --- Native picture-in-picture (focused view floats over other windows) ---
 
+    /** Wires the PiP button (hidden if the browser lacks PiP support) and the leave-PiP callback. */
     setupPictureInPicture() {
         if (!this.pipButton) return;
         if (!document.pictureInPictureEnabled || !this.focusedVideo.requestPictureInPicture) {
@@ -315,6 +350,7 @@ export class UIController {
         });
     }
 
+    /** Enters/exits native picture-in-picture for the focused video. */
     async togglePictureInPicture() {
         try {
             if (document.pictureInPictureElement === this.focusedVideo) {
@@ -327,6 +363,7 @@ export class UIController {
         }
     }
 
+    /** Clamps `panX`/`panY` so the zoomed video can't be panned past its own edges. */
     clampPan() {
         const vid = this.focusedVideo;
         const viewRect = this.focusedView.getBoundingClientRect();
@@ -337,6 +374,7 @@ export class UIController {
         this.panY = Math.min(0, Math.max(viewRect.height - scaledH, this.panY));
     }
 
+    /** Applies the current zoom/pan as a CSS transform on the focused video. */
     applyTransform() {
         this.focusedVideo.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})`;
         this.focusedView.style.cursor = this.zoom > 1 ? 'grab' : '';
@@ -344,15 +382,23 @@ export class UIController {
 
     // --- View mode ---
 
+    /** @param {'grid'|'focus'} mode */
     setViewMode(mode) {
         this.viewMode = mode;
         this.updateLayout();
     }
 
+    /** Flips between grid and focus view. */
     toggleViewMode() {
         this.setViewMode(this.viewMode === 'focus' ? 'grid' : 'focus');
     }
 
+    /**
+     * Switches to focus view on the given stream: marks it watched, resets
+     * zoom/pan, and updates the focus caption/watch-state overlay.
+     * @param {string} peerId
+     * @returns {void}
+     */
     focusStream(peerId) {
         const stream = this.streams[peerId];
         if (!stream) return;
@@ -369,6 +415,7 @@ export class UIController {
         this._renderFocusWatchState();
     }
 
+    /** Updates the focus view's bottom-left caption (nickname · resolution) for `peerId`. */
     _updateFocusMeta(peerId) {
         const isCam = peerId.endsWith('-cam');
         const actualPeerId = isCam ? peerId.slice(0, -4) : peerId;
@@ -385,11 +432,14 @@ export class UIController {
         video.onloadedmetadata = updateCaption;
     }
 
-    // Toggles the focused pane between the live video (+ caption/icon-button
-    // overlay) and the same "paused · click to watch" placeholder grid tiles use,
-    // based on whether the focused peer's stream is currently watched. Driven by
-    // the focus stop/resume controls below and re-applied on every updateLayout()
-    // pass so it can't drift out of sync with watchedTiles.
+    /**
+     * Toggles the focused pane between the live video (+ caption/icon-button
+     * overlay) and the same "paused · click to watch" placeholder grid tiles use,
+     * based on whether the focused peer's stream is currently watched. Driven by
+     * the focus stop/resume controls below and re-applied on every updateLayout()
+     * pass so it can't drift out of sync with watchedTiles.
+     * @returns {void}
+     */
     _renderFocusWatchState() {
         const paused = !!this.focusedPeerId && !this.watchedTiles.has(this.focusedPeerId);
         const overlay = document.getElementById('focus-paused-overlay');
@@ -401,9 +451,12 @@ export class UIController {
         if (btnGroup) btnGroup.style.display = paused ? 'none' : 'flex';
     }
 
-    // Wires the focus view's "stop watching" button and the paused-overlay's
-    // click-to-resume — separate from setupPictureInPicture() since PiP is
-    // feature-gated (may not exist) while these controls always do.
+    /**
+     * Wires the focus view's "stop watching" button and the paused-overlay's
+     * click-to-resume — separate from setupPictureInPicture() since PiP is
+     * feature-gated (may not exist) while these controls always do.
+     * @returns {void}
+     */
     setupFocusControls() {
         document.getElementById('focus-stop-button')?.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -420,10 +473,14 @@ export class UIController {
         });
     }
 
-    // Called from PeerManager's active-speaker detection. Opt-in (localStorage
-    // 'followActiveSpeaker'), only while already in focus view (never forces a
-    // view-mode switch), and backs off once the user manually pins someone by
-    // clicking a grid tile — re-saving the setting in Settings resumes it.
+    /**
+     * Called from PeerManager's active-speaker detection. Opt-in (localStorage
+     * 'followActiveSpeaker'), only while already in focus view (never forces a
+     * view-mode switch), and backs off once the user manually pins someone by
+     * clicking a grid tile — re-saving the setting in Settings resumes it.
+     * @param {string} peerId
+     * @returns {void}
+     */
     autoFocusTo(peerId) {
         if (localStorage.getItem('followActiveSpeaker') !== '1') return;
         if (this.autoFocusPaused) return;
@@ -435,9 +492,13 @@ export class UIController {
 
     // --- Watched-tile tracking (drives bandwidth-saving pause/resume signalling) ---
 
-    // Marks a stream as watched, evicting the least-recently-watched tile if over
-    // maxWatchedTiles. Returns the list of streamKeys evicted as a result, so callers
-    // (grid cell click handlers) can re-render those cells as placeholders.
+    /**
+     * Marks a stream as watched, evicting the least-recently-watched tile if over
+     * maxWatchedTiles.
+     * @param {string} streamKey
+     * @returns {string[]} streamKeys evicted as a result, so callers (grid cell
+     *   click handlers) can re-render those cells as placeholders.
+     */
     _watchTile(streamKey) {
         const evicted = [];
         if (!this.watchedTiles.has(streamKey)) {
@@ -464,6 +525,14 @@ export class UIController {
         return evicted;
     }
 
+    /**
+     * Updates `watchedTiles` and fires `onWatchChange` only on a real
+     * transition (not a redundant call), which is what actually triggers the
+     * `watch-stream`/`unwatch-stream` signal to the owning peer.
+     * @param {string} streamKey
+     * @param {boolean} watched
+     * @returns {void}
+     */
     _setWatched(streamKey, watched) {
         if (watched) this.watchedTiles.add(streamKey);
         else this.watchedTiles.delete(streamKey);
@@ -473,9 +542,13 @@ export class UIController {
         if (this.onWatchChange) this.onWatchChange(streamKey, watched);
     }
 
-    // Explicit user-initiated "stop watching" (the grid tile's stop button). Unlike
-    // eviction this also drops the LRU bookkeeping entry, since the slot is freed
-    // intentionally rather than reassigned to a newer tile.
+    /**
+     * Explicit user-initiated "stop watching" (the grid tile's stop button). Unlike
+     * eviction this also drops the LRU bookkeeping entry, since the slot is freed
+     * intentionally rather than reassigned to a newer tile.
+     * @param {string} streamKey
+     * @returns {void}
+     */
     _unwatchTile(streamKey) {
         const idx = this._watchOrder.indexOf(streamKey);
         if (idx !== -1) this._watchOrder.splice(idx, 1);
@@ -484,6 +557,12 @@ export class UIController {
 
     // --- Stream grid ---
 
+    /**
+     * Rebuilds the entire grid view from `this.streams`: excludes self-views
+     * and blocked peers, auto-watches the sole stream when there's only one,
+     * and lays out a 1 or 2-column grid.
+     * @returns {void}
+     */
     buildGrid() {
         this.gridView.innerHTML = '';
         const remoteIds = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam' && !this.isBlocked(id));
@@ -509,6 +588,13 @@ export class UIController {
         });
     }
 
+    /**
+     * Builds one grid tile: either the live video (with mic icon, resolution
+     * badge, and stop-watching button, if this stream is currently watched)
+     * or a "paused · click to watch" placeholder otherwise.
+     * @param {string} peerId - a stream key: bare peerId for screen share, `${peerId}-cam` for webcam.
+     * @returns {HTMLElement}
+     */
     _buildGridCell(peerId) {
         const isCam = peerId.endsWith('-cam');
         const actualPeerId = isCam ? peerId.slice(0, -4) : peerId;
@@ -609,6 +695,13 @@ export class UIController {
 
     // --- Peers ---
 
+    /**
+     * Handles a new peer joining: plays a sound, adds their participant
+     * card immediately, and (after a short delay, to let their real
+     * nickname arrive first) posts a "joined" system message.
+     * @param {string} peerId
+     * @returns {void}
+     */
     addPeer(peerId) {
         playSound('peerJoin');
         this.addParticipant(peerId);
@@ -622,6 +715,13 @@ export class UIController {
         }, 2000);
     }
 
+    /**
+     * Handles a peer leaving: plays a sound, removes their audio element and
+     * participant card, clears their typing indicator, and posts a "left"
+     * system message.
+     * @param {string} peerId
+     * @returns {void}
+     */
     removePeer(peerId) {
         const name = this._peerNickname(peerId);
         playSound('peerLeft');
@@ -631,6 +731,12 @@ export class UIController {
         this.addSystemMessage(`${name} left`, 'leave');
     }
 
+    /**
+     * Creates the local user's own participant card (idempotent) and
+     * populates the top-bar identity pill.
+     * @param {string} peerId
+     * @returns {void}
+     */
     addSelf(peerId) {
         if (document.getElementById(`participant-${peerId}`)) return;
         this.selfPeerId = peerId;
@@ -646,6 +752,13 @@ export class UIController {
         }
     }
 
+    /**
+     * Creates a remote peer's participant card (idempotent), initially
+     * shown with a shortened-peerId placeholder name until their real
+     * nickname arrives.
+     * @param {string} peerId
+     * @returns {void}
+     */
     addParticipant(peerId) {
         if (document.getElementById(`participant-${peerId}`)) return;
         this._createParticipantCard(peerId, peerId.substring(0, 8), false);
@@ -665,25 +778,40 @@ export class UIController {
         offline: 'Offline',
     };
 
+    /** @param {string} displayName @returns {string} up to 2 initials, one per word. */
     _avatarInitials(displayName) {
         return displayName.split(/\s+/).map(w => w[0]).join('').substring(0, 2).toUpperCase()
             || displayName.substring(0, 2).toUpperCase();
     }
 
-    // Deterministic per-peer hue, same algorithm as lobby.html's hueFromString()
-    // (duplicated rather than shared — lobby.html and this file are separate,
-    // unbundled page entry points with no shared module today).
+    /**
+     * Deterministic per-peer hue, same algorithm as lobby.html's hueFromString()
+     * (duplicated rather than shared — lobby.html and this file are separate,
+     * unbundled page entry points with no shared module today).
+     * @param {string} str
+     * @returns {number} 0-359
+     */
     _hueFromString(str) {
         let hash = 0;
         for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) % 360;
         return Math.abs(hash);
     }
 
+    /** @returns {string} a CSS color — the accent token for self, else a deterministic per-peer hue. */
     _avatarSquareColor(peerId, isSelf) {
         if (isSelf) return 'var(--accent)';
         return `oklch(0.64 0.15 ${this._hueFromString(peerId)})`;
     }
 
+    /**
+     * Builds and inserts one participant card: avatar, status dot, crown
+     * badge, name, status label, signal icon, mic icon, and (for non-self
+     * cards) the volume/block controls and moderator menu.
+     * @param {string} peerId
+     * @param {string} displayName
+     * @param {boolean} isSelf
+     * @returns {void}
+     */
     _createParticipantCard(peerId, displayName, isSelf) {
         const container = document.getElementById('participants');
 
@@ -779,16 +907,20 @@ export class UIController {
         this._updateMemberCount();
     }
 
-    // Kebab button + tiny popover for moderator-only actions on another peer's card.
-    // Hidden by default — updateModeratorStatus() reveals it only when the local user
-    // is themselves a moderator. Enforcement is server-side regardless (see
-    // WebSocketServer.js); this is just the UI entry point.
-    //
-    // Menu items are (re)built fresh every time the popover opens, not once at card
-    // creation — "Stop their stream" is available to any moderator (including against
-    // the room creator's own card), but "Kick"/"Make moderator"/"Remove moderator" are
-    // creator-only and the promote/demote label depends on the target's *current*
-    // moderator membership, both of which can change after the card already exists.
+    /**
+     * Kebab button + tiny popover for moderator-only actions on another peer's card.
+     * Hidden by default — updateModeratorStatus() reveals it only when the local user
+     * is themselves a moderator. Enforcement is server-side regardless (see
+     * WebSocketServer.js); this is just the UI entry point.
+     *
+     * Menu items are (re)built fresh every time the popover opens, not once at card
+     * creation — "Stop their stream" is available to any moderator (including against
+     * the room creator's own card), but "Kick"/"Make moderator"/"Remove moderator" are
+     * creator-only and the promote/demote label depends on the target's *current*
+     * moderator membership, both of which can change after the card already exists.
+     * @param {string} peerId
+     * @returns {HTMLElement}
+     */
     _buildModeratorMenu(peerId) {
         const wrap = document.createElement('div');
         wrap.className = 'participant-mod-menu relative flex-shrink-0';
@@ -845,8 +977,12 @@ export class UIController {
         return wrap;
     }
 
-    // Local playback volume for this one peer — everyone's own preference, so
-    // (unlike _buildModeratorMenu) this is never gated behind moderator status.
+    /**
+     * Local playback volume for this one peer — everyone's own preference, so
+     * (unlike _buildModeratorMenu) this is never gated behind moderator status.
+     * @param {string} peerId
+     * @returns {HTMLElement}
+     */
     _buildVolumeControl(peerId) {
         const wrap = document.createElement('div');
         wrap.className = 'participant-volume-menu relative flex-shrink-0';
@@ -897,9 +1033,13 @@ export class UIController {
         return wrap;
     }
 
-    // Local-only block toggle — no popover needed, unlike volume/mod menus, since
-    // it's a single on/off action. Available to everyone (unlike the moderator
-    // menu), since blocking is a personal preference, not a permission.
+    /**
+     * Local-only block toggle — no popover needed, unlike volume/mod menus, since
+     * it's a single on/off action. Available to everyone (unlike the moderator
+     * menu), since blocking is a personal preference, not a permission.
+     * @param {string} peerId
+     * @returns {HTMLElement}
+     */
     _buildBlockControl(peerId) {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -916,6 +1056,12 @@ export class UIController {
         return btn;
     }
 
+    /**
+     * Updates one participant card's status dot color/icon and text label.
+     * @param {string} peerId
+     * @param {'online'|'away'|'dnd'|'offline'} status
+     * @returns {void}
+     */
     updateParticipantStatus(peerId, status) {
         let el = document.getElementById(`participant-${peerId}`);
         if (!el) return;
@@ -942,6 +1088,7 @@ export class UIController {
         }
     }
 
+    /** @param {'excellent'|'good'|'fair'|'poor'|'unknown'} tier @returns {string} colored signal-bars icon SVG markup. */
     _signalBarsSvg(tier) {
         const dim = '#374151';
         const c = {
@@ -954,6 +1101,7 @@ export class UIController {
         return `<svg width="12" height="10" viewBox="0 0 12 10" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="6" width="3" height="4" rx="0.5" fill="${c[0]}"/><rect x="4.5" y="3" width="3" height="7" rx="0.5" fill="${c[1]}"/><rect x="9" y="0" width="3" height="10" rx="0.5" fill="${c[2]}"/></svg>`;
     }
 
+    /** Updates one participant card's signal-bars icon + tooltip. */
     updateConnectionQuality(peerId, tier) {
         const el = document.getElementById(`participant-${peerId}`);
         if (!el) return;
@@ -964,16 +1112,20 @@ export class UIController {
         icon.innerHTML = this._signalBarsSvg(tier);
     }
 
+    /** Removes one peer's participant card and refreshes the member count. */
     removeParticipant(peerId) {
         const el = document.getElementById(`participant-${peerId}`);
         if (el) el.remove();
         this._updateMemberCount();
     }
 
-    // Called on a fresh 'init' (first join, or a reconnect after the socket dropped).
-    // Every peerId — including our own — is freshly assigned per connection, so any
-    // cards left over from before the drop are now orphaned and must be cleared first,
-    // or they double up alongside the newly (re)assigned ones.
+    /**
+     * Called on a fresh 'init' (first join, or a reconnect after the socket dropped).
+     * Every peerId — including our own — is freshly assigned per connection, so any
+     * cards left over from before the drop are now orphaned and must be cleared first,
+     * or they double up alongside the newly (re)assigned ones.
+     * @returns {void}
+     */
     clearAllParticipants() {
         const container = document.getElementById('participants');
         if (container) container.innerHTML = '';
@@ -983,6 +1135,7 @@ export class UIController {
         this._updateMemberCount();
     }
 
+    /** Refreshes the members-sidebar and top-bar "X / cap" participant counts. */
     _updateMemberCount() {
         const count = document.getElementById('participants')?.children.length || 0;
         const el = document.getElementById('member-count');
@@ -993,8 +1146,12 @@ export class UIController {
         if (topbarCap) topbarCap.textContent = this.maxPeers;
     }
 
-    // Called once from the 'init' handler — populates the top bar's room-state pill
-    // and stashes the cap so every later _updateMemberCount() reflects it.
+    /**
+     * Called once from the 'init' handler — populates the top bar's room-state pill
+     * and stashes the cap so every later _updateMemberCount() reflects it.
+     * @param {{name: string|null, code: string, hasPassword: boolean, maxPeers: number}} meta
+     * @returns {void}
+     */
     setRoomMeta({ name, code, hasPassword, maxPeers }) {
         this.roomName = name || null;
         this.maxPeers = maxPeers || 6;
@@ -1012,9 +1169,13 @@ export class UIController {
         this._updateMemberCount();
     }
 
-    // Refreshes every participant card's crown badge + kebab-menu visibility when
-    // moderator status changes (initial join, a promote/demote, or a reconnect-reclaim).
-    // moderatorPeerIds may be a Set or a plain array (WS payloads arrive as arrays).
+    /**
+     * Refreshes every participant card's crown badge + kebab-menu visibility when
+     * moderator status changes (initial join, a promote/demote, or a reconnect-reclaim).
+     * @param {string|null} creatorPeerId
+     * @param {Set<string>|string[]} moderatorPeerIds - may be a Set or a plain array (WS payloads arrive as arrays).
+     * @returns {void}
+     */
     updateModeratorStatus(creatorPeerId, moderatorPeerIds) {
         this.creatorPeerId = creatorPeerId;
         this.moderatorPeerIds = moderatorPeerIds instanceof Set ? moderatorPeerIds : new Set(moderatorPeerIds || []);
@@ -1039,9 +1200,14 @@ export class UIController {
         });
     }
 
-    // Replaces the old "Xms · mesh" text with the same colored signal-bars icon
-    // used per-participant in the members list (_signalBarsSvg) — tier is the
-    // worst connection quality across all mesh peers, ms is only for the tooltip.
+    /**
+     * Replaces the old "Xms · mesh" text with the same colored signal-bars icon
+     * used per-participant in the members list (_signalBarsSvg) — tier is the
+     * worst connection quality across all mesh peers, ms is only for the tooltip.
+     * @param {number|null} ms
+     * @param {'excellent'|'good'|'fair'|'poor'|'unknown'} tier
+     * @returns {void}
+     */
     updateMeshSignal(ms, tier) {
         const wrap = document.getElementById('topbar-signal-wrap');
         const icon = document.getElementById('topbar-signal-icon');
@@ -1056,16 +1222,25 @@ export class UIController {
         wrap.classList.remove('hidden');
     }
 
+    /** @returns {string} mic-on icon SVG markup. */
     _micOnSvg() {
         return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-2.5 h-2.5"><path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 1 1-6 0V4Z" /><path d="M5.5 9.643a.75.75 0 0 1 .75.75v.357a3.75 3.75 0 0 0 7.5 0v-.357a.75.75 0 0 1 1.5 0v.357a5.25 5.25 0 0 1-4.5 5.196V17.5a.75.75 0 0 1-1.5 0v-1.554a5.25 5.25 0 0 1-4.5-5.196v-.357a.75.75 0 0 1 .75-.75Z" /></svg>`;
     }
 
+    /** @returns {string} mic-off icon SVG markup. */
     _micOffSvg() {
         return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-2.5 h-2.5"><path d="M7.22 3.22a.75.75 0 0 1 1.06 0L12 6.94l3.72-3.72a.75.75 0 1 1 1.06 1.06L13.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L12 9.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06L10.94 8 7.22 4.28a.75.75 0 0 1 0-1.06Z" /></svg>`;
     }
 
-    // Discord-style speaking ring — toggled by PeerManager's real audio-level polling
-    // (not mic-enabled/disabled, which only tells you they *could* be making sound).
+    /**
+     * Discord-style speaking ring — toggled by PeerManager's real audio-level polling
+     * (not mic-enabled/disabled, which only tells you they *could* be making sound).
+     * Applies to the participant card, any matching grid tile(s), and (for the
+     * local user) the top-bar identity avatar.
+     * @param {string} peerId
+     * @param {boolean} speaking
+     * @returns {void}
+     */
     setSpeaking(peerId, speaking) {
         const el = document.getElementById(`participant-${peerId}`);
         if (el) {
@@ -1087,6 +1262,7 @@ export class UIController {
         }
     }
 
+    /** Updates the mic icon on any grid tile(s) matching this peer. */
     _updateGridMicIcon(peerId, enabled) {
         [peerId, `${peerId}-cam`].forEach(key => {
             const tile = this.gridView?.querySelector(`[data-peer-id="${key}"]`);
@@ -1097,6 +1273,15 @@ export class UIController {
         });
     }
 
+    /**
+     * Updates a peer's mic icon everywhere it appears (card + grid tiles),
+     * creating the participant card first if it doesn't exist yet. Muting
+     * also immediately clears the speaking ring, rather than waiting for
+     * the next speaking-poll tick.
+     * @param {string} peerId
+     * @param {boolean} enabled
+     * @returns {void}
+     */
     updateParticipantMic(peerId, enabled) {
         let el = document.getElementById(`participant-${peerId}`);
         if (!el) {
@@ -1122,6 +1307,7 @@ export class UIController {
         }
     }
 
+    /** Shows/hides a peer's deafened-icon badge on their participant card. */
     updateParticipantDeafen(peerId, deafened) {
         let el = document.getElementById(`participant-${peerId}`);
         if (!el) return;
@@ -1140,6 +1326,16 @@ export class UIController {
         }
     }
 
+    /**
+     * Updates a peer's displayed nickname (card, avatar initials, and the
+     * top-bar identity pill if it's the local user), creating the
+     * participant card first if it doesn't exist yet. If this nickname
+     * update resolves a pending "joined" toast (see `addPeer`), posts the
+     * join system message now that the real name is known.
+     * @param {string} peerId
+     * @param {string} nickname
+     * @returns {void}
+     */
     updateParticipantNickname(peerId, nickname) {
         let el = document.getElementById(`participant-${peerId}`);
         if (!el) {
@@ -1165,6 +1361,7 @@ export class UIController {
         }
     }
 
+    /** Updates the top-bar identity pill's status-dot class for the local user. */
     updateIdentityStatus(status) {
         const dot = document.getElementById('topbar-identity-status-dot');
         if (dot) dot.className = `topbar-identity-status-dot ${status === 'online' ? '' : status}`.trim();
@@ -1172,6 +1369,13 @@ export class UIController {
 
     // --- Audio ---
 
+    /**
+     * Creates (or reuses) an `<audio>` element for one incoming audio track
+     * and applies the current deafen/volume state to it.
+     * @param {string} peerId - `audioKey` — bare peerId (mic) or `${peerId}-screen` (screen-share audio).
+     * @param {MediaStreamTrack} track
+     * @returns {void}
+     */
     addAudio(peerId, track) {
         let audio = document.getElementById(`audio-${peerId}`);
         if (!audio) {
@@ -1185,6 +1389,7 @@ export class UIController {
         this._applyAudioVolume(peerId);
     }
 
+    /** Removes and stops one audio element (see the `audioKey` note on `addAudio`). */
     removeAudio(peerId) {
         const audio = document.getElementById(`audio-${peerId}`);
         if (audio) {
@@ -1193,9 +1398,14 @@ export class UIController {
         }
     }
 
-    // `audioKey` is the id passed to addAudio/removeAudio — either a bare
-    // peerId (mic) or `${peerId}-screen` (screen-share audio). Both share one
-    // per-person volume, so strip the suffix to look it up.
+    /**
+     * `audioKey` is the id passed to addAudio/removeAudio — either a bare
+     * peerId (mic) or `${peerId}-screen` (screen-share audio). Both share one
+     * per-person volume, so strip the suffix to look it up. Forces 0 for a
+     * blocked peer regardless of their saved volume.
+     * @param {string} audioKey
+     * @returns {void}
+     */
     _applyAudioVolume(audioKey) {
         const audio = document.getElementById(`audio-${audioKey}`);
         if (!audio) return;
@@ -1203,23 +1413,38 @@ export class UIController {
         audio.volume = this.blockedPeerIds.has(basePeerId) ? 0 : this.masterCallVolume * (this.peerVolumes.get(basePeerId) ?? 1);
     }
 
+    /**
+     * Sets one peer's local playback volume (mic + screen-share audio share it).
+     * @param {string} peerId
+     * @param {number} volume - 0-1.
+     * @returns {void}
+     */
     setPeerVolume(peerId, volume) {
         this.peerVolumes.set(peerId, volume);
         this._applyAudioVolume(peerId);
         this._applyAudioVolume(`${peerId}-screen`);
     }
 
-    // `key` is a stream key, either a bare peerId (screen share) or `${peerId}-cam`
-    // (webcam) — strip the cam suffix so both map to the same block entry.
+    /**
+     * `key` is a stream key, either a bare peerId (screen share) or `${peerId}-cam`
+     * (webcam) — strip the cam suffix so both map to the same block entry.
+     * @param {string} key
+     * @returns {boolean}
+     */
     isBlocked(key) {
         const basePeerId = key.endsWith('-cam') ? key.slice(0, -'-cam'.length) : key;
         return this.blockedPeerIds.has(basePeerId);
     }
 
-    // Single entry point for toggling a block — mirrors setSpeaking()'s style of
-    // querying the DOM fresh rather than caching element references, so any future
-    // second call site (e.g. a "block" action from a chat message) can just call
-    // this too instead of duplicating the video/audio/UI side effects.
+    /**
+     * Single entry point for toggling a block — mirrors setSpeaking()'s style of
+     * querying the DOM fresh rather than caching element references, so any future
+     * second call site (e.g. a "block" action from a chat message) can just call
+     * this too instead of duplicating the video/audio/UI side effects.
+     * @param {string} peerId
+     * @param {boolean} blocked
+     * @returns {void}
+     */
     setBlocked(peerId, blocked) {
         if (blocked) {
             this.blockedPeerIds.add(peerId);
@@ -1251,6 +1476,12 @@ export class UIController {
         this.updateLayout();
     }
 
+    /**
+     * Sets the overall call volume (persisted — a personal preference, not
+     * tied to any peer/session) and re-applies it to every active audio element.
+     * @param {number} volume - 0-1.
+     * @returns {void}
+     */
     setMasterCallVolume(volume) {
         this.masterCallVolume = volume;
         localStorage.setItem('masterCallVolume', String(volume));
@@ -1261,6 +1492,7 @@ export class UIController {
 
     // --- Self-view PiPs ---
 
+    /** Auto-stacks the screen/cam self-view PiPs against the right edge (skips any that's been manually dragged). */
     _updateSelfViewPositions() {
         const screenView = document.getElementById('self-view');
         const camView = document.getElementById('self-cam-view');
@@ -1276,6 +1508,7 @@ export class UIController {
         }
     }
 
+    /** Re-clamps a manually-dragged PiP back on-screen (e.g. after a window resize) and persists the new position. */
     _reclampDraggedPip(el, storageKey) {
         const maxLeft = Math.max(0, window.innerWidth - el.offsetWidth);
         const maxTop = Math.max(0, window.innerHeight - el.offsetHeight);
@@ -1286,10 +1519,16 @@ export class UIController {
         localStorage.setItem(`pipPosition:${storageKey}`, JSON.stringify({ left, top }));
     }
 
-    // Drag-to-reposition for the self-view PiPs (Discord-style). Position is
-    // remembered per PiP (`pipPosition:${storageKey}`) across stream stop/start
-    // and page reloads, since it's a personal layout preference, not tied to any
-    // one stream instance.
+    /**
+     * Drag-to-reposition for the self-view PiPs (Discord-style), via Pointer
+     * Events so mouse and touch share one code path. Position is
+     * remembered per PiP (`pipPosition:${storageKey}`) across stream stop/start
+     * and page reloads, since it's a personal layout preference, not tied to any
+     * one stream instance.
+     * @param {HTMLElement} el
+     * @param {string} storageKey
+     * @returns {void}
+     */
     _makeDraggable(el, storageKey) {
         el.style.cursor = 'grab';
         el.style.touchAction = 'none'; // prevent touch-drag from also scrolling the page
@@ -1343,6 +1582,15 @@ export class UIController {
         });
     }
 
+    /**
+     * Records an incoming (or local self-) stream and renders it: self-views
+     * become a draggable PiP, a blocked peer's stream is recorded but never
+     * shown, and a new remote stream auto-focuses if nothing else is
+     * currently focused.
+     * @param {string} peerId - a stream key: `'me'`/`'me-cam'` for local self-views, else a remote stream key.
+     * @param {MediaStream} stream
+     * @returns {void}
+     */
     addStream(peerId, stream) {
         this.streams[peerId] = stream;
 
@@ -1388,6 +1636,13 @@ export class UIController {
         this.updateLayout();
     }
 
+    /**
+     * Removes a recorded stream and its rendering, re-focusing another
+     * stream if the removed one was currently focused.
+     * @param {string} peerId - a stream key (see `addStream`).
+     * @param {boolean} [silent=false] - suppress the streamDown sound (blanket cleanup on full disconnect already plays its own sound).
+     * @returns {void}
+     */
     removeStream(peerId, silent = false) {
         // A full peer disconnect (PeerManager.removePeer) calls this as blanket
         // cleanup for streams that may never have existed, and already plays its
@@ -1435,6 +1690,13 @@ export class UIController {
 
     // --- Layout ---
 
+    /**
+     * Re-renders the stage from current state: shows the spinner if there
+     * are no remote streams, otherwise builds the grid or the focus view
+     * per `viewMode`. The single entry point that should be called after
+     * anything that could change what's on screen.
+     * @returns {void}
+     */
     updateLayout() {
         const remoteStreams = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam' && !this.isBlocked(id));
         const spinner = document.getElementById('spinner');
@@ -1477,6 +1739,7 @@ export class UIController {
         }
     }
 
+    /** Updates the stage header's grid/focus toggle active state and the watched-stream count. */
     _updateStageHeader() {
         const gridBtn = document.getElementById('stage-view-grid');
         const focusBtn = document.getElementById('stage-view-focus');
@@ -1487,8 +1750,12 @@ export class UIController {
         if (countEl) countEl.textContent = `${this.watchedTiles.size} / ${this.maxWatchedTiles}`;
     }
 
-    // Called by PeerManager whenever our own screen-share starts/stops/quality
-    // changes — pass null to hide the segment (nothing meaningful while not sharing).
+    /**
+     * Called by PeerManager whenever our own screen-share starts/stops/quality
+     * changes — pass null to hide the segment (nothing meaningful while not sharing).
+     * @param {string|null} label
+     * @returns {void}
+     */
     updateStageQuality(label) {
         const stat = document.getElementById('stage-quality-stat');
         const divider = document.getElementById('stage-quality-divider');
@@ -1499,6 +1766,7 @@ export class UIController {
         if (labelEl) labelEl.textContent = label || '';
     }
 
+    /** @param {'push-to-talk'|'push-to-mute'|'voice-activity'|string} micMode shows the dock's PTT/PTM/VA badge, hidden for any other mode. */
     updateMicModeBadge(micMode) {
         const badge = document.getElementById('mic-mode-badge');
         if (!badge) return;
@@ -1508,6 +1776,13 @@ export class UIController {
         badge.classList.toggle('hidden', !text);
     }
 
+    /**
+     * Shows/hides self-view PiPs and the "Still Streaming..." placeholder
+     * badge when the window loses/regains focus (or the tab is hidden)
+     * while actively streaming.
+     * @param {boolean} blurred
+     * @returns {void}
+     */
     handleVisibilityChange(blurred) {
         const myVideo = document.getElementById('self-view');
         const myCamVideo = document.getElementById('self-cam-view');

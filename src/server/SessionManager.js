@@ -1,12 +1,33 @@
 // --- src/server/SessionManager.js ---
 import { timingSafeEqual } from 'crypto';
 
+/**
+ * All server-side room state, in-memory only — the concrete embodiment of
+ * Peek's "no info held on a server" principle. A session (room) and every
+ * peer's membership in it live only as long as the process runs and the
+ * room stays non-empty; nothing here is ever persisted to disk or a
+ * database. Two maps: `sessions` (sessionId -> room state, including
+ * moderator/creator bookkeeping) and `peerMap` (peerId -> which session and
+ * socket a connected peer belongs to, for O(1) reverse lookup).
+ */
 export class SessionManager {
     constructor() {
         this.sessions = new Map(); // sessionId -> { peers: Set, name, password }
         this.peerMap = new Map();  // peerId -> { sessionId, socket }
     }
 
+    /**
+     * Creates a session if it doesn't already exist (idempotent — a repeat
+     * call for an existing sessionId is a no-op, it does not reset state).
+     * @param {string} sessionId - the room code.
+     * @param {object} [options]
+     * @param {string|null} [options.name] - optional display name for the room.
+     * @param {string|null} [options.password] - optional join password.
+     * @param {number} [options.maxPeers=6] - participant cap, clamped to [2, 12].
+     * @param {string|null} [options.creatorToken] - secret minted at room
+     *   creation; whoever presents it via `claimModerator` becomes creator.
+     * @returns {void}
+     */
     createSession(sessionId, { name = null, password = null, maxPeers = 6, creatorToken = null } = {}) {
         if (!this.sessions.has(sessionId)) {
             const clampedMaxPeers = Math.min(12, Math.max(2, parseInt(maxPeers, 10) || 6));
@@ -14,19 +35,33 @@ export class SessionManager {
         }
     }
 
-    // `password` only applies when the join lazily recreates a dead session — a saved
-    // password-protected room recreated this way keeps its protection instead of
-    // silently coming back passwordless. `creatorToken` gets the same treatment: if the
-    // very first joiner of a lazily-recreated session presents one (this happens when
-    // the whole server process restarts — a dev deploy, a crash-restart — which wipes
-    // every in-memory session, including ones that *did* go through /api/create-room),
-    // it's adopted as that session's creatorToken so claimModerator() (called right
-    // after this, in WebSocketServer.js's 'join' case) can succeed and the original
-    // creator doesn't lose their crown just because the process happened to restart
-    // between their disconnect and reconnect. Safe because the token is an unguessable
-    // secret the client already held — only whoever legitimately created the room (or
-    // wins the race to reconnect first after a restart, same trust level as recreating
-    // a saved room today) can supply one that matches on a later claim.
+    /**
+     * Registers a peer as a member of a session, lazily creating the session
+     * (with default settings) if it doesn't exist yet — this is what lets a
+     * room code be rejoined/recreated after it emptied out.
+     *
+     * `password` only applies when the join lazily recreates a dead session — a saved
+     * password-protected room recreated this way keeps its protection instead of
+     * silently coming back passwordless. `creatorToken` gets the same treatment: if the
+     * very first joiner of a lazily-recreated session presents one (this happens when
+     * the whole server process restarts — a dev deploy, a crash-restart — which wipes
+     * every in-memory session, including ones that *did* go through /api/create-room),
+     * it's adopted as that session's creatorToken so claimModerator() (called right
+     * after this, in WebSocketServer.js's 'join' case) can succeed and the original
+     * creator doesn't lose their crown just because the process happened to restart
+     * between their disconnect and reconnect. Safe because the token is an unguessable
+     * secret the client already held — only whoever legitimately created the room (or
+     * wins the race to reconnect first after a restart, same trust level as recreating
+     * a saved room today) can supply one that matches on a later claim.
+     *
+     * @param {string} sessionId
+     * @param {string} peerId
+     * @param {import('ws').WebSocket} socket
+     * @param {object} [options]
+     * @param {string|null} [options.password] - only applied if the session is being lazily created here.
+     * @param {string|null} [options.creatorToken] - only applied if the session is being lazily created here.
+     * @returns {void}
+     */
     addPeer(sessionId, peerId, socket, { password = null, creatorToken = null } = {}) {
         if (!this.sessions.has(sessionId)) {
             this.sessions.set(sessionId, { peers: new Set(), name: null, password, maxPeers: 6, createdAt: Date.now(), creatorToken, creatorPeerId: null, moderatorPeerIds: new Set() });
@@ -35,9 +70,15 @@ export class SessionManager {
         this.peerMap.set(peerId, { sessionId, socket });
     }
 
-    // A peer presenting the token minted at room creation claims (or reclaims, after a
-    // reconnect issues them a new peerId) creator/moderator status for that session.
-    // The old creatorPeerId (stale after a reconnect) is dropped from moderatorPeerIds.
+    /**
+     * A peer presenting the token minted at room creation claims (or reclaims, after a
+     * reconnect issues them a new peerId) creator/moderator status for that session.
+     * The old creatorPeerId (stale after a reconnect) is dropped from moderatorPeerIds.
+     * @param {string} sessionId
+     * @param {string} peerId - the peer's current (possibly just-reconnected) ID.
+     * @param {string} token - the creator token the client presents.
+     * @returns {boolean} true if the token matched and creator status was (re)assigned.
+     */
     claimModerator(sessionId, peerId, token) {
         const s = this.sessions.get(sessionId);
         if (!s || !s.creatorToken || !token || s.creatorToken !== token) return false;
@@ -47,18 +88,37 @@ export class SessionManager {
         return true;
     }
 
-    // Broader check — creator + anyone promoted. Used for force-stop-stream and
-    // crown-badge visibility. Any moderator can target any peer, including the creator.
+    /**
+     * Broader check — creator + anyone promoted. Used for force-stop-stream and
+     * crown-badge visibility. Any moderator can target any peer, including the creator.
+     * @param {string} sessionId
+     * @param {string} peerId
+     * @returns {boolean}
+     */
     isModerator(sessionId, peerId) {
         return !!this.sessions.get(sessionId)?.moderatorPeerIds.has(peerId);
     }
 
-    // Stricter check — only the current token-holding creator. Used for kick and
-    // promote/demote, both deliberately kept owner-only.
+    /**
+     * Stricter check — only the current token-holding creator. Used for kick and
+     * promote/demote, both deliberately kept owner-only.
+     * @param {string} sessionId
+     * @param {string} peerId
+     * @returns {boolean}
+     */
     isCreator(sessionId, peerId) {
         return this.sessions.get(sessionId)?.creatorPeerId === peerId;
     }
 
+    /**
+     * Grants moderator status to another peer in the same room. Creator-only:
+     * fails if `requesterPeerId` isn't the current creator, preventing a peer
+     * from self-promoting or a non-creator moderator from promoting further.
+     * @param {string} sessionId
+     * @param {string} requesterPeerId
+     * @param {string} targetPeerId - must already be a member of this session.
+     * @returns {boolean} true if the promotion was applied.
+     */
     promoteModerator(sessionId, requesterPeerId, targetPeerId) {
         const s = this.sessions.get(sessionId);
         if (!s || s.creatorPeerId !== requesterPeerId) return false;
@@ -67,6 +127,14 @@ export class SessionManager {
         return true;
     }
 
+    /**
+     * Revokes a promoted peer's moderator status. Creator-only, and the
+     * creator itself can never be demoted this way.
+     * @param {string} sessionId
+     * @param {string} requesterPeerId
+     * @param {string} targetPeerId
+     * @returns {boolean} true if the demotion was applied.
+     */
     demoteModerator(sessionId, requesterPeerId, targetPeerId) {
         const s = this.sessions.get(sessionId);
         if (!s || s.creatorPeerId !== requesterPeerId) return false;
@@ -75,7 +143,13 @@ export class SessionManager {
         return true;
     }
 
-    // Created-but-never-joined sessions have no peers, so removePeer() never deletes them.
+    /**
+     * Deletes sessions that were created (via `/api/create-room`) but never
+     * actually joined by anyone, once they're older than `maxAgeMs`.
+     * Created-but-never-joined sessions have no peers, so removePeer() never deletes them.
+     * @param {number} maxAgeMs
+     * @returns {void}
+     */
     sweepEmptySessions(maxAgeMs) {
         const now = Date.now();
         for (const [id, s] of this.sessions) {
@@ -85,12 +159,23 @@ export class SessionManager {
         }
     }
 
+    /**
+     * @param {string} sessionId
+     * @returns {boolean} true if the session is at its configured participant cap.
+     */
     isFull(sessionId) {
         const s = this.sessions.get(sessionId);
         if (!s) return false;
         return s.peers.size >= (s.maxPeers ?? 6);
     }
 
+    /**
+     * Removes a peer from whatever session it belongs to (on disconnect).
+     * Deletes the session entirely once its last peer leaves — this is the
+     * mechanism behind "a room disappears the moment everyone leaves."
+     * @param {string} peerId
+     * @returns {void}
+     */
     removePeer(peerId) {
         const peerInfo = this.peerMap.get(peerId);
         if (peerInfo) {
@@ -110,16 +195,32 @@ export class SessionManager {
         }
     }
 
+    /**
+     * @param {string} sessionId
+     * @returns {boolean}
+     */
     hasSession(sessionId) {
         return this.sessions.has(sessionId);
     }
 
+    /**
+     * Public-safe snapshot of a session's metadata (never includes the
+     * actual password) — used to answer lobby validation requests and to
+     * populate the room-info a client sees in its own `'init'` payload.
+     * @param {string} sessionId
+     * @returns {{name: string|null, hasPassword: boolean, peerCount: number, maxPeers: number, creatorPeerId: string|null, moderatorPeerIds: string[]}|null}
+     */
     getSessionMeta(sessionId) {
         const s = this.sessions.get(sessionId);
         if (!s) return null;
         return { name: s.name, hasPassword: !!s.password, peerCount: s.peers.size, maxPeers: s.maxPeers ?? 6, creatorPeerId: s.creatorPeerId ?? null, moderatorPeerIds: [...s.moderatorPeerIds] };
     }
 
+    /**
+     * @param {string} sessionId
+     * @param {string} password
+     * @returns {boolean} true if the session has no password, or `password` matches it.
+     */
     validatePassword(sessionId, password) {
         const s = this.sessions.get(sessionId);
         if (!s) return true;
@@ -134,15 +235,27 @@ export class SessionManager {
         return timingSafeEqual(expected, given);
     }
 
+    /**
+     * @param {string} sessionId
+     * @returns {string[]} peer IDs currently in the session (empty if the session doesn't exist).
+     */
     getPeersInSession(sessionId) {
         const s = this.sessions.get(sessionId);
         return s ? [...s.peers] : [];
     }
 
+    /**
+     * @param {string} peerId
+     * @returns {import('ws').WebSocket|undefined}
+     */
     getPeerSocket(peerId) {
         return this.peerMap.get(peerId)?.socket;
     }
 
+    /**
+     * @param {string} peerId
+     * @returns {string|undefined}
+     */
     getSessionId(peerId) {
         return this.peerMap.get(peerId)?.sessionId;
     }

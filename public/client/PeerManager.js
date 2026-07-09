@@ -10,7 +10,19 @@ const QUALITY_TIERS = [
     { max: 12, cap: { screenRes: '1280x720', screenFps: 15, camRes: '640x360', camFps: 15 } },
 ];
 
+/**
+ * Owns the entire WebRTC mesh: per-peer connections, local/remote media
+ * tracks (screen, cam, mic), the signalling handshake over `socket`, file
+ * transfers via `RTCDataChannel`, chat/reaction/poll broadcast, active-speaker
+ * detection, adaptive quality tiers, and moderator actions. `ui` (a
+ * `UIController`) is the sole outlet for anything that touches the DOM —
+ * this class never queries or mutates it directly.
+ */
 export class PeerManager {
+    /**
+     * @param {WebSocket|null} socket - the signalling connection; null until App.js's connect() assigns one.
+     * @param {import('./UIController.js').UIController} ui
+     */
     constructor(socket, ui) {
         this.socket = socket;
         this.ui = ui;
@@ -62,13 +74,20 @@ export class PeerManager {
         this._localAnalyserStream = null;
     }
 
-    // Adds every track of `stream` to `pc` and records the resulting RTCRtpSender
-    // under this.senders[peerId]['<kind>-<track.kind>'] (e.g. 'screen-video',
-    // 'screen-audio', 'cam-video'), so a later watch/unwatch request from that peer
-    // can pause/resume this specific connection's sender without touching the other
-    // peer connections sharing the same local stream. Keying by track kind too matters
-    // once a stream carries both video and audio (screen share + its audio) — without
-    // it the audio sender would silently overwrite the video sender's map entry.
+    /**
+     * Adds every track of `stream` to `pc` and records the resulting RTCRtpSender
+     * under this.senders[peerId]['<kind>-<track.kind>'] (e.g. 'screen-video',
+     * 'screen-audio', 'cam-video'), so a later watch/unwatch request from that peer
+     * can pause/resume this specific connection's sender without touching the other
+     * peer connections sharing the same local stream. Keying by track kind too matters
+     * once a stream carries both video and audio (screen share + its audio) — without
+     * it the audio sender would silently overwrite the video sender's map entry.
+     * @param {RTCPeerConnection} pc
+     * @param {string} peerId
+     * @param {MediaStream} stream
+     * @param {'screen'|'cam'|'mic'} kind
+     * @returns {void}
+     */
     _addTrackedStream(pc, peerId, stream, kind) {
         stream.getTracks().forEach(track => {
             const sender = pc.addTrack(track, stream);
@@ -77,10 +96,16 @@ export class PeerManager {
         });
     }
 
-    // Pauses or resumes the video we're sending to `peerId` for the given kind, in
-    // response to that peer reporting they've stopped/started watching it. Uses
-    // replaceTrack(null) rather than transceiver renegotiation — it stops the encoder
-    // (real bandwidth savings) without an SDP offer/answer round-trip.
+    /**
+     * Pauses or resumes the video we're sending to `peerId` for the given kind, in
+     * response to that peer reporting they've stopped/started watching it. Uses
+     * replaceTrack(null) rather than transceiver renegotiation — it stops the encoder
+     * (real bandwidth savings) without an SDP offer/answer round-trip.
+     * @param {string} peerId
+     * @param {'screen'|'cam'} kind
+     * @param {boolean} paused
+     * @returns {Promise<void>}
+     */
     async setSenderPaused(peerId, kind, paused) {
         const sender = this.senders[peerId]?.[`${kind}-video`];
         if (!sender) return;
@@ -96,14 +121,37 @@ export class PeerManager {
         }
     }
 
-    // Called by UIController when the local user starts/stops watching a remote
-    // stream (streamKey is peerId for screen share, peerId-cam for webcam).
+    /**
+     * Called by UIController when the local user starts/stops watching a remote
+     * stream (streamKey is peerId for screen share, peerId-cam for webcam) —
+     * signals the owning peer to pause/resume that sender.
+     * @param {string} streamKey
+     * @param {boolean} watched
+     * @returns {void}
+     */
     setWatched(streamKey, watched) {
         const isCam = streamKey.endsWith('-cam');
         const peerId = isCam ? streamKey.slice(0, -4) : streamKey;
         this.send(watched ? 'watch-stream' : 'unwatch-stream', peerId, { kind: isCam ? 'cam' : 'screen' });
     }
 
+    /**
+     * Single dispatch point for every message the signalling server relays
+     * (WebSocketServer.js) — one `case` per `type`. Handles session bootstrap
+     * ('init'), peer join/leave, WebRTC offer/answer/ICE relay, stream
+     * start/stop announcements, watch/unwatch pause requests, and presence
+     * (mic/deafen/nickname/status/typing) broadcasts.
+     * @param {object} msg
+     * @param {string} msg.type
+     * @param {string} [msg.peerId] - this client's own peerId (only on 'init').
+     * @param {string[]} [msg.peers] - existing room members (only on 'init').
+     * @param {string} [msg.from] - the sending peer, for peer-relative message types.
+     * @param {*} [msg.payload]
+     * @param {RTCIceServer[]} [msg.iceServers]
+     * @param {string|null} [msg.creatorPeerId]
+     * @param {string[]} [msg.moderatorPeerIds]
+     * @returns {Promise<void>}
+     */
     async handleSignal({ type, peerId, peers, from, payload, iceServers, creatorPeerId, moderatorPeerIds }) {
         // console.groupCollapsed(`PeerManager.handleSignal(${type})`);
         // console.log('[SIGNAL]', type, { peerId, peers, from, payload });
@@ -256,6 +304,13 @@ export class PeerManager {
         // console.groupEnd();
     }
 
+    /**
+     * Starts (or switches the source of) an outgoing screen share. Requests
+     * the new `getDisplayMedia` stream before tearing down any existing
+     * share, so cancelling the picker mid-switch leaves the current share
+     * running untouched.
+     * @returns {Promise<void>}
+     */
     async startSharing() {
         try {
             const constraints = {
@@ -315,6 +370,7 @@ export class PeerManager {
         }
     }
 
+    /** Re-applies the current screen-share track's resolved quality constraints (e.g. after a Settings change or a quality-tier shift). */
     async applyQualitySettings() {
         if (!this.stream) return;
         const track = this.stream.getVideoTracks()[0];
@@ -322,6 +378,7 @@ export class PeerManager {
         await track.applyConstraints(this._resolveQuality('screen'));
     }
 
+    /** Re-applies the current webcam track's resolved quality constraints. */
     async applyCamQualitySettings() {
         if (!this.camStream) return;
         const track = this.camStream.getVideoTracks()[0];
@@ -329,27 +386,36 @@ export class PeerManager {
         await track.applyConstraints(this._resolveQuality('cam'));
     }
 
-    // Returns the cap for the current room size, or null if the room is small
-    // enough (<=6) that the user's chosen settings apply unmodified.
+    /**
+     * @returns {{screenRes: string, screenFps: number, camRes: string, camFps: number}|null}
+     *   the cap for the current room size, or null if the room is small
+     *   enough (<=6) that the user's chosen settings apply unmodified.
+     */
     _qualityTier() {
         const peerCount = Object.keys(this.peers).length + 1;
         const tier = QUALITY_TIERS.find(t => peerCount <= t.max);
         return tier ? tier.cap : QUALITY_TIERS[QUALITY_TIERS.length - 1].cap;
     }
 
+    /** @returns {string} `userVal` if it's already <= `capVal` in RES_RANK, else `capVal`. */
     _capResolution(userVal, capVal) {
         if (!capVal) return userVal;
         if (userVal === 'source') return capVal;
         return (RES_RANK[userVal] ?? 99) <= (RES_RANK[capVal] ?? 99) ? userVal : capVal;
     }
 
+    /** @returns {number} the lesser of `userVal` and `capVal` (or `userVal` if uncapped). */
     _capFps(userVal, capVal) {
         return capVal ? Math.min(userVal, capVal) : userVal;
     }
 
-    // Builds getUserMedia/applyConstraints-style video constraints for 'screen' or
-    // 'cam', honoring the user's saved settings but never exceeding the current
-    // room-size quality tier.
+    /**
+     * Builds getUserMedia/applyConstraints-style video constraints for 'screen' or
+     * 'cam', honoring the user's saved settings but never exceeding the current
+     * room-size quality tier.
+     * @param {'screen'|'cam'} kind
+     * @returns {MediaTrackConstraints}
+     */
     _resolveQuality(kind) {
         const isCam = kind === 'cam';
         const resVal = localStorage.getItem(isCam ? 'camRes' : 'screenShareRes') || (isCam ? '640x480' : '1280x720');
@@ -378,8 +444,12 @@ export class PeerManager {
         return constraints;
     }
 
-    // Toasts only on an actual tier transition (not on every join/leave), and only
-    // while there's an active screen/cam stream for the cap to matter to.
+    /**
+     * Posts a system-message toast only on an actual tier transition (not on
+     * every join/leave), and only while there's an active screen/cam stream
+     * for the cap to matter to.
+     * @returns {void}
+     */
     _announceQualityTierChange() {
         const tier = this._qualityTier();
         const key = tier ? JSON.stringify(tier) : null;
@@ -395,6 +465,11 @@ export class PeerManager {
         }
     }
 
+    /**
+     * @param {number|null} rtt - round-trip time in seconds, or null if unknown.
+     * @param {number} lossRate - 0-1 fraction of packets lost.
+     * @returns {'unknown'|'poor'|'fair'|'good'|'excellent'}
+     */
     _connectionQualityFromStats(rtt, lossRate) {
         if (rtt === null) return 'unknown';
         const ms = rtt * 1000;
@@ -409,6 +484,13 @@ export class PeerManager {
     // could mask one bad peer among several good ones.
     _qualityRank = { excellent: 0, good: 1, fair: 2, poor: 3, unknown: 0 };
 
+    /**
+     * Runs every 3s (see `_startStatsPolling`): reads each connection's ICE
+     * stats for RTT/packet loss, pushes a per-peer quality tier to the UI,
+     * and pushes the mesh-wide average RTT + worst-connection tier to the
+     * top bar's signal icon.
+     * @returns {Promise<void>}
+     */
     async _pollConnectionStats() {
         const rttSamples = [];
         let worstTier = 'unknown';
@@ -437,28 +519,33 @@ export class PeerManager {
         this.ui.updateMeshSignal?.(avgMs, worstTier);
     }
 
+    /** Starts the 3s connection-quality poll (idempotent). */
     _startStatsPolling() {
         if (this._statsInterval) return;
         this._statsInterval = setInterval(() => this._pollConnectionStats(), 3000);
     }
 
+    /** Stops the connection-quality poll (called once the last peer leaves). */
     _stopStatsPolling() {
         clearInterval(this._statsInterval);
         this._statsInterval = null;
     }
 
-    // Public entry point for the Settings panel's live mic-level meter (see
-    // SettingsPanel._startMicMeter) — lets someone test/tune their sensitivity
-    // threshold before anyone else has joined. _pollActiveSpeaker's regular
-    // 200ms loop only runs once there's at least one peer connection
-    // (createPeerConnection's `Object.keys(this.peers).length === 0` check), so
-    // testing solo needs its own call into the same real detection function
-    // rather than just reading stale/never-populated `_speakingState`. Reuses
-    // the exact production algorithm (not a reimplementation) so the meter
-    // matches what would actually happen once someone's in the room — if a
-    // call *is* already in progress, this runs alongside the regular poll
-    // harmlessly (same deterministic math over the same signal, just sampled
-    // at a different cadence while Settings happens to be open).
+    /**
+     * Public entry point for the Settings panel's live mic-level meter (see
+     * SettingsPanel._startMicMeter) — lets someone test/tune their sensitivity
+     * threshold before anyone else has joined. _pollActiveSpeaker's regular
+     * 200ms loop only runs once there's at least one peer connection
+     * (createPeerConnection's `Object.keys(this.peers).length === 0` check), so
+     * testing solo needs its own call into the same real detection function
+     * rather than just reading stale/never-populated `_speakingState`. Reuses
+     * the exact production algorithm (not a reimplementation) so the meter
+     * matches what would actually happen once someone's in the room — if a
+     * call *is* already in progress, this runs alongside the regular poll
+     * harmlessly (same deterministic math over the same signal, just sampled
+     * at a different cadence while Settings happens to be open).
+     * @returns {{level: number, speaking: boolean}}
+     */
     pollSelfMicActivity() {
         if (!this.peerId) return { level: 0, speaking: false };
         const level = this._localMicLevel();
@@ -466,8 +553,11 @@ export class PeerManager {
         return { level, speaking };
     }
 
-    // RMS level (roughly 0-1) of the local mic, via a Web Audio analyser on micStream.
-    // Recreated whenever micStream itself changes (e.g. mic toggled off then on again).
+    /**
+     * RMS level (roughly 0-1) of the local mic, via a Web Audio analyser on micStream.
+     * Recreated whenever micStream itself changes (e.g. mic toggled off then on again).
+     * @returns {number}
+     */
     _localMicLevel() {
         if (!this.micEnabled || !this.micStream) return 0;
         if (this._localAnalyserStream !== this.micStream) {
@@ -489,6 +579,7 @@ export class PeerManager {
         return Math.sqrt(sumSquares / this._localAnalyserData.length);
     }
 
+    /** @returns {Promise<Object<string, number>>} peerId -> current inbound audio level, from ICE stats. */
     async _remotePeerLevels() {
         const levels = {};
         for (const [peerId, pc] of Object.entries(this.peers)) {
@@ -504,13 +595,18 @@ export class PeerManager {
         return levels;
     }
 
-    // Picks the active speaker from current audio levels, excluding the local user
-    // (you already know when you're talking). `speaking` is the same adaptive-floor
-    // signal driving the speaking-ring (see _updateSpeakingStates) — not a raw level
-    // — so a mic with a high self-noise floor can't win purely by being loud at rest.
-    // Requires a candidate to be the (only) one speaking for a sustained hold time
-    // before switching to them, and enforces a minimum gap between switches —
-    // otherwise normal back-and-forth conversation makes the focused view flicker.
+    /**
+     * Picks the active speaker from current audio levels, excluding the local user
+     * (you already know when you're talking). `speaking` is the same adaptive-floor
+     * signal driving the speaking-ring (see _updateSpeakingStates) — not a raw level
+     * — so a mic with a high self-noise floor can't win purely by being loud at rest.
+     * Requires a candidate to be the (only) one speaking for a sustained hold time
+     * before switching to them, and enforces a minimum gap between switches —
+     * otherwise normal back-and-forth conversation makes the focused view flicker.
+     * @param {Object<string, boolean>} speaking - remote peerId -> currently speaking.
+     * @param {number} now - `Date.now()` at call time.
+     * @returns {string|null} the current active-speaker peerId, or null.
+     */
     _pickActiveSpeaker(speaking, now) {
         const HOLD_MS = 500;
         const MIN_SWITCH_GAP_MS = 1500;
@@ -553,9 +649,16 @@ export class PeerManager {
     // The floor tracks each peer's own ambient level and only adapts while they're NOT
     // currently counted as speaking, so a sustained loud voice doesn't drag its own
     // floor up and mask itself.
-    // Returns { peerId: boolean } — who's currently counted as speaking, after the
-    // adaptive floor + release-window debounce. This is the single source of truth
-    // both the speaking-ring and _pickActiveSpeaker consume.
+    /**
+     * The single source of truth both the speaking-ring and `_pickActiveSpeaker`
+     * consume for "is this peer currently speaking" — adaptive per-peer noise
+     * floor (not a fixed threshold) plus a release-window debounce so the
+     * ring doesn't blink off between individual words. Fires `onSpeakingChange`
+     * for any peer whose speaking state actually flips.
+     * @param {Object<string, number>} levels - peerId -> current audio level (includes the local peerId, if present).
+     * @param {number} now - `Date.now()` at call time.
+     * @returns {Object<string, boolean>} peerId -> currently speaking.
+     */
     _updateSpeakingStates(levels, now) {
         // User-adjustable via Settings' "Mic sensitivity" slider (voice-activity
         // mode only, but this one constant drives speech detection for every
@@ -596,6 +699,12 @@ export class PeerManager {
         return speaking;
     }
 
+    /**
+     * Runs every 200ms (see `_startSpeakerPolling`): samples local + remote
+     * audio levels, updates speaking states (driving the speaking rings and
+     * the voice-activity mic gate), and updates auto-focus's active speaker.
+     * @returns {Promise<void>}
+     */
     async _pollActiveSpeaker() {
         const levels = await this._remotePeerLevels();
         if (this.peerId) levels[this.peerId] = this._localMicLevel();
@@ -612,17 +721,21 @@ export class PeerManager {
         if (speaker && this.onActiveSpeakerChange) this.onActiveSpeakerChange(speaker);
     }
 
-    // Gates actual transmission for every mic mode, not just voice-activity —
-    // toggleMic() only ever flips track.enabled (see its comment), which mutes
-    // *content* but never stops the RTP sender: a disabled track still gets
-    // encoded and sent as continuous silence, so push-to-talk/push-to-mute
-    // were transmitting the whole time regardless of whether the key was held
-    // (confirmed via DebugPanel's per-track byte counters climbing with the
-    // key untouched). Uses replaceTrack(null) on each connection's mic sender
-    // (the same pause primitive setSenderPaused uses for video) rather than
-    // track.enabled, since the track is shared with _localMicLevel()'s
-    // analyser — disabling the track itself would silence that too and the
-    // gate could never reopen.
+    /**
+     * Gates actual transmission for every mic mode, not just voice-activity —
+     * toggleMic() only ever flips track.enabled (see its comment), which mutes
+     * *content* but never stops the RTP sender: a disabled track still gets
+     * encoded and sent as continuous silence, so push-to-talk/push-to-mute
+     * were transmitting the whole time regardless of whether the key was held
+     * (confirmed via DebugPanel's per-track byte counters climbing with the
+     * key untouched). Uses replaceTrack(null) on each connection's mic sender
+     * (the same pause primitive setSenderPaused uses for video) rather than
+     * track.enabled, since the track is shared with _localMicLevel()'s
+     * analyser — disabling the track itself would silence that too and the
+     * gate could never reopen.
+     * @param {boolean} speakingLocally
+     * @returns {void}
+     */
     _reconcileMicGate(speakingLocally) {
         const micMode = (typeof localStorage !== 'undefined' && localStorage.getItem('micMode')) || 'toggle';
         const shouldTransmit = this.micEnabled && (micMode !== 'voice-activity' || speakingLocally);
@@ -643,11 +756,13 @@ export class PeerManager {
         }
     }
 
+    /** Starts the 200ms active-speaker/mic-gate poll (idempotent). */
     _startSpeakerPolling() {
         if (this._speakerInterval) return;
         this._speakerInterval = setInterval(() => this._pollActiveSpeaker(), 200);
     }
 
+    /** Stops the active-speaker poll and clears all speaking-state (called once the last peer leaves). */
     _stopSpeakerPolling() {
         clearInterval(this._speakerInterval);
         this._speakerInterval = null;
@@ -663,6 +778,11 @@ export class PeerManager {
         this._noiseFloor = {};
     }
 
+    /**
+     * Requests mic permission on first use, then toggles enabled/disabled on
+     * subsequent calls. Broadcasts the new state to peers either way.
+     * @returns {Promise<boolean>} the resulting `micEnabled` state.
+     */
     async toggleMic() {
         if (!this.micStream) {
             try {
@@ -688,19 +808,29 @@ export class PeerManager {
         return this.micEnabled;
     }
 
+    /** Sends the current `micEnabled` state to every peer. */
     broadcastMicStatus() {
         this.send('mic-status', null, { enabled: this.micEnabled });
     }
 
+    /** Sends the current deafen state to every peer. */
     broadcastDeafenStatus() {
         this.send('deafen-status', null, { deafened: this.deafened || false });
     }
 
+    /** Sends the current (localStorage-persisted) nickname to every peer. */
     broadcastNickname() {
         const nickname = (localStorage.getItem('nickname') || 'Anonymous').trim();
         this.send('nickname-update', null, { nickname });
     }
 
+    /**
+     * Sets and broadcasts the local presence status, and updates the local
+     * UI to match. Does not touch `_manualStatus` — callers that represent a
+     * deliberate user choice should use `setManualStatus` instead.
+     * @param {'online'|'away'|'dnd'} status
+     * @returns {void}
+     */
     setStatus(status) {
         this.status = status;
         this.send('status-update', null, { status });
@@ -708,15 +838,31 @@ export class PeerManager {
         this.ui.updateIdentityStatus?.(status);
     }
 
+    /**
+     * Records a deliberate user choice from the status picker (as opposed to
+     * an automatic away/idle transition) and applies it immediately.
+     * `_reconcileAwayStatus` reads `_manualStatus` back to decide what to
+     * restore once an automatic away condition clears.
+     * @param {'online'|'away'|'dnd'} status
+     * @returns {void}
+     */
     setManualStatus(status) {
         this._manualStatus = status;
         this.setStatus(status);
     }
 
+    /** Re-sends the current status to every peer (e.g. on a new peer joining). */
     broadcastStatus() {
         this.send('status-update', null, { status: this.status });
     }
 
+    /**
+     * Called on every `visibilitychange` — pauses/resumes incoming video
+     * (bandwidth-saving while the tab is backgrounded) and reconciles the
+     * away status.
+     * @param {boolean} hidden - `document.hidden` at call time.
+     * @returns {void}
+     */
     handleTabVisibility(hidden) {
         if (hidden) {
             this._pauseIncomingVideo();
@@ -726,25 +872,37 @@ export class PeerManager {
         this._reconcileAwayStatus(hidden);
     }
 
-    // Shared by handleTabVisibility and handleIdleChange — both are just
-    // different signals for "the user isn't really here right now." Never
-    // overrides a manually-chosen DND, and reverts to whatever status was
-    // manually chosen before (not hardcoded 'online') once the away
-    // condition clears, so a manually-chosen 'away' stays put too.
+    /**
+     * Shared by handleTabVisibility and handleIdleChange — both are just
+     * different signals for "the user isn't really here right now." Never
+     * overrides a manually-chosen DND, and reverts to whatever status was
+     * manually chosen before (not hardcoded 'online') once the away
+     * condition clears, so a manually-chosen 'away' stays put too.
+     * @param {boolean} away
+     * @returns {void}
+     */
     _reconcileAwayStatus(away) {
         if (this._manualStatus === 'dnd') return;
         this.setStatus(away ? 'away' : (this._manualStatus || 'online'));
     }
 
-    // Idle-timeout auto-away (mouse/keyboard/touch inactivity), distinct from
-    // handleTabVisibility's tab-switch trigger — no video pause/resume here,
-    // since an idle-but-visible tab should keep rendering incoming streams.
+    /**
+     * Idle-timeout auto-away (mouse/keyboard/touch inactivity), distinct from
+     * handleTabVisibility's tab-switch trigger — no video pause/resume here,
+     * since an idle-but-visible tab should keep rendering incoming streams.
+     * @param {boolean} idle
+     * @returns {void}
+     */
     handleIdleChange(idle) {
         this._reconcileAwayStatus(idle);
     }
 
-    // A peer's video stays enabled if its stream is the one currently floating
-    // in native picture-in-picture — tab-hidden doesn't mean unwatched there.
+    /**
+     * A peer's video stays enabled if its stream is the one currently floating
+     * in native picture-in-picture — tab-hidden doesn't mean unwatched there.
+     * @param {string} peerId
+     * @returns {boolean}
+     */
     _isPeerInPictureInPicture(peerId) {
         if (document.pictureInPictureElement !== this.ui.focusedVideo) return false;
         const focusedPeerId = this.ui.focusedPeerId;
@@ -753,6 +911,7 @@ export class PeerManager {
         return basePeerId === peerId;
     }
 
+    /** Disables every remote video receiver track (except one in native PiP) — tab hidden/idle bandwidth saving. */
     _pauseIncomingVideo() {
         Object.entries(this.peers).forEach(([peerId, pc]) => {
             if (this._isPeerInPictureInPicture(peerId)) return;
@@ -764,6 +923,7 @@ export class PeerManager {
         });
     }
 
+    /** Re-enables every remote video receiver track. */
     _resumeIncomingVideo() {
         Object.values(this.peers).forEach(pc => {
             pc.getReceivers().forEach(r => {
@@ -774,6 +934,7 @@ export class PeerManager {
         });
     }
 
+    /** Stops the outgoing screen share and notifies peers. */
     stopSharing() {
         if (this.stream) {
             this.stream.getTracks().forEach(track => track.stop());
@@ -788,9 +949,12 @@ export class PeerManager {
         this.send('stop-sharing', null, {});
     }
 
-    // Formats the effective (room-size-capped) outgoing screen-share quality for
-    // the stage header's "Auto · 1280x720 · 30fps" readout — reuses the same
-    // resolved constraints _resolveQuality() already computes for getUserMedia.
+    /**
+     * Formats the effective (room-size-capped) outgoing screen-share quality for
+     * the stage header's "Auto · 1280x720 · 30fps" readout — reuses the same
+     * resolved constraints _resolveQuality() already computes for getUserMedia.
+     * @returns {string}
+     */
     getScreenQualityLabel() {
         const { width, height, frameRate } = this._resolveQuality('screen');
         const res = width && height ? `${width.max}x${height.max}` : 'source';
@@ -798,6 +962,15 @@ export class PeerManager {
     }
 
 
+    /**
+     * Creates and wires a new `RTCPeerConnection` for `remotePeerId`: ICE
+     * candidate relay, incoming track routing (mic vs. screen-share audio,
+     * screen vs. cam video — disambiguated via the announced stream IDs),
+     * connection-failure cleanup, and the file-transfer data channel. Starts
+     * the stats/speaker polls if this is the first peer connection.
+     * @param {string} remotePeerId
+     * @returns {RTCPeerConnection}
+     */
     createPeerConnection(remotePeerId) {
         const pc = new RTCPeerConnection({ iceServers: this.iceServers });
 
@@ -845,12 +1018,27 @@ export class PeerManager {
         return pc;
     }
 
+    /** Wires open/close/message handlers for one peer's file-transfer data channel. */
     _setupDataChannel(dc, peerId) {
         dc.onopen = () => { this.dataChannels[peerId] = dc; };
         dc.onclose = () => { delete this.dataChannels[peerId]; };
         dc.onmessage = (e) => this._handleDataChannelMessage(peerId, e.data);
     }
 
+    /**
+     * Demuxes one incoming data-channel message. JSON string messages are
+     * one of: file-offer/accept/decline/start/end, poll-create/vote, chat,
+     * reaction, or typing — each re-validated here (peer-controlled input is
+     * never trusted, see the file-transfer trust-boundary note in
+     * CLAUDE.md), and dropped silently for a blocked peer. Binary messages
+     * are file chunks, demuxed to the one in-flight transfer from that
+     * sender (see the per-peer send-queue serialization note on
+     * `_sendFileToPeer` for why only one transfer per sender is ever active
+     * on the receive side at a time).
+     * @param {string} peerId
+     * @param {string|ArrayBuffer} data
+     * @returns {void}
+     */
     _handleDataChannelMessage(peerId, data) {
         if (typeof data === 'string') {
             let msg;
@@ -983,6 +1171,7 @@ export class PeerManager {
         'woff', 'woff2', 'ttf', 'otf', 'eot',
     ]);
 
+    /** @returns {boolean} true if the file's extension is on the allowlist. */
     _isFileAllowed(fileName) {
         const ext = fileName.split('.').pop().toLowerCase();
         return this._allowedExtensions.has(ext);
@@ -995,21 +1184,29 @@ export class PeerManager {
         webp: 'image/webp', bmp: 'image/bmp', avif: 'image/avif', ico: 'image/x-icon',
     };
 
-    // The peer-supplied MIME type is untrusted: a blob typed image/svg+xml (or text/html)
-    // opened via its blob: URL runs scripts in THIS origin. Derive the type from the
-    // extension instead — raster images keep a previewable MIME, everything else
-    // (including svg) becomes an opaque binary that only gets download links.
+    /**
+     * The peer-supplied MIME type is untrusted: a blob typed image/svg+xml (or text/html)
+     * opened via its blob: URL runs scripts in THIS origin. Derive the type from the
+     * extension instead — raster images keep a previewable MIME, everything else
+     * (including svg) becomes an opaque binary that only gets download links.
+     * @param {string} fileName
+     * @returns {string}
+     */
     _safeMimeType(fileName) {
         const ext = (fileName || '').split('.').pop().toLowerCase();
         return this._rasterMimeByExt[ext] || 'application/octet-stream';
     }
 
-    // Receiver decides per-file whether to accept (unless they've turned on
-    // "auto-accept files" for a room they trust) — see `settings-auto-accept-files`.
+    /**
+     * Receiver decides per-file whether to accept (unless they've turned on
+     * "auto-accept files" for a room they trust) — see `settings-auto-accept-files`.
+     * @returns {boolean}
+     */
     _autoAcceptFiles() {
         return localStorage.getItem('autoAcceptFiles') === '1';
     }
 
+    /** Sends a file-accept or file-decline reply for an incoming offer. */
     _respondToOffer(peerId, fileId, accepted) {
         if (!accepted) delete this._offeredFiles[fileId];
         const dc = this.dataChannels[peerId];
@@ -1017,9 +1214,15 @@ export class PeerManager {
         dc.send(JSON.stringify({ type: accepted ? 'file-accept' : 'file-decline', fileId }));
     }
 
-    // Waits (with a timeout, so a peer who never answers — or leaves — doesn't
-    // hang the transfer forever) for each peer's file-accept/file-decline before
-    // sending a single byte, so a declined file never wastes bandwidth.
+    /**
+     * Waits (with a timeout, so a peer who never answers — or leaves — doesn't
+     * hang the transfer forever) for each peer's file-accept/file-decline before
+     * sending a single byte, so a declined file never wastes bandwidth.
+     * @param {string} peerId
+     * @param {string} fileId
+     * @param {number} [timeoutMs=60000]
+     * @returns {Promise<boolean>} whether the peer accepted.
+     */
     _awaitOfferResponse(peerId, fileId, timeoutMs = 60_000) {
         const key = `${fileId}:${peerId}`;
         return new Promise((resolve) => {
@@ -1034,12 +1237,19 @@ export class PeerManager {
         });
     }
 
-    // Entry point for the composer's Send button: one or more staged files plus an
-    // optional caption, all rendered as one bubble (see ChatUI.ensureFileGroup).
-    // Each file still gets its own independent per-peer offer/accept/transfer
-    // (sendFileToAll below) — grouping is purely a rendering concern, not a
-    // transport one, so one AFK peer or one blocked/oversized file can never hold
-    // up any other file in the batch.
+    /**
+     * Entry point for the composer's Send button: one or more staged files plus an
+     * optional caption, all rendered as one bubble (see ChatUI.ensureFileGroup).
+     * Each file still gets its own independent per-peer offer/accept/transfer
+     * (sendFileToAll below) — grouping is purely a rendering concern, not a
+     * transport one, so one AFK peer or one blocked/oversized file can never hold
+     * up any other file in the batch.
+     * @param {File[]} files
+     * @param {string|null} caption
+     * @param {{messageId: string, sender: string, text: string}|null} replyTo
+     * @param {string} messageId
+     * @returns {Promise<void>}
+     */
     async sendFilesWithCaption(files, caption, replyTo, messageId) {
         const groupId = 'grp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 8);
         const group = { groupId, caption: caption || null, replyTo: replyTo || null, messageId };
@@ -1048,6 +1258,15 @@ export class PeerManager {
         }
     }
 
+    /**
+     * Sends one file to every connected peer: local echo first (regardless
+     * of whether anyone accepts), then an independent offer/accept/transfer
+     * per peer (see `_sendFileToPeer`) — one AFK or declining peer never
+     * blocks delivery to the others.
+     * @param {File} file
+     * @param {{groupId: string, caption: string|null, replyTo: object|null, messageId: string|null}} group
+     * @returns {Promise<void>}
+     */
     async sendFileToAll(file, group) {
         if (!this._isFileAllowed(file.name)) {
             this.ui.addSystemMessage(`Blocked: .${file.name.split('.').pop()} files are not allowed`, 'leave');
@@ -1085,6 +1304,29 @@ export class PeerManager {
         });
     }
 
+    /**
+     * Sends the offer to one peer, waits for their accept/decline, then
+     * queues the actual chunk stream behind any transfer already in flight
+     * to that same peer.
+     *
+     * Binary WebRTC messages carry no fileId of their own — the receiver can
+     * only tell one file's chunks apart from another's by assuming at most one
+     * transfer is in flight per sender at a time (see the binary branch of
+     * handleDataChannelMessage). Sending a caption+files batch (or just two
+     * drops close together) fires every file's offer/accept near-simultaneously,
+     * so without this queue two accepted files' chunk loops would interleave on
+     * the same connection and get demuxed into the wrong incomingTransfers entry
+     * on the other end — corrupting both and often tripping the declared-size
+     * guard. Chaining behind this peer's previous transfer only delays *when*
+     * the next file's bytes start going out; it doesn't affect other peers,
+     * preserving the existing "one AFK/declining peer can't block another peer"
+     * guarantee.
+     * @param {string} pid
+     * @param {File} file
+     * @param {string} fileId
+     * @param {object} offer
+     * @returns {Promise<void>}
+     */
     async _sendFileToPeer(pid, file, fileId, offer) {
         const awaited = this._awaitOfferResponse(pid, fileId);
         this.dataChannels[pid]?.send(JSON.stringify(offer));
@@ -1109,6 +1351,15 @@ export class PeerManager {
         return thisTransfer;
     }
 
+    /**
+     * Streams one file's bytes to one peer in 16KB chunks, respecting the
+     * data channel's own backpressure (`bufferedAmount`).
+     * @param {string} pid
+     * @param {File} file
+     * @param {string} fileId
+     * @param {string} groupId
+     * @returns {Promise<void>}
+     */
     async _streamFileToPeer(pid, file, fileId, groupId) {
         const dc = this.dataChannels[pid];
         if (!dc || dc.readyState !== 'open') return;
@@ -1138,16 +1389,27 @@ export class PeerManager {
         dc.send(JSON.stringify({ type: 'file-end', fileId }));
     }
 
-    // With multiple peers accepting at different times / uploading at different
-    // rates (each connection's own bufferedAmount backpressure), one shared
-    // progress bar can only show one number — report the least-advanced peer
-    // still in flight, since that's the one still holding up "done".
+    /**
+     * With multiple peers accepting at different times / uploading at different
+     * rates (each connection's own bufferedAmount backpressure), one shared
+     * progress bar can only show one number — report the least-advanced peer
+     * still in flight, since that's the one still holding up "done".
+     * @returns {void}
+     */
     _reportUploadProgress(fileId, fileName, groupId) {
         const map = this._filePeerProgress[fileId];
         if (!map || map.size === 0) return;
         this.ui.updateFileProgress(fileId, Math.min(...map.values()), 'upload', fileName, groupId);
     }
 
+    /**
+     * Sends a chat message to every peer over their data channel.
+     * @param {string} text
+     * @param {string} nickname
+     * @param {string} messageId
+     * @param {object|null} replyTo
+     * @returns {void}
+     */
     broadcastChat(text, nickname, messageId, replyTo) {
         const msg = JSON.stringify({ type: 'chat', text, nickname, messageId, replyTo: replyTo || null });
         for (const dc of Object.values(this.dataChannels)) {
@@ -1155,6 +1417,7 @@ export class PeerManager {
         }
     }
 
+    /** Sends a reaction toggle to every peer. */
     broadcastReaction(messageId, emoji, nickname) {
         const msg = JSON.stringify({ type: 'reaction', messageId, emoji, nickname });
         for (const dc of Object.values(this.dataChannels)) {
@@ -1162,6 +1425,7 @@ export class PeerManager {
         }
     }
 
+    /** Sends the local typing state to every peer. */
     broadcastTyping(isTyping) {
         const msg = JSON.stringify({ type: 'typing', isTyping });
         for (const dc of Object.values(this.dataChannels)) {
@@ -1169,6 +1433,7 @@ export class PeerManager {
         }
     }
 
+    /** Sends a new poll to every peer. */
     broadcastPollCreate(pollId, question, options) {
         const msg = JSON.stringify({ type: 'poll-create', pollId, question, options });
         for (const dc of Object.values(this.dataChannels)) {
@@ -1176,6 +1441,7 @@ export class PeerManager {
         }
     }
 
+    /** Sends the local peer's poll vote to every peer, tagged with the real local peerId. */
     broadcastPollVote(pollId, optionIndex) {
         const msg = JSON.stringify({ type: 'poll-vote', pollId, optionIndex, voterId: this.peerId });
         for (const dc of Object.values(this.dataChannels)) {
@@ -1183,6 +1449,14 @@ export class PeerManager {
         }
     }
 
+    /**
+     * Initiates the WebRTC offer side of a connection (only called by the
+     * "larger" peerId in a pair, per `handleSignal`'s join handling, so both
+     * sides don't race to offer at once). Attaches any active local
+     * streams, or a recvonly transceiver in their place, then sends the offer.
+     * @param {string} peerId
+     * @returns {void}
+     */
     initiateConnection(peerId) {
         const pc = this.peers[peerId] || this.createPeerConnection(peerId);
 
@@ -1209,6 +1483,17 @@ export class PeerManager {
             });
     }
 
+    /**
+     * Handles an incoming WebRTC offer: creates the connection if needed,
+     * attaches any active local streams not already attached (checked via
+     * the `senders` map, not live track kinds — a mic sender gated closed by
+     * the voice-activity gate has `.track === null` and would otherwise be
+     * missed and re-added, see the inline note below on the mic-audio check),
+     * and replies with an answer.
+     * @param {string} from
+     * @param {RTCSessionDescriptionInit} offer
+     * @returns {Promise<void>}
+     */
     async receiveOffer(from, offer) {
         let pc = this.peers[from];
 
@@ -1243,6 +1528,7 @@ export class PeerManager {
         this.send('answer', from, pc.localDescription);
     }
 
+    /** Applies an incoming WebRTC answer to the matching connection. */
     receiveAnswer(from, answer) {
         const pc = this.peers[from];
         if (pc) {
@@ -1250,6 +1536,7 @@ export class PeerManager {
         }
     }
 
+    /** Applies an incoming ICE candidate to the matching connection. */
     receiveCandidate(from, candidate) {
         const pc = this.peers[from];
         if (pc) {
@@ -1257,6 +1544,16 @@ export class PeerManager {
         }
     }
 
+    /**
+     * Full teardown of a peer connection (disconnect, kick, or connection
+     * failure): closes the RTCPeerConnection, stops the stats/speaker polls
+     * if it was the last peer, and clears every per-peer map entry plus that
+     * peer's video/audio elements. `silent` is threaded through to
+     * `ui.removeStream` so a blanket sweep (e.g. the 'init' reconnect reset)
+     * doesn't queue phantom stream-down sounds for peers who never streamed.
+     * @param {string} peerId
+     * @returns {void}
+     */
     removePeer(peerId) {
         const pc = this.peers[peerId];
         if (pc) pc.close();
@@ -1278,19 +1575,29 @@ export class PeerManager {
         this.ui.removeAudio(peerId + '-screen');
     }
 
-    // Called when a REMOTE peer stops their screen share ('stop-sharing') — their
-    // tracks end on our receivers on their own, so the only cleanup needed here is
-    // the video tile. This must never touch pc.getSenders(): those are OUR outbound
-    // tracks (mic/cam/screen) to that peer, and a removeTrack() on them silently
-    // stops our audio/video toward the ex-sharer with no renegotiation and no error
-    // (the next negotiation then locks the transceiver receive-only, killing the
-    // mic to that peer permanently — the "they can't hear me anymore" bug).
+    /**
+     * Called when a REMOTE peer stops their screen share ('stop-sharing') — their
+     * tracks end on our receivers on their own, so the only cleanup needed here is
+     * the video tile. This must never touch pc.getSenders(): those are OUR outbound
+     * tracks (mic/cam/screen) to that peer, and a removeTrack() on them silently
+     * stops our audio/video toward the ex-sharer with no renegotiation and no error
+     * (the next negotiation then locks the transceiver receive-only, killing the
+     * mic to that peer permanently — the "they can't hear me anymore" bug).
+     * @param {string} peerId
+     * @returns {void}
+     */
     removePeerStream(peerId) {
         this.ui.removeStream(peerId);
     }
 
 
 
+    /**
+     * Requests camera permission on first use, then stops it on subsequent
+     * calls. Attaches the new stream to every existing connection and
+     * renegotiates.
+     * @returns {Promise<boolean>} the resulting `camEnabled` state.
+     */
     async toggleCam() {
         if (this.camEnabled) {
             this.stopCam();
@@ -1340,6 +1647,7 @@ export class PeerManager {
         }
     }
 
+    /** Stops the outgoing webcam stream and notifies peers. */
     stopCam() {
         if (this.camStream) {
             this.camStream.getTracks().forEach(t => t.stop());
@@ -1357,9 +1665,12 @@ export class PeerManager {
         this.send('webcam-stop', null, {});
     }
 
-    // Flips between front/back camera without renegotiating — swaps the outbound
-    // track via replaceTrack() on each existing sender, same mechanism the
-    // watch/unwatch pause system and mic-gate use for track swaps without SDP churn.
+    /**
+     * Flips between front/back camera without renegotiating — swaps the outbound
+     * track via replaceTrack() on each existing sender, same mechanism the
+     * watch/unwatch pause system and mic-gate use for track swaps without SDP churn.
+     * @returns {Promise<void>}
+     */
     async switchCamera() {
         if (!this.camStream) return;
         const nextFacingMode = this._camFacingMode === 'environment' ? 'user' : 'environment';
@@ -1393,41 +1704,60 @@ export class PeerManager {
         }
     }
 
+    /** Re-announces the current webcam stream's ID to peers (e.g. on a new peer joining). */
     broadcastCamStreamId() {
         if (this.camStream) {
             this.send('webcam-start', null, { streamId: this.camStream.id });
         }
     }
 
-    // Broader tier — creator + anyone promoted. Can stop any peer's stream, including
-    // the creator's own.
+    /**
+     * Broader tier — creator + anyone promoted. Can stop any peer's stream, including
+     * the creator's own.
+     * @returns {boolean}
+     */
     isModeratorMe() {
         return !!this.peerId && this.moderatorPeerIds.has(this.peerId);
     }
 
-    // Stricter tier — only the current token-holding creator. Can kick and promote/demote.
+    /**
+     * Stricter tier — only the current token-holding creator. Can kick and promote/demote.
+     * @returns {boolean}
+     */
     isCreatorMe() {
         return !!this.peerId && this.creatorPeerId === this.peerId;
     }
 
     // All four actions are enforced server-side (WebSocketServer.js checks
     // SessionManager.isModerator/isCreator before acting) — these just send the request.
+
+    /** Requests the server force-stop a peer's stream. Requires moderator status server-side. */
     requestStopStream(targetPeerId) {
         this.send('force-stop-stream', targetPeerId, {});
     }
 
+    /** Requests the server kick a peer from the room. Requires creator status server-side. */
     kickPeer(targetPeerId) {
         this.send('kick', targetPeerId, {});
     }
 
+    /** Requests the server promote a peer to moderator. Requires creator status server-side. */
     promotePeer(targetPeerId) {
         this.send('promote-moderator', targetPeerId, {});
     }
 
+    /** Requests the server demote a peer from moderator. Requires creator status server-side. */
     demotePeer(targetPeerId) {
         this.send('demote-moderator', targetPeerId, {});
     }
 
+    /**
+     * Sends one signalling message over the WebSocket, if it's open.
+     * @param {string} type
+     * @param {string|null} to - target peerId for point-to-point messages, or null to broadcast.
+     * @param {*} payload
+     * @returns {void}
+     */
     send(type, to, payload) {
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
             this.socket.send(JSON.stringify({ type, to, payload }));
