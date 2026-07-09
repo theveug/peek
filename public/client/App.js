@@ -522,6 +522,30 @@ document.addEventListener('visibilitychange', () => {
     peerManager.handleTabVisibility(document.hidden);
 });
 
+// Idle/away auto-detection: flips status to Away after 15 minutes of no
+// mouse/keyboard/touch input, same manual-status-respecting logic as tab
+// visibility (see PeerManager._reconcileAwayStatus) — never overrides a
+// manually-chosen DND, and restores whatever status was manually chosen
+// before (not hardcoded 'online') once activity resumes.
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+let idleTimer = null;
+let isIdle = false;
+function resetIdleTimer() {
+    if (isIdle) {
+        isIdle = false;
+        peerManager.handleIdleChange(false);
+    }
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+        isIdle = true;
+        peerManager.handleIdleChange(true);
+    }, IDLE_TIMEOUT_MS);
+}
+['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach((evt) => {
+    document.addEventListener(evt, resetIdleTimer, { passive: true });
+});
+resetIdleTimer();
+
 
 // --- Mobile detection helper ---
 function isMobile() {

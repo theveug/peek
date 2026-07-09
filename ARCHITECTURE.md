@@ -34,6 +34,63 @@ See also:
 
 ---
 
+## Scaling ceiling & regulatory considerations (SFU migration, 2026-07-09)
+
+*Not legal advice — this is engineering-team reasoning about the tradeoff, captured so
+the SFU decision in `TODO.md` isn't made without this context. Get actual
+jurisdiction-specific legal review before committing to an SFU design, especially if
+transcoding/mixing/recording is ever added on top of it.*
+
+The mesh architecture's scaling ceiling (see `TODO.md`'s "Scaling ceiling" section) is
+real — full mesh is N×(N-1) connections, and quality tiers (`_qualityTier()`) only
+shrink each connection's bitrate, they don't reduce the connection *count*. The actual
+fix at large room sizes is an SFU (Selective Forwarding Unit): one upload per client,
+fanned out server-side. That's a deliberate architectural shift away from "no info held
+on a server," so before picking it up, it's worth being precise about what legal
+exposure it would and wouldn't add — a concern raised directly by the user.
+
+- **It's very unlikely to trigger age-verification/ID-check laws** (e.g. Australia's
+  social-media minimum-age rules, in force since ~Dec 2025). Those regimes key off
+  *product features* — persistent accounts, a social graph, content
+  discovery/search across users, ongoing feed posting — not transport architecture.
+  Most explicitly carve out services whose sole/primary purpose is messaging or
+  voice/video calling. Zoom and Teams run centralized SFUs and aren't captured by
+  these laws; the carve-out is about *what the product is*, not *how media moves*.
+  Peek's no-accounts, ephemeral-room design is what keeps it on the "communication
+  tool" side of that line, and an SFU migration wouldn't change that classification
+  by itself — only adding social features (profiles, directories, discovery, feeds)
+  would.
+- **The real legal risk is different: carriage-vs-hosting classification.** Today's
+  TURN relay (fallback only) is a blind byte-forwarder — it relays DTLS-SRTP
+  encrypted packets without ever holding decryption keys, which is legally similar to
+  a telecom carrier ("mere conduit" under the EU's e-Commerce Directive/DSA,
+  common-carrier treatment under Australia's Telecommunications Act): no technical
+  capability to inspect content, so no reasonable expectation to moderate it. A pure
+  forwarding SFU (just picking which simulcast layer to relay per receiver) can
+  preserve this property, especially combined with client-side E2EE via WebRTC
+  insertable streams, so the server never holds keys. But an SFU that needs to
+  **transcode, mix, or compose** streams (audio mixing for large calls, recording,
+  server-side composition) typically has to decrypt server-side, even with nothing
+  ever written to disk — and that's the point regulators/plaintiffs can run a
+  "capability implies duty" argument: once you *can* inspect content, even
+  transiently, you can be expected to. Australia's Online Safety Act industry codes
+  around proactive CSAM detection are the concrete version of this, and they're
+  framed around *reasonable technical capability*, not storage.
+- **Keep privacy-law exposure and carriage-classification exposure separate** — they
+  don't move together. Privacy-law exposure (GDPR-style, Australian Privacy Act) is
+  about *storage* and stays minimal under a stateless SFU exactly as it does under
+  the current mesh, as long as nothing persists server-side. Carriage/hosting
+  classification is about *capability to inspect decrypted content*, and only shifts
+  if a future SFU design needs to decrypt for transcoding/mixing/recording.
+- **If/when the SFU migration is scoped**: favor a pure forwarding design (no
+  transcode/mix/record) with client-side E2EE via insertable streams so the server
+  never holds keys, and keep logging ephemeral/connection-metadata-only — that
+  preserves the current legal posture. Recording or server-side composition
+  features, if ever wanted, are the things that would actually need a fresh legal
+  review, not the SFU migration on its own.
+
+---
+
 ## Visual redesign (Phases 0-5 — all complete)
 
 Based on a Claude Design handoff pack (`peek-design.zip`, originally from Downloads — `README.md` + `Peek.dc.html` prototype; the prototype is inline-styled preview-runtime HTML, **not** meant to be copied verbatim, just a spec for appearance/behavior). Phased: 0 decisions → **1 tokens/fonts (done)** → **2 screen re-skins — all sub-phases done (2a lobby, 2b top bar/Invite popover, 2c members sidebar, 2d stage/controls dock, 2e chat/files/polls panel)** → **3 settings panel (done)** → **4 removed the legacy glass/gradient background (done)** → **5 Background tint picker (done)**. DMs are explicitly out of scope (was a stray future-idea note in the pack, not a real ask). Phases 4-5 were new scope beyond the original pack — nothing further currently planned.

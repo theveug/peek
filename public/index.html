@@ -57,7 +57,7 @@
                                     style="width:auto;padding:9px 14px;">Copy</button>
                             </div>
                         </div>
-                        <div class="settings-field" style="margin-bottom:0;">
+                        <div class="settings-field" style="margin-bottom:16px;">
                             <div class="settings-label">Direct link</div>
                             <div class="topbar-invite-field">
                                 <input type="text" id="invite-link-field" class="settings-text-input font-mono-app"
@@ -65,6 +65,10 @@
                                 <button type="button" id="invite-copy-link" class="lobby-btn-primary"
                                     style="width:auto;padding:9px 14px;">Copy</button>
                             </div>
+                        </div>
+                        <div class="settings-field" style="margin-bottom:0;">
+                            <div class="settings-label">Scan to join</div>
+                            <div id="invite-qr-code" class="invite-qr-code"></div>
                         </div>
                     </div>
                 </div>
@@ -822,13 +826,15 @@
     </div>
 
     <!-- Third-party libs — self-hosted from /assets/vendor (marked@13.0.3,
-             dompurify@3.1.6, jszip@3.10.1, highlight.js@11.9.0), so the app has
-             zero network dependencies and works on a disconnected LAN. Never
-             swap these back to CDN URLs: unpinned/no-SRI CDN scripts were the
-             top finding of two security reviews. -->
+             dompurify@3.1.6, jszip@3.10.1, highlight.js@11.9.0,
+             qrcode-generator@2.0.4), so the app has zero network dependencies
+             and works on a disconnected LAN. Never swap these back to CDN
+             URLs: unpinned/no-SRI CDN scripts were the top finding of two
+             security reviews. -->
     <script src="/assets/vendor/marked.min.js"></script>
     <script src="/assets/vendor/purify.min.js"></script>
     <script src="/assets/vendor/jszip.min.js"></script>
+    <script src="/assets/vendor/qrcode-generator.min.js"></script>
 
     <!-- Highlight.js: the common-languages bundle plus a few extras;
              download more from the hljs 11.9.0 release into /assets/vendor if needed -->

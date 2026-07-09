@@ -3620,6 +3620,23 @@ body,
   min-width: 0;
 }
 
+/* White background regardless of theme — the QR module colors are baked in
+   as black-on-white by the generator, and a dark surface behind them would
+   ruin contrast/scannability. */
+.invite-qr-code {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  background: #fff;
+  border-radius: 10px;
+}
+
+.invite-qr-code svg {
+  display: block;
+  width: 132px;
+  height: 132px;
+}
+
 @media (max-width: 767px) {
   .topbar {
     padding: 0 8px;

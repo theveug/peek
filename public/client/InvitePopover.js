@@ -24,9 +24,24 @@ export class InvitePopover {
         if (codeField) codeField.value = this.roomCode;
 
         const linkField = document.getElementById('invite-link-field');
-        if (linkField) linkField.value = `${location.origin}/${this.roomCode}`;
+        const link = `${location.origin}/${this.roomCode}`;
+        if (linkField) linkField.value = link;
+
+        this._renderQrCode(link);
 
         this.popover.classList.remove('hidden');
+    }
+
+    // qrcode-generator (public/assets/vendor/qrcode-generator.min.js) — pure
+    // client-side, no server round-trip, matches the offline-first rule.
+    // typeNumber 0 = auto-pick the smallest QR version that fits the data.
+    _renderQrCode(text) {
+        const container = document.getElementById('invite-qr-code');
+        if (!container || typeof qrcode !== 'function') return;
+        const qr = qrcode(0, 'M');
+        qr.addData(text);
+        qr.make();
+        container.innerHTML = qr.createSvgTag({ scalable: true });
     }
 
     close() {

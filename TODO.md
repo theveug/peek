@@ -18,7 +18,6 @@ Living backlog for Peek. Check this at the start of a session for pending work; 
 ## Documentation / open-source prep
 
 - [ ] **JSDoc the public API surface** — docblocks on class-level + public methods of `PeerManager`, `SessionManager`, `UIController`, `ChatUI`, and the genuinely non-obvious internals (not every function). Highest-value onboarding aid for incoming open-source contributors facing the large client files, and helps targeted reads. **If done, update the line counts in `CLAUDE.md`'s "Never read large files in full" list in the same pass** — docblocks inflate those files and the budget rules are keyed to size. A generated docs site (typedoc/jsdoc HTML) is deliberately *not* planned yet — a strong `README.md` + `ARCHITECTURE.md` is more valuable at this size and rots less.
-- [ ] **README.md for the repo root** — table stakes for open-sourcing: what Peek is, the no-server-storage pitch, how to run (`npm run dev`, the mkcert HTTPS note), and pointers to `ARCHITECTURE.md`/`CHANGELOG.md`/`CLAUDE.md`.
 
 ## Desktop / Electron
 
@@ -29,10 +28,6 @@ Living backlog for Peek. Check this at the start of a session for pending work; 
 - [ ] **Rejected: local contacts / friends list** — considered a client-side contacts system (local keypair + `localStorage` label per contact, added via out-of-band invite link, no server directory/discovery). Dropped because without accounts there's no cross-room presence, so "friending" someone only pays off if you can PM them outside a room — and *that* needs presence tracking, a bigger step against no-server-storage than a contacts list justifies. **Saved rooms** (see `CHANGELOG.md`) covers the actual need. Revisit only if async P2P messaging becomes a real goal — see Direct messaging below.
 - [ ] **Direct messaging (P2P data channel)** — private 1-to-1 chat between any two participants via `RTCDataChannel` on the existing peer connection, so messages never touch the signaling server. Click a participant's avatar/name to open a scoped DM panel alongside group chat. Implementation lives in `PeerManager.js` (open a named data channel per peer on connect, handle `ondatachannel` on the receiving side). Works identically in the hosted web version and the future Electron build since data channels are P2P after ICE.
 - [ ] **Screen annotation/drawing** — overlay a canvas on the shared screen so participants can circle/mark things, useful for code review.
-
-## Polish
-
-- [ ] **Keyboard shortcuts panel** — `?` or `F1` overlay listing available shortcuts.
 
 ## New feature ideas (brainstorm — 2026-07-04)
 
@@ -49,8 +44,6 @@ Not yet scoped/estimated — captured here so they don't get lost; move into a p
 - [ ] **Raise hand** — a lightweight broadcast signal (mirrors the existing typing/reaction broadcast pattern) + an icon on the participant card. Cheap once room-rules/push-to-talk moderation exists, but useful standalone too.
 - [ ] **@mentions in chat** — detect `@nickname` in outgoing chat text, highlight it for the mentioned peer, and give it a distinct notification (separate from the general unread dot) so it's not lost in a busy room.
 - [ ] **Live captions (Web Speech API)** — client-side speech-to-text overlay on your own mic only; never leaves the browser, so it sidesteps the no-server-storage tension entirely. Real accessibility win.
-- [ ] **QR code for room join** — generate client-side from the room URL (no server involvement) for quickly getting a phone into a room.
-- [ ] **Idle/away auto-detection** — auto-flip status to "away" after N minutes of no mouse/keyboard input; manual online/away/DND picker already exists, this just automates the away case.
 - [ ] **Collaborative whiteboard** — freestanding draw canvas (not just an overlay on a shared screen) synced via the existing data-channel broadcast pattern used for chat/reactions.
 - [ ] **Session recap export** — before a session ends, bundle the in-memory chat log + shared files into a single local download (zip), entirely client-side. Doesn't violate no-persistence since nothing is stored server-side or between sessions — just don't let the ephemeral data vanish without an explicit export option.
 - [ ] **Members sidebar has unused space at realistic room sizes (2026-07-09)** — the panel is sized for the max participant cap (12), but most rooms run far smaller, so the bottom half sits empty. No concrete feature picked yet (call-status/bandwidth stats was floated and set aside — felt more like a power-user/debug stat than something worth permanent sidebar space, see `DebugPanel.js`) — flagging the space itself as a future opportunity, not a specific design.

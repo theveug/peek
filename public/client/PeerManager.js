@@ -720,15 +720,27 @@ export class PeerManager {
     handleTabVisibility(hidden) {
         if (hidden) {
             this._pauseIncomingVideo();
-            if (this._manualStatus !== 'dnd') {
-                this.setStatus('away');
-            }
         } else {
             this._resumeIncomingVideo();
-            if (this._manualStatus !== 'dnd') {
-                this.setStatus(this._manualStatus || 'online');
-            }
         }
+        this._reconcileAwayStatus(hidden);
+    }
+
+    // Shared by handleTabVisibility and handleIdleChange — both are just
+    // different signals for "the user isn't really here right now." Never
+    // overrides a manually-chosen DND, and reverts to whatever status was
+    // manually chosen before (not hardcoded 'online') once the away
+    // condition clears, so a manually-chosen 'away' stays put too.
+    _reconcileAwayStatus(away) {
+        if (this._manualStatus === 'dnd') return;
+        this.setStatus(away ? 'away' : (this._manualStatus || 'online'));
+    }
+
+    // Idle-timeout auto-away (mouse/keyboard/touch inactivity), distinct from
+    // handleTabVisibility's tab-switch trigger — no video pause/resume here,
+    // since an idle-but-visible tab should keep rendering incoming streams.
+    handleIdleChange(idle) {
+        this._reconcileAwayStatus(idle);
     }
 
     // A peer's video stays enabled if its stream is the one currently floating
