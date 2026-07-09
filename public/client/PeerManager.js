@@ -54,6 +54,12 @@ export class PeerManager {
         this.camStream = null;
         this.camEnabled = false;
         this._camFacingMode = 'user';
+        // The actual camera hardware stream, kept separate from `camStream`
+        // (the outgoing, possibly background-blurred stream) so toggling
+        // blur on/off can swap the processing pipeline without restarting
+        // the physical camera. Equal to `camStream` when blur is off.
+        this._rawCamStream = null;
+        this._virtualBackground = null;
         this.peerCamStreamIds = {};
         this._lastQualityTierKey = null;
         this.peerScreenStreamIds = {};
@@ -1610,17 +1616,18 @@ export class PeerManager {
 
         try {
             this._camFacingMode = 'user';
-            this.camStream = await navigator.mediaDevices.getUserMedia({
+            this._rawCamStream = await navigator.mediaDevices.getUserMedia({
                 video: { ...this._resolveQuality('cam'), facingMode: { ideal: this._camFacingMode } },
                 audio: false,
             });
-            this.camEnabled = true;
-
-            this.camStream.getVideoTracks()[0].onended = () => {
+            this._rawCamStream.getVideoTracks()[0].onended = () => {
                 this.stopCam();
                 document.getElementById('cam-on-icon')?.classList.add('hidden');
                 document.getElementById('cam-off-icon')?.classList.remove('hidden');
             };
+
+            this.camStream = await this._applyBackgroundProcessing(this._rawCamStream);
+            this.camEnabled = true;
 
             // Signal peers about the stream ID before tracks arrive via WebRTC
             this.send('webcam-start', null, { streamId: this.camStream.id });
@@ -1637,6 +1644,8 @@ export class PeerManager {
             return true;
         } catch (err) {
             console.warn('Camera error:', err);
+            this._rawCamStream?.getTracks().forEach(t => t.stop());
+            this._rawCamStream = null;
             this.camStream = null;
             this.camEnabled = false;
             const msg = err.name === 'NotAllowedError' ? 'Camera permission denied'
@@ -1647,7 +1656,62 @@ export class PeerManager {
         }
     }
 
-    /** Stops the outgoing webcam stream and notifies peers. */
+    /**
+     * Background blur is opt-in (`localStorage['backgroundBlur']`) — when
+     * off, this is a no-op returning `rawStream` unchanged, so there's zero
+     * extra CPU cost for anyone who never touches the feature. When on,
+     * routes the stream through a `VirtualBackground` instance (lazily
+     * importing the module so its cost is paid only if ever used) and falls
+     * back to the raw stream with a toast if segmentation fails to load
+     * (e.g. a browser too old for the vendored WASM build).
+     * @param {MediaStream} rawStream
+     * @returns {Promise<MediaStream>}
+     */
+    async _applyBackgroundProcessing(rawStream) {
+        if (localStorage.getItem('backgroundBlur') !== '1') return rawStream;
+        try {
+            const { VirtualBackground } = await import('./VirtualBackground.js');
+            this._virtualBackground = new VirtualBackground();
+            return await this._virtualBackground.start(rawStream, { blurPx: 12 });
+        } catch (err) {
+            console.warn('Background blur unavailable, using raw camera stream:', err);
+            this.ui.showToast('Background blur unavailable — showing camera unblurred');
+            this._virtualBackground = null;
+            return rawStream;
+        }
+    }
+
+    /**
+     * Toggles background blur on/off. If the camera is already on, swaps
+     * the processing pipeline live (new canvas track via `replaceTrack` on
+     * every existing sender) without restarting the physical camera — the
+     * user's cam-on state and the raw hardware stream are untouched either way.
+     * @param {boolean} enabled
+     * @returns {Promise<void>}
+     */
+    async setBackgroundBlur(enabled) {
+        localStorage.setItem('backgroundBlur', enabled ? '1' : '0');
+        if (!this.camEnabled || !this._rawCamStream) return;
+
+        const oldStream = this.camStream;
+        this._virtualBackground?.stop();
+        this._virtualBackground = null;
+
+        this.camStream = await this._applyBackgroundProcessing(this._rawCamStream);
+        const newTrack = this.camStream.getVideoTracks()[0];
+
+        for (const peerId of Object.keys(this.peers)) {
+            const sender = this.senders[peerId]?.['cam-video'];
+            if (sender) await sender.replaceTrack(newTrack).catch(() => {});
+        }
+
+        this.ui.addStream('me-cam', this.camStream);
+        if (oldStream && oldStream !== this._rawCamStream) {
+            oldStream.getTracks().forEach(t => t.stop());
+        }
+    }
+
+    /** Stops the outgoing webcam stream (and its background-blur pipeline, if active) and notifies peers. */
     stopCam() {
         if (this.camStream) {
             this.camStream.getTracks().forEach(t => t.stop());
@@ -1659,6 +1723,12 @@ export class PeerManager {
                 }
             });
             this.camStream = null;
+        }
+        this._virtualBackground?.stop();
+        this._virtualBackground = null;
+        if (this._rawCamStream) {
+            this._rawCamStream.getTracks().forEach(t => t.stop());
+            this._rawCamStream = null;
         }
         this.camEnabled = false;
         this.ui.removeStream('me-cam');
@@ -1676,21 +1746,25 @@ export class PeerManager {
         const nextFacingMode = this._camFacingMode === 'environment' ? 'user' : 'environment';
 
         try {
-            const newStream = await navigator.mediaDevices.getUserMedia({
+            const newRawStream = await navigator.mediaDevices.getUserMedia({
                 video: { ...this._resolveQuality('cam'), facingMode: { ideal: nextFacingMode } },
                 audio: false,
             });
-            const newTrack = newStream.getVideoTracks()[0];
-
-            this.camStream.getVideoTracks()[0].stop();
-            this._camFacingMode = nextFacingMode;
-            this.camStream = newStream;
-
-            newTrack.onended = () => {
+            newRawStream.getVideoTracks()[0].onended = () => {
                 this.stopCam();
                 document.getElementById('cam-on-icon')?.classList.add('hidden');
                 document.getElementById('cam-off-icon')?.classList.remove('hidden');
             };
+
+            const oldRawStream = this._rawCamStream;
+            const oldProcessedStream = this.camStream;
+            this._virtualBackground?.stop();
+            this._virtualBackground = null;
+
+            this._rawCamStream = newRawStream;
+            this._camFacingMode = nextFacingMode;
+            this.camStream = await this._applyBackgroundProcessing(newRawStream);
+            const newTrack = this.camStream.getVideoTracks()[0];
 
             for (const [peerId, pc] of Object.entries(this.peers)) {
                 const sender = this.senders[peerId]?.['cam-video'];
@@ -1698,6 +1772,11 @@ export class PeerManager {
             }
 
             this.ui.addStream('me-cam', this.camStream);
+
+            oldRawStream?.getTracks().forEach(t => t.stop());
+            if (oldProcessedStream && oldProcessedStream !== oldRawStream) {
+                oldProcessedStream.getTracks().forEach(t => t.stop());
+            }
         } catch (err) {
             console.warn('Switch camera failed:', err);
             this.ui.showToast('Could not switch camera');

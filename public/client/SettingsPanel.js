@@ -221,6 +221,12 @@ export class SettingsPanel {
             if (checked && this.ui) this.ui.autoFocusPaused = false; // re-enabling counts as "resume following"
         });
 
+        // setBackgroundBlur() itself persists the localStorage value and, if the
+        // camera is already on, live-swaps the processing pipeline — see PeerManager.js.
+        document.getElementById('settings-background-blur')?.addEventListener('change', (e) => {
+            this.peerManager?.setBackgroundBlur(e.target.checked);
+        });
+
         document.getElementById('settings-max-messages')?.addEventListener('change', (e) => {
             localStorage.setItem('maxMessages', e.target.value);
         });
@@ -234,6 +240,9 @@ export class SettingsPanel {
 
         const followSpeaker = document.getElementById('settings-follow-speaker');
         if (followSpeaker) followSpeaker.checked = localStorage.getItem('followActiveSpeaker') === '1';
+
+        const backgroundBlur = document.getElementById('settings-background-blur');
+        if (backgroundBlur) backgroundBlur.checked = localStorage.getItem('backgroundBlur') === '1';
 
         const maxMessages = document.getElementById('settings-max-messages');
         if (maxMessages) maxMessages.value = localStorage.getItem('maxMessages') || '100';

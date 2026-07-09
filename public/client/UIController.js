@@ -36,7 +36,11 @@ export class UIController {
         this.panX = 0;
         this.panY = 0;
         this.isPanning = false;
-        this.chat = new ChatUI({ getNickname: (id) => this._peerNickname(id), avatarInitials: (name) => this._avatarInitials(name) });
+        this.chat = new ChatUI({
+            getNickname: (id) => this._peerNickname(id),
+            avatarInitials: (name) => this._avatarInitials(name),
+            getAllNicknames: () => this._allNicknames(),
+        });
         // A dragged self-view PiP's saved left/top can end up off-screen after the
         // window shrinks (e.g. undocking to a smaller monitor) — reclamp on resize.
         window.addEventListener('resize', () => {
@@ -214,6 +218,19 @@ export class UIController {
         if (!el) return peerId.substring(0, 8);
         const name = el.querySelector('.participant-name');
         return name ? name.textContent : peerId.substring(0, 8);
+    }
+
+    /**
+     * Every current participant's display nickname (including the local
+     * user's own), for @mention detection — ChatUI has no direct access to
+     * the participant list, so this is passed into its constructor as
+     * `getAllNicknames`.
+     * @returns {string[]}
+     */
+    _allNicknames() {
+        return Array.from(document.querySelectorAll('#participants .participant-name'))
+            .map(el => el.textContent)
+            .filter(Boolean);
     }
 
     /**

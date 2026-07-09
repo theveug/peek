@@ -13,10 +13,12 @@ export class ChatUI {
      * @param {object} deps
      * @param {() => string} deps.getNickname - resolves a peerId to its current display nickname.
      * @param {(name: string) => string} [deps.avatarInitials] - derives avatar initials from a display name; defaults to just the first letter.
+     * @param {() => string[]} [deps.getAllNicknames] - every current participant's nickname, used for @mention detection.
      */
-    constructor({ getNickname, avatarInitials }) {
+    constructor({ getNickname, avatarInitials, getAllNicknames }) {
         this._getNickname = getNickname;
         this._avatarInitials = avatarInitials || ((name) => name.charAt(0).toUpperCase());
+        this._getAllNicknames = getAllNicknames || (() => []);
         this.maxMessages = 100;
         this._typingPeers = new Set();
         this._reactions = new Map();
@@ -439,8 +441,9 @@ export class ChatUI {
         msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}${captionHtml}<div class="chat-file-group ml-7"></div>${reactionBarHtml}</div>`;
 
         this._wireReplyQuote(msgContainer);
+        let mentionedMe = false;
         if (caption) {
-            this._finalizeMarkdownBody(msgContainer);
+            mentionedMe = this._finalizeMarkdownBody(msgContainer);
             if (messageId) this._setupEmojiPicker(msgContainer.querySelector('.chat-message'), messageId);
         }
 
@@ -452,13 +455,20 @@ export class ChatUI {
 
         this._fileGroups[groupId] = { el: msgContainer, slotsEl: msgContainer.querySelector('.chat-file-group') };
 
+        if (mentionedMe && !isSelf) {
+            msgContainer.querySelector('.chat-message')?.classList.add('chat-message-mentioned');
+        }
+
         // A caption is real message content arriving now — notify like any other
         // chat message. A files-only group (no caption) keeps the existing
         // file-offer behavior of staying silent until a transfer actually completes.
         if (caption) {
             if (!isSelf && (!document.hasFocus() || this._isChatViewClosed())) {
-                document.getElementById('new-message-indicator')?.classList.remove('hidden');
-                this._playMessageSound();
+                if (mentionedMe) this._notifyMention();
+                else {
+                    document.getElementById('new-message-indicator')?.classList.remove('hidden');
+                    this._playMessageSound();
+                }
             } else if (isSelf) {
                 document.getElementById('new-message-indicator')?.classList.add('hidden');
             }
@@ -633,6 +643,21 @@ export class ChatUI {
         this._lastMessageSoundAt = now;
     }
 
+    /**
+     * The unseen-only half of mention handling: a separate `#mention-indicator`
+     * badge + sound (not just the general `#new-message-indicator` dot), so a
+     * mention doesn't get lost among ordinary unread messages in a busy room.
+     * The persistent bubble highlight itself (`.chat-message-mentioned`) is
+     * applied unconditionally by the caller whenever mentioned — like
+     * Discord, that stays visible even if you already saw it — only this
+     * badge+sound part is gated on "not already seen".
+     * @returns {void}
+     */
+    _notifyMention() {
+        document.getElementById('mention-indicator')?.classList.remove('hidden');
+        this._playMessageSound();
+    }
+
     _imageUrlPattern = /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?.*)?$/i;
 
     /**
@@ -730,15 +755,22 @@ export class ChatUI {
             chatLog.removeChild(chatLog.firstChild);
         }
 
-        this._finalizeMarkdownBody(msgContainer);
+        const mentionedMe = this._finalizeMarkdownBody(msgContainer);
 
         const newMessageIndicator = document.getElementById('new-message-indicator');
         const tabFocused = document.hasFocus();
         const isFromOther = sender !== 'Me';
 
+        if (mentionedMe && isFromOther) {
+            msg.classList.add('chat-message-mentioned');
+        }
+
         if (isFromOther && (!tabFocused || this._isChatViewClosed())) {
-            newMessageIndicator.classList.remove('hidden');
-            this._playMessageSound();
+            if (mentionedMe) this._notifyMention();
+            else {
+                newMessageIndicator.classList.remove('hidden');
+                this._playMessageSound();
+            }
         } else {
             newMessageIndicator.classList.add('hidden');
         }
@@ -775,10 +807,10 @@ export class ChatUI {
 
     /**
      * Post-processing shared by any rendered markdown body (chat text or a file
-     * group's caption): syntax highlighting + a copy button on code fences, and
-     * link-preview expansion.
+     * group's caption): syntax highlighting + a copy button on code fences,
+     * link-preview expansion, and @mention detection/highlighting.
      * @param {HTMLElement} msgContainer
-     * @returns {void}
+     * @returns {boolean} true if the local user was mentioned in this body.
      */
     _finalizeMarkdownBody(msgContainer) {
         msgContainer.querySelectorAll('pre code').forEach((block) => {
@@ -803,6 +835,62 @@ export class ChatUI {
         });
 
         this._processLinkPreviews(msgContainer);
+        return this._processMentions(msgContainer);
+    }
+
+    /**
+     * Finds `@nickname` tokens (matched against every current participant's
+     * nickname, case-insensitively, longest-name-first so one name that's a
+     * prefix of another can't steal the match) in a rendered markdown body
+     * and wraps each in a highlighted `.chat-mention` span. Skips text
+     * inside links/code so a mention-like substring there isn't mangled.
+     * Operates on the DOM (not the HTML string) so wrapping can't break out
+     * of an existing tag or attribute.
+     * @param {HTMLElement} container
+     * @returns {boolean} true if one of the mentions matches the local user's own nickname.
+     */
+    _processMentions(container) {
+        const body = container.querySelector('.chat-markdown');
+        if (!body) return false;
+
+        const nicknames = [...new Set(this._getAllNicknames().map(n => n.trim()).filter(Boolean))]
+            .sort((a, b) => b.length - a.length);
+        if (nicknames.length === 0) return false;
+
+        const escaped = nicknames.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        const pattern = new RegExp(`@(?:${escaped.join('|')})\\b`, 'gi');
+        const myNickname = (localStorage.getItem('nickname') || '').trim().toLowerCase();
+
+        let mentionedMe = false;
+        const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+        const textNodes = [];
+        let node;
+        while ((node = walker.nextNode())) textNodes.push(node);
+
+        for (const textNode of textNodes) {
+            if (textNode.parentElement?.closest('a, code, pre')) continue;
+            const text = textNode.textContent;
+            pattern.lastIndex = 0;
+            if (!pattern.test(text)) continue;
+            pattern.lastIndex = 0;
+
+            const frag = document.createDocumentFragment();
+            let lastIndex = 0;
+            let match;
+            while ((match = pattern.exec(text))) {
+                if (match.index > lastIndex) frag.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+                const span = document.createElement('span');
+                span.className = 'chat-mention';
+                span.textContent = match[0];
+                frag.appendChild(span);
+                if (match[0].slice(1).toLowerCase() === myNickname) mentionedMe = true;
+                lastIndex = match.index + match[0].length;
+            }
+            if (lastIndex < text.length) frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+            textNode.parentNode.replaceChild(frag, textNode);
+        }
+
+        return mentionedMe;
     }
 
     /**

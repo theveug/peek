@@ -590,16 +590,16 @@ chatButton.addEventListener('click', () => {
         chatBox.classList.toggle('mobile-open');
         if (mobileBackdrop) mobileBackdrop.classList.toggle('active', opening);
         if (opening) {
-            const indicator = document.getElementById('new-message-indicator');
-            if (indicator) indicator.classList.add('hidden');
+            document.getElementById('new-message-indicator')?.classList.add('hidden');
+            document.getElementById('mention-indicator')?.classList.add('hidden');
         }
     } else {
         const isHidden = chatBox.classList.toggle('hidden');
         if (handle) handle.style.display = isHidden ? 'none' : '';
         localStorage.setItem('chatHidden', isHidden ? '1' : '0');
         if (!isHidden) {
-            const indicator = document.getElementById('new-message-indicator');
-            if (indicator) indicator.classList.add('hidden');
+            document.getElementById('new-message-indicator')?.classList.add('hidden');
+            document.getElementById('mention-indicator')?.classList.add('hidden');
         }
     }
 });

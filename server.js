@@ -105,11 +105,14 @@ if (TRUST_PROXY) {
 // lists ws:/wss: explicitly since not every browser lets 'self' cover the
 // scheme change to the signalling socket; img-src allows blob: for received
 // file-image previews. Any new external resource will be blocked until it's
-// self-hosted — that's the point.
+// self-hosted — that's the point. 'wasm-unsafe-eval' (added 2026-07-09 for
+// background blur's self-hosted MediaPipe WASM) is a distinct, narrower CSP
+// Level 3 keyword — it only permits compiling/instantiating WebAssembly
+// modules, not JS eval()/Function() — 'unsafe-eval' remains deliberately absent.
 app.use((req, res, next) => {
     res.setHeader('Content-Security-Policy', [
         "default-src 'self'",
-        "script-src 'self'",
+        "script-src 'self' 'wasm-unsafe-eval'",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' blob: data:",
         "media-src 'self' blob:",

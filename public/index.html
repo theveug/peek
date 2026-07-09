@@ -267,6 +267,7 @@
                 <button id="togglechat" title="Toggle Chat" class="panel-tab chat-tab">
                     <div id="new-message-indicator"
                         class="w-3 h-3 bg-red-600 absolute -top-1 -right-1 rounded-full hidden"></div>
+                    <div id="mention-indicator" class="chat-mention-indicator hidden" title="You were mentioned">@</div>
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                         stroke="currentColor" class="size-5">
                         <path stroke-linecap="round" stroke-linejoin="round"
@@ -645,6 +646,16 @@
                         </div>
                         <div class="settings-toggle-row">
                             <div>
+                                <div class="settings-toggle-row-title">Background blur</div>
+                                <div class="settings-toggle-row-desc">Blurs what's behind you on your webcam. Runs
+                                    entirely in your browser before your video is ever sent — nothing leaves your
+                                    device.</div>
+                            </div>
+                            <label class="settings-switch"><input type="checkbox" id="settings-background-blur" /><span
+                                    class="settings-switch-track"></span></label>
+                        </div>
+                        <div class="settings-toggle-row">
+                            <div>
                                 <div class="settings-toggle-row-title">Automatically focus on whoever's speaking</div>
                                 <div class="settings-toggle-row-desc">Switches the focused view to the active speaker
                                     while you're already in focus view.</div>
@@ -827,14 +838,19 @@
 
     <!-- Third-party libs — self-hosted from /assets/vendor (marked@13.0.3,
              dompurify@3.1.6, jszip@3.10.1, highlight.js@11.9.0,
-             qrcode-generator@2.0.4), so the app has zero network dependencies
-             and works on a disconnected LAN. Never swap these back to CDN
-             URLs: unpinned/no-SRI CDN scripts were the top finding of two
-             security reviews. -->
+             qrcode-generator@2.0.4, @mediapipe/selfie_segmentation@0.1.1675465747),
+             so the app has zero network dependencies and works on a disconnected
+             LAN. Never swap these back to CDN URLs: unpinned/no-SRI CDN scripts
+             were the top finding of two security reviews. -->
     <script src="/assets/vendor/marked.min.js"></script>
     <script src="/assets/vendor/purify.min.js"></script>
     <script src="/assets/vendor/jszip.min.js"></script>
     <script src="/assets/vendor/qrcode-generator.min.js"></script>
+    <!-- Wrapper JS only (~44KB) — the multi-MB WASM/model files in
+             /assets/vendor/mediapipe/ are only fetched if/when background
+             blur is actually turned on (see VirtualBackground.js), so this
+             costs nothing for everyone who never touches the feature. -->
+    <script src="/assets/vendor/mediapipe/selfie_segmentation.js"></script>
 
     <!-- Highlight.js: the common-languages bundle plus a few extras;
              download more from the hljs 11.9.0 release into /assets/vendor if needed -->

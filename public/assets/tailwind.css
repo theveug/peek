@@ -699,6 +699,43 @@ body:hover #controls {
   position: relative;
 }
 
+/* ===== @mentions ===== */
+/* Inline pill wrapped around a matched @nickname token, visible to every
+   reader (not just the mentioned peer) — same convention as Discord/Slack. */
+.chat-mention {
+  background: var(--accentSoft);
+  color: var(--accent);
+  border-radius: 0.25rem;
+  padding: 0 0.25rem;
+  font-weight: 600;
+}
+
+/* Persistent highlight on a message bubble that mentions the local user —
+   distinct from .chat-message-highlight's transient scroll-to flash. */
+.chat-message-mentioned {
+  background: var(--accentSoft);
+  border-radius: 0.5rem;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* Separate from #new-message-indicator's plain dot — a mention shouldn't
+   get lost among ordinary unread messages in a busy room. */
+.chat-mention-indicator {
+  position: absolute;
+  top: -0.3rem;
+  right: -0.3rem;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.2rem;
+  border-radius: 9999px;
+  background: var(--accent);
+  color: var(--accentText);
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.1rem;
+  text-align: center;
+}
+
 .emoji-picker {
   position: absolute;
   right: 0.25rem;
