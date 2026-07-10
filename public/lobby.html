@@ -27,7 +27,7 @@
         <div class="lobby-page">
             <div class="lobby-shell">
                 <div class="lobby-toolbar">
-                    <button id="theme-toggle" class="lobby-icon-btn" title="Toggle theme">
+                    <button id="theme-toggle" class="lobby-icon-btn" data-tip="Toggle theme">
                         <svg id="theme-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
                             <path d="M12 2.25a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V3a.75.75 0 0 1 .75-.75ZM7.5 12a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM18.894 6.166a.75.75 0 0 0-1.06-1.06l-1.591 1.59a.75.75 0 1 0 1.06 1.061l1.591-1.59ZM21.75 12a.75.75 0 0 1-.75.75h-2.25a.75.75 0 0 1 0-1.5H21a.75.75 0 0 1 .75.75ZM17.834 18.894a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 1 0-1.061 1.06l1.59 1.591ZM12 18a.75.75 0 0 1 .75.75V21a.75.75 0 0 1-1.5 0v-2.25A.75.75 0 0 1 12 18ZM7.758 17.303a.75.75 0 0 0-1.061-1.06l-1.591 1.59a.75.75 0 0 0 1.06 1.061l1.591-1.59ZM6 12a.75.75 0 0 1-.75.75H3a.75.75 0 0 1 0-1.5h2.25A.75.75 0 0 1 6 12ZM6.697 7.757a.75.75 0 0 0 1.06-1.06l-1.59-1.591a.75.75 0 0 0-1.061 1.06l1.59 1.591Z" />
                         </svg>
@@ -35,7 +35,7 @@
                             <path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 0 1 .162.819A8.97 8.97 0 0 0 9 6a9 9 0 0 0 9 9 8.97 8.97 0 0 0 3.463-.69.75.75 0 0 1 .981.98 10.503 10.503 0 0 1-9.694 6.46c-5.799 0-10.5-4.7-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 0 1 .818.162Z" clip-rule="evenodd" />
                         </svg>
                     </button>
-                    <button id="settings-button" class="lobby-icon-btn" title="Settings">
+                    <button id="settings-button" class="lobby-icon-btn" data-tip="Settings">
                         <span class="material-symbols-rounded">settings</span>
                     </button>
                 </div>
@@ -59,9 +59,9 @@
                                 </div>
                                 <div class="lobby-stepper">
                                     <span class="lobby-stepper-label">CAP</span>
-                                    <button type="button" id="create-max-peers-dec" class="lobby-stepper-btn" title="Decrease max participants">&minus;</button>
+                                    <button type="button" id="create-max-peers-dec" class="lobby-stepper-btn" data-tip="Decrease max participants">&minus;</button>
                                     <input type="number" id="create-max-peers" class="lobby-stepper-value" value="6" min="2" max="12" readonly />
-                                    <button type="button" id="create-max-peers-inc" class="lobby-stepper-btn" title="Increase max participants">+</button>
+                                    <button type="button" id="create-max-peers-inc" class="lobby-stepper-btn" data-tip="Increase max participants">+</button>
                                 </div>
                             </div>
                             <div class="lobby-checkbox-row">
@@ -148,7 +148,7 @@
                 </div>
 
                 <div class="settings-content">
-                    <button type="button" id="close-settings" class="settings-close-btn" title="Close">
+                    <button type="button" id="close-settings" class="settings-close-btn" data-tip="Close">
                         <span class="settings-close-btn-icon"><span class="material-symbols-rounded">close</span></span>
                         <span class="settings-close-btn-esc">ESC</span>
                     </button>
@@ -166,13 +166,13 @@
                             <div class="settings-field">
                                 <div class="settings-label">Status</div>
                                 <div id="status-picker" class="flex gap-2">
-                                    <button type="button" data-status="online" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" title="Online">
+                                    <button type="button" data-status="online" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" data-tip="Online">
                                         <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> Online
                                     </button>
-                                    <button type="button" data-status="away" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" title="Away">
+                                    <button type="button" data-status="away" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" data-tip="Away">
                                         <span class="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block"></span> Away
                                     </button>
-                                    <button type="button" data-status="dnd" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" title="Do Not Disturb">
+                                    <button type="button" data-status="dnd" class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all" data-tip="Do Not Disturb">
                                         <span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> DND
                                     </button>
                                 </div>

@@ -164,7 +164,7 @@ export class ChatUI {
             const remove = document.createElement('button');
             remove.className = 'attachment-chip-remove';
             remove.type = 'button';
-            remove.title = 'Remove';
+            remove.dataset.tip = 'Remove';
             remove.textContent = '×';
             remove.addEventListener('click', () => this._removePendingFile(index));
             chip.appendChild(remove);
@@ -192,7 +192,7 @@ export class ChatUI {
         copyBtn.className = 'msg-action-btn';
         const copyIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M13.887 3.182c.396.037.79.08 1.183.128C16.194 3.45 17 4.414 17 5.517V16.75A2.25 2.25 0 0 1 14.75 19h-9.5A2.25 2.25 0 0 1 3 16.75V5.517c0-1.103.806-2.068 1.93-2.207.393-.048.787-.09 1.183-.128A3.001 3.001 0 0 1 9 1h2c1.373 0 2.531.923 2.887 2.182ZM7.5 4A1.5 1.5 0 0 1 9 2.5h2A1.5 1.5 0 0 1 12.5 4v.5h-5V4Z" clip-rule="evenodd" /></svg>';
         copyBtn.innerHTML = copyIcon;
-        copyBtn.title = 'Copy message';
+        copyBtn.dataset.tip = 'Copy message';
         copyBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             let toCopy = (rawText ?? msgEl.querySelector('.chat-markdown')?.textContent ?? '').trim();
@@ -210,7 +210,7 @@ export class ChatUI {
         const replyBtn = document.createElement('button');
         replyBtn.className = 'msg-action-btn';
         replyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 0 1-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 0 1 0 10.75H10.75a.75.75 0 0 1 0-1.5h2.875a3.875 3.875 0 0 0 0-7.75H3.622l4.146 3.957a.75.75 0 0 1-1.036 1.085l-5.5-5.25a.75.75 0 0 1 0-1.085l5.5-5.25a.75.75 0 0 1 1.06.025Z" clip-rule="evenodd" /></svg>';
-        replyBtn.title = 'Reply';
+        replyBtn.dataset.tip = 'Reply';
         replyBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             const senderEl = msgEl.querySelector('.chat-sender');
@@ -224,7 +224,7 @@ export class ChatUI {
         const btn = document.createElement('button');
         btn.className = 'msg-action-btn';
         btn.textContent = '😀';
-        btn.title = 'React';
+        btn.dataset.tip = 'React';
         actionBar.appendChild(btn);
         msgEl.appendChild(actionBar);
 
@@ -639,9 +639,9 @@ export class ChatUI {
         const safeFileName = escapeHtml(fileName);
 
         if (isImage) {
-            content.innerHTML = `<div class="chat-image-preview"><a href="${blobUrl}" target="_blank" rel="noopener"><img src="${blobUrl}" alt="${safeFileName}" /></a><a href="${blobUrl}" download="${safeFileName}" class="file-card-download chat-image-download" title="Download">&#x2B73;</a></div>`;
+            content.innerHTML = `<div class="chat-image-preview"><a href="${blobUrl}" target="_blank" rel="noopener"><img src="${blobUrl}" alt="${safeFileName}" /></a><a href="${blobUrl}" download="${safeFileName}" class="file-card-download chat-image-download" data-tip="Download">&#x2B73;</a></div>`;
         } else {
-            content.innerHTML = `<div class="file-card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-muted"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" /></svg><div class="file-card-info"><span class="file-card-name">${safeFileName}</span><span class="file-card-size">${sizeStr}</span></div><a href="${blobUrl}" download="${safeFileName}" class="file-card-download" title="Download">&#x2B73;</a></div>`;
+            content.innerHTML = `<div class="file-card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-muted"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" /></svg><div class="file-card-info"><span class="file-card-name">${safeFileName}</span><span class="file-card-size">${sizeStr}</span></div><a href="${blobUrl}" download="${safeFileName}" class="file-card-download" data-tip="Download">&#x2B73;</a></div>`;
         }
 
         this._scrollIfAtBottom(document.getElementById('chat-log'));
@@ -855,7 +855,7 @@ export class ChatUI {
 
             const copyBtn = document.createElement('button');
             copyBtn.textContent = '\u{1F4CB}';
-            copyBtn.title = 'Copy code';
+            copyBtn.dataset.tip = 'Copy code';
             copyBtn.className = 'copy-btn';
 
             copyBtn.addEventListener('click', () => {
@@ -874,7 +874,7 @@ export class ChatUI {
         // is the button, since an appended button would break inline text flow.
         msgContainer.querySelectorAll('.chat-markdown code').forEach((code) => {
             if (code.closest('pre')) return;
-            code.title = 'Click to copy';
+            code.dataset.tip = 'Click to copy';
             code.addEventListener('click', (e) => {
                 e.stopPropagation();
                 navigator.clipboard.writeText(code.textContent.trim()).then(() => {

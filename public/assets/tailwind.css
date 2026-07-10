@@ -1473,6 +1473,32 @@ body:has(#members-sidebar.collapsed) .members-tab {
 }
 
 /* ===== Participant card ===== */
+/* ===== Tooltips (data-tip, see client/Tooltip.js) ===== */
+/* One fixed-position singleton bubble, styled like the app's popovers.
+   pointer-events:none so it can never trap the cursor or eat a click. */
+.app-tooltip {
+  position: fixed;
+  z-index: 100;
+  width: max-content;
+  max-width: 240px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  color: var(--t1);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  pointer-events: none;
+  animation: tooltip-in 0.08s ease-out;
+}
+
+@keyframes tooltip-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .participant-card {
   display: flex;
   align-items: center;

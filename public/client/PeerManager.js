@@ -356,7 +356,7 @@ export class PeerManager {
             this.stream.getVideoTracks()[0].onended = () => {
                 this.stopSharing();
                 document.getElementById('stop-share-button')?.classList.add('hidden');
-                document.getElementById('share-toggle').title = 'Share screen';
+                document.getElementById('share-toggle').dataset.tip = 'Share screen';
             };
 
             // Signal peers about the stream ID before tracks arrive via WebRTC, so

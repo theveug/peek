@@ -6,8 +6,10 @@
 import { initTheme } from '/client/ThemeManager.js';
 import { getSavedRooms, saveRoom, removeRoom } from '/client/savedRooms.js';
 import { SettingsPanel } from '/client/SettingsPanel.js';
+import { initTooltips } from '/client/Tooltip.js';
 
 initTheme();
+initTooltips();
 
 const settingsPanel = new SettingsPanel();
 document.getElementById('settings-button').addEventListener('click', () => settingsPanel.open());
@@ -294,7 +296,7 @@ function renderSavedRooms() {
 
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
-        removeBtn.title = 'Remove';
+        removeBtn.dataset.tip = 'Remove';
         removeBtn.className = 'lobby-recent-remove';
         removeBtn.innerHTML = '<span class="material-symbols-rounded">close</span>';
         removeBtn.addEventListener('click', () => {

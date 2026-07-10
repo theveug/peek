@@ -7,6 +7,9 @@ import { SettingsPanel } from './SettingsPanel.js';
 import { QuickRoomSettings } from './QuickRoomSettings.js';
 import { InvitePopover } from './InvitePopover.js';
 import { TopbarIdentity } from './TopbarIdentity.js';
+import { initTooltips } from './Tooltip.js';
+
+initTooltips();
 
 initTheme();
 
@@ -389,13 +392,13 @@ function updateShareButton() {
     // custom rule) sets `display:flex` and beats Tailwind's layered `.hidden` utility in
     // the cascade regardless of source order — see CLAUDE.md's cascade-layers gotcha.
     document.getElementById('stop-share-button').style.display = peerManager.isSharing ? '' : 'none';
-    document.getElementById('share-toggle').title = peerManager.isSharing ? 'Share a different window' : 'Share screen';
+    document.getElementById('share-toggle').dataset.tip = peerManager.isSharing ? 'Share a different window' : 'Share screen';
 }
 
 function updateCamUI(enabled) {
     document.getElementById('cam-off-icon').classList.toggle('hidden', enabled);
     document.getElementById('cam-on-icon').classList.toggle('hidden', !enabled);
-    document.getElementById('cam-toggle').title = enabled ? 'Turn off Camera' : 'Turn on Camera';
+    document.getElementById('cam-toggle').dataset.tip = enabled ? 'Turn off Camera' : 'Turn on Camera';
     document.getElementById('switch-cam-button').style.display = (enabled && hasMultipleCameras) ? '' : 'none';
 }
 
@@ -477,7 +480,7 @@ document.getElementById('deafen-toggle').addEventListener('click', () => {
     document.querySelectorAll('audio').forEach(a => { a.muted = peerManager.deafened; });
     document.getElementById('deafen-off-icon').classList.toggle('hidden', peerManager.deafened);
     document.getElementById('deafen-on-icon').classList.toggle('hidden', !peerManager.deafened);
-    document.getElementById('deafen-toggle').title = peerManager.deafened ? 'Undeafen' : 'Deafen';
+    document.getElementById('deafen-toggle').dataset.tip = peerManager.deafened ? 'Undeafen' : 'Deafen';
     peerManager.broadcastDeafenStatus();
     if (peerManager.peerId) ui.updateParticipantDeafen(peerManager.peerId, peerManager.deafened);
 });
@@ -742,7 +745,7 @@ new TopbarIdentity({ peerManager, settingsPanel });
 function updateMicUI(enabled) {
     document.getElementById('mic-off-icon').classList.toggle('hidden', enabled);
     document.getElementById('mic-on-icon').classList.toggle('hidden', !enabled);
-    document.getElementById('mic-toggle').title = enabled ? 'Mute Microphone' : 'Unmute Microphone';
+    document.getElementById('mic-toggle').dataset.tip = enabled ? 'Mute Microphone' : 'Unmute Microphone';
     if (peerManager.peerId) ui.updateParticipantMic(peerManager.peerId, enabled);
 }
 

@@ -100,8 +100,8 @@ async function main() {
 
         const cardIsBlocked = await pageB.locator(`#participant-${remotePeerId}`).evaluate(el => el.classList.contains('is-blocked'));
         assert(cardIsBlocked, 'card should carry .is-blocked after blocking');
-        const btnTitle = await blockBtn.getAttribute('title');
-        assert(btnTitle === 'Unblock', `block button title should flip to Unblock, got "${btnTitle}"`);
+        const btnTitle = await blockBtn.getAttribute('data-tip');
+        assert(btnTitle === 'Unblock', `block button tooltip should flip to Unblock, got "${btnTitle}"`);
         console.log('STEP 4 - card + button reflect blocked state: PASS');
 
         // Chat sent while blocked must not show up on B.
@@ -137,7 +137,7 @@ async function main() {
         await blockBtn.click();
         await blockBtn.click();
         await pageB.waitForTimeout(500);
-        const finalTitle = await blockBtn.getAttribute('title');
+        const finalTitle = await blockBtn.getAttribute('data-tip');
         console.log('🔍 rapid double-toggle final title:', finalTitle);
 
         console.log('consoleErrors on A (blocked-peer side) during entire run:', consoleErrorsA);

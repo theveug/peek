@@ -119,7 +119,7 @@ export class UIController {
                 <div class="text-sm font-medium truncate">${escapeHtml(entry.fileName)}</div>
                 <div class="text-[10px] text-muted">${escapeHtml(entry.sender)} · ${this._formatFileSize(entry.fileSize)}</div>
             </div>
-            <button class="shrink-0 p-1.5 rounded text-muted hover:text-foreground transition-colors" title="Download"></button>
+            <button class="shrink-0 p-1.5 rounded text-muted hover:text-foreground transition-colors" data-tip="Download"></button>
         `;
         const dlBtn = row.querySelector('button');
         dlBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"/><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/></svg>`;
@@ -680,7 +680,7 @@ export class UIController {
 
             const stopBtn = document.createElement('button');
             stopBtn.type = 'button';
-            stopBtn.title = 'Stop watching';
+            stopBtn.dataset.tip = 'Stop watching';
             stopBtn.className = 'grid-tile-stop-btn';
             stopBtn.innerHTML = '<span class="material-symbols-rounded">close</span>';
             stopBtn.addEventListener('click', (e) => {
@@ -867,11 +867,11 @@ export class UIController {
         const statusDot = document.createElement('div');
         statusDot.className = 'participant-status-dot absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2';
         statusDot.style.background = this._statusColors.online;
-        statusDot.title = 'Online';
+        statusDot.dataset.tip = 'Online';
 
         const crownBadge = document.createElement('span');
         crownBadge.className = 'participant-crown material-symbols-rounded';
-        crownBadge.title = peerId === this.creatorPeerId ? 'Room creator' : 'Moderator';
+        crownBadge.dataset.tip = peerId === this.creatorPeerId ? 'Room creator' : 'Moderator';
         crownBadge.textContent = 'workspace_premium';
         crownBadge.style.display = this.moderatorPeerIds?.has(peerId) ? '' : 'none';
 
@@ -930,7 +930,7 @@ export class UIController {
         if (!isSelf) {
             const sigIcon = document.createElement('span');
             sigIcon.className = 'participant-signal-icon inline-flex items-center';
-            sigIcon.title = 'Connection: Unknown';
+            sigIcon.dataset.tip = 'Connection: Unknown';
             sigIcon.innerHTML = this._signalBarsSvg('unknown');
             passiveIcons.appendChild(sigIcon);
         }
@@ -976,7 +976,7 @@ export class UIController {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'participant-mod-btn';
-        btn.title = 'Moderator actions';
+        btn.dataset.tip = 'Moderator actions';
         btn.innerHTML = '<span class="material-symbols-rounded">more_vert</span>';
 
         const menu = document.createElement('div');
@@ -1037,7 +1037,7 @@ export class UIController {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'participant-volume-btn';
-        btn.title = 'Adjust their volume';
+        btn.dataset.tip = 'Adjust their volume';
         btn.innerHTML = '<span class="material-symbols-rounded">volume_up</span>';
 
         const popover = document.createElement('div');
@@ -1091,7 +1091,7 @@ export class UIController {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'participant-block-btn';
-        btn.title = this.blockedPeerIds.has(peerId) ? 'Unblock' : 'Block';
+        btn.dataset.tip = this.blockedPeerIds.has(peerId) ? 'Unblock' : 'Block';
         btn.innerHTML = '<span class="material-symbols-rounded">block</span>';
         if (this.blockedPeerIds.has(peerId)) btn.classList.add('is-blocked');
 
@@ -1118,7 +1118,7 @@ export class UIController {
         const text = this._statusLabels[status] || 'Online';
         if (dot) {
             dot.style.background = color;
-            dot.title = text;
+            dot.dataset.tip = text;
             if (status === 'dnd') {
                 dot.innerHTML = `<svg viewBox="0 0 10 10" class="w-1.5 h-1.5" style="margin:auto"><rect x="2" y="4" width="6" height="2" rx="1" fill="white"/></svg>`;
             } else {
@@ -1155,7 +1155,7 @@ export class UIController {
         const icon = el.querySelector('.participant-signal-icon');
         if (!icon) return;
         const labels = { excellent: 'Excellent', good: 'Good', fair: 'Fair', poor: 'Poor', unknown: 'Unknown' };
-        icon.title = `Connection: ${labels[tier] || 'Unknown'}`;
+        icon.dataset.tip = `Connection: ${labels[tier] || 'Unknown'}`;
         icon.innerHTML = this._signalBarsSvg(tier);
     }
 
@@ -1233,7 +1233,7 @@ export class UIController {
             const crown = card.querySelector('.participant-crown');
             if (crown) {
                 crown.style.display = this.moderatorPeerIds.has(peerId) ? '' : 'none';
-                crown.title = peerId === this.creatorPeerId ? 'Room creator' : 'Moderator';
+                crown.dataset.tip = peerId === this.creatorPeerId ? 'Room creator' : 'Moderator';
             }
 
             const modMenu = card.querySelector('.participant-mod-menu');
@@ -1265,7 +1265,7 @@ export class UIController {
         }
         const labels = { excellent: 'Excellent', good: 'Good', fair: 'Fair', poor: 'Poor', unknown: 'Unknown' };
         icon.innerHTML = this._signalBarsSvg(tier);
-        icon.title = `${Math.round(ms)}ms · mesh · ${labels[tier] || 'Unknown'}`;
+        icon.dataset.tip = `${Math.round(ms)}ms · mesh · ${labels[tier] || 'Unknown'}`;
         wrap.classList.remove('hidden');
     }
 
@@ -1364,7 +1364,7 @@ export class UIController {
             if (!deafIcon) {
                 deafIcon = document.createElement('span');
                 deafIcon.className = 'participant-deafen-icon';
-                deafIcon.title = 'Deafened';
+                deafIcon.dataset.tip = 'Deafened';
                 deafIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3 text-red-400"><path d="M10.047 3.062a.75.75 0 0 1 .453.688v12.5a.75.75 0 0 1-1.264.546L5.203 13H2.667a.75.75 0 0 1-.7-.48A6.985 6.985 0 0 1 1.5 10c0-.622.082-1.225.234-1.798a.75.75 0 0 1 .467-.512L5.203 7l4.033-3.796a.75.75 0 0 1 .811-.142ZM13.78 7.22a.75.75 0 1 0-1.06 1.06L14.44 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 1 0 1.06-1.06L16.56 10l1.72-1.72a.75.75 0 1 0-1.06-1.06l-1.72 1.72-1.72-1.72Z" /></svg>`;
                 status.appendChild(deafIcon);
             }
@@ -1517,7 +1517,7 @@ export class UIController {
         const btn = card?.querySelector('.participant-block-btn');
         if (btn) {
             btn.classList.toggle('is-blocked', blocked);
-            btn.title = blocked ? 'Unblock' : 'Block';
+            btn.dataset.tip = blocked ? 'Unblock' : 'Block';
         }
 
         this.updateLayout();

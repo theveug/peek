@@ -123,7 +123,7 @@ export class SettingsPanel {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'settings-accent-swatch';
-            btn.title = name.charAt(0).toUpperCase() + name.slice(1);
+            btn.dataset.tip = name.charAt(0).toUpperCase() + name.slice(1);
             btn.dataset.accent = name;
             btn.style.background = presetColor(name);
             btn.innerHTML = '<span class="material-symbols-rounded icon-filled">check</span>';
@@ -142,7 +142,7 @@ export class SettingsPanel {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'settings-accent-swatch';
-            btn.title = name.charAt(0).toUpperCase() + name.slice(1);
+            btn.dataset.tip = name.charAt(0).toUpperCase() + name.slice(1);
             btn.dataset.bg = name;
             btn.style.background = presetBgColor(name);
             btn.innerHTML = '<span class="material-symbols-rounded icon-filled">check</span>';
