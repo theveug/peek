@@ -847,13 +847,29 @@ export class ChatUI {
             copyBtn.className = 'copy-btn';
 
             copyBtn.addEventListener('click', () => {
-                navigator.clipboard.writeText(block.textContent).then(() => {
+                // marked always leaves a trailing \n inside the <code> element —
+                // trim so pasting into a field doesn't drag a newline along.
+                navigator.clipboard.writeText(block.textContent.trim()).then(() => {
                     copyBtn.textContent = '✅';
                     setTimeout(() => (copyBtn.textContent = '\u{1F4CB}'), 1500);
                 });
             });
 
             pre.appendChild(copyBtn);
+        });
+
+        // Inline (single-backtick) code chips are click-to-copy — the chip itself
+        // is the button, since an appended button would break inline text flow.
+        msgContainer.querySelectorAll('.chat-markdown code').forEach((code) => {
+            if (code.closest('pre')) return;
+            code.title = 'Click to copy';
+            code.addEventListener('click', (e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(code.textContent.trim()).then(() => {
+                    code.classList.add('inline-code-copied');
+                    setTimeout(() => code.classList.remove('inline-code-copied'), 1500);
+                });
+            });
         });
 
         this._processLinkPreviews(msgContainer);
