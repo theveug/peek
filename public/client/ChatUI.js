@@ -836,10 +836,22 @@ export class ChatUI {
      */
     _finalizeMarkdownBody(msgContainer) {
         msgContainer.querySelectorAll('pre code').forEach((block) => {
+            // Read the declared fence language before highlightElement runs —
+            // hljs adds its own language-* class when it auto-detects, and only
+            // the sender's explicit ```lang should get a label.
+            const declaredLang = block.className.match(/language-([\w+#-]+)/)?.[1];
+
             hljs.highlightElement(block);
 
             const pre = block.parentElement;
             pre.style.position = 'relative';
+
+            if (declaredLang) {
+                const langLabel = document.createElement('span');
+                langLabel.className = 'code-lang-label';
+                langLabel.textContent = declaredLang;
+                pre.appendChild(langLabel);
+            }
 
             const copyBtn = document.createElement('button');
             copyBtn.textContent = '\u{1F4CB}';

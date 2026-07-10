@@ -1225,6 +1225,23 @@ a.link-preview:hover {
   @apply absolute top-1 right-2 bg-gray-700 text-white px-2 py-1 rounded text-xs opacity-75 hover:opacity-100 transition;
 }
 
+/* Declared fence language (```js etc.), rendered top-right beside the copy
+   button. pointer-events off so it can't steal clicks meant for the code. */
+.code-lang-label {
+  position: absolute;
+  /* rem, not em — at font-size 10px an em-based offset lands under the
+     copy button (top-1/right-2 + its padding ≈ 2.5rem from the edge). */
+  top: 0.7rem;
+  right: 3rem;
+  color: var(--t3);
+  font-family: "Fira Code", ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* Syntax highlighting palette — replaces the vendored base16-material hljs
    theme (its <link> was removed from index.html 2026-07-10; the file stays in
    assets/vendor). Built entirely from design tokens so code blocks follow the
