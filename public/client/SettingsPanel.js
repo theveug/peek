@@ -221,6 +221,10 @@ export class SettingsPanel {
             if (checked && this.ui) this.ui.autoFocusPaused = false; // re-enabling counts as "resume following"
         });
 
+        document.getElementById('settings-audio-only-mode')?.addEventListener('change', (e) => {
+            localStorage.setItem('audioOnlyMode', e.target.checked ? '1' : '0');
+        });
+
         // setBackgroundBlur() itself persists the localStorage value and, if the
         // camera is already on, live-swaps the processing pipeline — see PeerManager.js.
         document.getElementById('settings-background-blur')?.addEventListener('change', (e) => {
@@ -240,6 +244,9 @@ export class SettingsPanel {
 
         const followSpeaker = document.getElementById('settings-follow-speaker');
         if (followSpeaker) followSpeaker.checked = localStorage.getItem('followActiveSpeaker') === '1';
+
+        const audioOnlyMode = document.getElementById('settings-audio-only-mode');
+        if (audioOnlyMode) audioOnlyMode.checked = localStorage.getItem('audioOnlyMode') === '1';
 
         const backgroundBlur = document.getElementById('settings-background-blur');
         if (backgroundBlur) backgroundBlur.checked = localStorage.getItem('backgroundBlur') === '1';

@@ -543,6 +543,25 @@ export class UIController {
     }
 
     /**
+     * Auto-watches a stream, unless the user's 'audioOnlyMode' preference
+     * (Settings > Screen & Video) is on — in which case it's explicitly left
+     * unwatched instead of just skipped. A stream that's never had `_watchTile`
+     * or `_setWatched` called on it has no `_watchSentState` entry, so its
+     * sender defaults to actively transmitting; calling `_setWatched(key, false)`
+     * sends the initial `unwatch-stream` signal so it actually pauses, rather
+     * than the video staying paused locally while still being sent and decoded
+     * for nothing. Only gates *automatic* watches (new stream arriving, focus
+     * auto-picking someone) — manual clicks on a tile always call `_watchTile`
+     * directly and work regardless of this setting.
+     * @param {string} streamKey
+     * @returns {void}
+     */
+    _autoWatchOrSkip(streamKey) {
+        if (localStorage.getItem('audioOnlyMode') === '1') this._setWatched(streamKey, false);
+        else this._watchTile(streamKey);
+    }
+
+    /**
      * Updates `watchedTiles` and fires `onWatchChange` only on a real
      * transition (not a redundant call), which is what actually triggers the
      * `watch-stream`/`unwatch-stream` signal to the owning peer.
@@ -587,7 +606,7 @@ export class UIController {
         if (count === 0) return;
 
         if (count <= 1) {
-            this._watchTile(remoteIds[0]);
+            this._autoWatchOrSkip(remoteIds[0]);
         } else {
             remoteIds.forEach(id => {
                 if (this._watchOrder.includes(id)) this._setWatched(id, true);
@@ -1645,7 +1664,7 @@ export class UIController {
         playSound('streamUp');
 
         if (!this.focusedPeerId || !this.streams[this.focusedPeerId]) {
-            this._watchTile(peerId);
+            this._autoWatchOrSkip(peerId);
             this.focusedPeerId = peerId;
             this.focusedVideo.srcObject = stream;
         }
@@ -1692,7 +1711,7 @@ export class UIController {
                 this.focusedVideo.srcObject = null;
                 const remaining = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam' && !this.isBlocked(id));
                 if (remaining.length > 0) {
-                    this._watchTile(remaining[0]);
+                    this._autoWatchOrSkip(remaining[0]);
                     this.focusedPeerId = remaining[0];
                     this.focusedVideo.srcObject = this.streams[remaining[0]];
                 }
@@ -1738,7 +1757,7 @@ export class UIController {
             this.buildGrid();
         } else {
             if (!this.focusedPeerId || !this.streams[this.focusedPeerId]) {
-                this._watchTile(remoteStreams[0]);
+                this._autoWatchOrSkip(remoteStreams[0]);
                 this.focusedPeerId = remoteStreams[0];
                 this.focusedVideo.srcObject = this.streams[remoteStreams[0]];
             }
