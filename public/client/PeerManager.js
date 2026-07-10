@@ -32,6 +32,7 @@ export class PeerManager {
         this.creatorPeerId = null;
         this.moderatorPeerIds = new Set();
         this.onForceStopped = null; // set by App.js — keeps share/cam button icons in sync
+        this.onBanList = null; // set by QuickRoomSettings — (bans[]) from listBans()/unbanPeer()
         this.isSharing = false;
         // Placeholder until the server's 'init' supplies the real list (built
         // from the deployment's STUN_URL/TURN env config). Deliberately empty,
@@ -164,7 +165,7 @@ export class PeerManager {
      * @param {string[]} [msg.moderatorPeerIds]
      * @returns {Promise<void>}
      */
-    async handleSignal({ type, peerId, peers, from, payload, iceServers, creatorPeerId, moderatorPeerIds }) {
+    async handleSignal({ type, peerId, peers, from, payload, iceServers, creatorPeerId, moderatorPeerIds, bans }) {
         // console.groupCollapsed(`PeerManager.handleSignal(${type})`);
         // console.log('[SIGNAL]', type, { peerId, peers, from, payload });
 
@@ -206,6 +207,12 @@ export class PeerManager {
                 this.creatorPeerId = creatorPeerId || null;
                 this.moderatorPeerIds = new Set(moderatorPeerIds || []);
                 this.ui.updateModeratorStatus(this.creatorPeerId, this.moderatorPeerIds);
+                break;
+
+            // Response to listBans()/unbanPeer() — both round-trip through the same
+            // 'ban-list' reply so there's one rendering path, not a separate ack.
+            case 'ban-list':
+                this.onBanList?.(bans || []);
                 break;
 
             case 'force-stop-stream':
@@ -1921,9 +1928,24 @@ export class PeerManager {
         this.send('kick', targetPeerId, {});
     }
 
-    /** Requests the server ban a peer (kick + their IP stays out for the session's lifetime). Requires creator status server-side. */
-    banPeer(targetPeerId) {
-        this.send('ban', targetPeerId, {});
+    /**
+     * Requests the server ban a peer (kick + their IP stays out for the session's
+     * lifetime). Requires creator status server-side. `nickname` is display-only,
+     * for the ban-list UI (listBans) — the server has no other way to label an
+     * entry, since it never otherwise learns anyone's identity.
+     */
+    banPeer(targetPeerId, nickname) {
+        this.send('ban', targetPeerId, { nickname: nickname || null });
+    }
+
+    /** Requests the current session's ban list. Resolves via the next onBanList call. Requires creator status server-side. */
+    listBans() {
+        this.send('list-bans', null, {});
+    }
+
+    /** Requests the server lift a ban by its opaque id (from listBans/onBanList). Requires creator status server-side. */
+    unbanPeer(banId) {
+        this.send('unban', null, { banId });
     }
 
     /** Requests the server promote a peer to moderator. Requires creator status server-side. */

@@ -8,6 +8,7 @@ import { QuickRoomSettings } from './QuickRoomSettings.js';
 import { InvitePopover } from './InvitePopover.js';
 import { TopbarIdentity } from './TopbarIdentity.js';
 import { initTooltips } from './Tooltip.js';
+import { getOwnerToken, setOwnerToken } from './ownerTokens.js';
 
 initTooltips();
 
@@ -26,7 +27,7 @@ ui.onPipExit = () => peerManager.handleTabVisibility(document.hidden);
 ui.onModeratorAction = (action, peerId) => {
     if (action === 'stop-stream') peerManager.requestStopStream(peerId);
     else if (action === 'kick') peerManager.kickPeer(peerId);
-    else if (action === 'ban') peerManager.banPeer(peerId);
+    else if (action === 'ban') peerManager.banPeer(peerId, ui._peerNickname(peerId));
     else if (action === 'promote') peerManager.promotePeer(peerId);
     else if (action === 'demote') peerManager.demotePeer(peerId);
 };
@@ -39,8 +40,17 @@ let leavingRoom = false;
 let roomPassword = sessionStorage.getItem('roomPassword') || null;
 // `let`, not `const`: joining a code with no live session lazily creates the
 // room, and the server mints + returns a creator token in 'init' — it must be
-// adopted here so reconnects within this tab re-claim ownership.
-let creatorToken = sessionStorage.getItem('creatorToken') || null;
+// adopted here so reconnects within this tab re-claim ownership. Falls back
+// to the localStorage-backed ownerTokens store (survives a closed browser or
+// restarted PC — sessionStorage alone doesn't) when this tab is a fresh
+// session with nothing in sessionStorage: this matters even when the room
+// never emptied out (another peer kept it alive), since the lazy-recreate
+// path that would otherwise mint a fresh owner never triggers in that case.
+let creatorToken = sessionStorage.getItem('creatorToken') || getOwnerToken(sessionId) || null;
+if (creatorToken) {
+    sessionStorage.setItem('creatorToken', creatorToken);
+    setOwnerToken(sessionId, creatorToken);
+}
 
 // Server sends a fresh buildId (regenerated every process start) in every 'init'
 // message. If it changes between our first connect and a later reconnect, the
@@ -113,6 +123,7 @@ function connect() {
             if (msg.creatorToken) {
                 creatorToken = msg.creatorToken;
                 sessionStorage.setItem('creatorToken', msg.creatorToken);
+                setOwnerToken(sessionId, msg.creatorToken);
             }
         }
         peerManager.handleSignal(msg);

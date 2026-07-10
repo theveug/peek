@@ -25,7 +25,8 @@
     "test:noise-suppression": "node tests/noise-suppression-lifecycle.mjs",
     "test:chat-edit": "node tests/chat-edit-delete.mjs",
     "test:ban-sticky": "node tests/ban-sticky.mjs",
-    "test:lazy-owner": "node tests/lazy-room-owner.mjs"
+    "test:lazy-owner": "node tests/lazy-room-owner.mjs",
+    "test:owner-persist": "node tests/owner-token-persistence.mjs"
   },
   "author": "",
   "license": "ISC",

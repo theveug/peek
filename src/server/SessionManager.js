@@ -1,5 +1,5 @@
 // --- src/server/SessionManager.js ---
-import { timingSafeEqual } from 'crypto';
+import { timingSafeEqual, randomBytes } from 'crypto';
 
 /**
  * All server-side room state, in-memory only — the concrete embodiment of
@@ -31,7 +31,7 @@ export class SessionManager {
     createSession(sessionId, { name = null, password = null, maxPeers = 6, creatorToken = null } = {}) {
         if (!this.sessions.has(sessionId)) {
             const clampedMaxPeers = Math.min(12, Math.max(2, parseInt(maxPeers, 10) || 6));
-            this.sessions.set(sessionId, { peers: new Set(), name, password, maxPeers: clampedMaxPeers, createdAt: Date.now(), creatorToken, creatorPeerId: null, moderatorPeerIds: new Set(), bannedIps: new Set() });
+            this.sessions.set(sessionId, { peers: new Set(), name, password, maxPeers: clampedMaxPeers, createdAt: Date.now(), creatorToken, creatorPeerId: null, moderatorPeerIds: new Set(), bannedIps: new Set(), bans: new Map() });
         }
     }
 
@@ -174,13 +174,25 @@ export class SessionManager {
      * peers behind one shared NAT share an IP, so banning one may exclude
      * others behind it — the creator-token bypass in the join gate keeps the
      * creator themselves immune.
+     *
+     * `nickname` is display-only, for the creator's ban-list UI (there's
+     * nothing else to show — the room itself never learns anyone's identity
+     * beyond a peerId) — it's supplied by the *banning* creator's client, not
+     * validated, and never fed back into any authorization decision. The raw
+     * IP itself is deliberately never sent to any client (see `listBans`) —
+     * an opaque `banId` is the only handle the creator gets for unbanning.
      * @param {string} sessionId
      * @param {string|null|undefined} ip
-     * @returns {void}
+     * @param {string|null} [nickname]
+     * @returns {string|null} the new ban's id, or null if nothing was recorded.
      */
-    recordBan(sessionId, ip) {
+    recordBan(sessionId, ip, nickname = null) {
         const s = this.sessions.get(sessionId);
-        if (s && ip) s.bannedIps.add(ip);
+        if (!s || !ip) return null;
+        s.bannedIps.add(ip);
+        const banId = randomBytes(8).toString('hex');
+        s.bans.set(banId, { ip, nickname: nickname || 'Unknown', bannedAt: Date.now() });
+        return banId;
     }
 
     /**
@@ -191,6 +203,35 @@ export class SessionManager {
     isBanned(sessionId, ip) {
         const s = this.sessions.get(sessionId);
         return !!(s && ip && s.bannedIps && s.bannedIps.has(ip));
+    }
+
+    /**
+     * @param {string} sessionId
+     * @returns {{banId: string, nickname: string, bannedAt: number}[]} newest first,
+     *   IP deliberately omitted — the creator's client never needs to see it.
+     */
+    listBans(sessionId) {
+        const s = this.sessions.get(sessionId);
+        if (!s) return [];
+        return [...s.bans.entries()]
+            .map(([banId, b]) => ({ banId, nickname: b.nickname, bannedAt: b.bannedAt }))
+            .sort((a, b) => b.bannedAt - a.bannedAt);
+    }
+
+    /**
+     * Reverses a ban by its opaque id. A stale/unknown banId (already undone,
+     * or from a different session) is a silent no-op.
+     * @param {string} sessionId
+     * @param {string} banId
+     * @returns {boolean} true if a ban was actually removed.
+     */
+    unban(sessionId, banId) {
+        const s = this.sessions.get(sessionId);
+        const entry = s?.bans.get(banId);
+        if (!entry) return false;
+        s.bannedIps.delete(entry.ip);
+        s.bans.delete(banId);
+        return true;
     }
 
     /**

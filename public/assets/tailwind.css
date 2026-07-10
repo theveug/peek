@@ -1724,6 +1724,57 @@ body:has(#members-sidebar.collapsed) .members-tab {
   color: var(--red) !important;
 }
 
+/* ===== Banned users list (room settings popover, creator-only) ===== */
+.quick-banned-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.quick-banned-empty {
+  font-size: 12px;
+  color: var(--t3);
+  padding: 6px 0;
+}
+
+.quick-banned-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--bg3);
+}
+
+.quick-banned-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--t1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-banned-unban-btn {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: none;
+  background: var(--bg4);
+  color: var(--t1);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.quick-banned-unban-btn:hover {
+  background: var(--accent);
+  color: var(--accentText);
+}
+
 .participant-volume-btn {
   width: 22px;
   height: 22px;

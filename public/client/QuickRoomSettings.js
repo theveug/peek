@@ -21,10 +21,12 @@ export class QuickRoomSettings {
         this._wireToggles();
         this._wireQuality();
         this._wireOutsideClick();
+        this._wireBannedList();
     }
 
     open() {
         this._refresh();
+        this._refreshBannedSection();
         this.popover.classList.remove('hidden');
     }
 
@@ -98,5 +100,71 @@ export class QuickRoomSettings {
 
         this._highlightSegmented('quick-screen-res-picker', 'screenShareRes', '1280x720');
         this._highlightSegmented('quick-cam-res-picker', 'camRes', '640x480');
+    }
+
+    /**
+     * Creator-only "Banned users" section — hidden entirely for anyone else,
+     * since a non-creator's listBans()/unbanPeer() requests are just silently
+     * ignored server-side anyway (same enforcement pattern as the moderator
+     * kebab menu: this visibility check is a UI nicety, not the trust boundary).
+     * @returns {void}
+     */
+    _refreshBannedSection() {
+        const section = document.getElementById('quick-banned-section');
+        if (!section) return;
+        if (!this.peerManager?.isCreatorMe?.()) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = '';
+        const list = document.getElementById('quick-banned-list');
+        if (list) list.innerHTML = '<div class="quick-banned-empty">Loading…</div>';
+        this.peerManager.listBans();
+    }
+
+    /** Wires the onBanList callback that both listBans() and unbanPeer() resolve through. */
+    _wireBannedList() {
+        if (!this.peerManager) return;
+        this.peerManager.onBanList = (bans) => this._renderBannedList(bans);
+    }
+
+    /**
+     * Renders the banned-users list from a fresh onBanList payload. Each row's
+     * Unban button re-requests the list itself (via unbanPeer's own 'ban-list'
+     * reply) rather than optimistically splicing the array locally, so the
+     * displayed list can never drift from the server's actual state.
+     * @param {{banId: string, nickname: string, bannedAt: number}[]} bans
+     * @returns {void}
+     */
+    _renderBannedList(bans) {
+        const list = document.getElementById('quick-banned-list');
+        if (!list) return;
+        list.innerHTML = '';
+        if (!bans.length) {
+            list.innerHTML = '<div class="quick-banned-empty">No one is banned.</div>';
+            return;
+        }
+        bans.forEach(({ banId, nickname }) => {
+            const row = document.createElement('div');
+            row.className = 'quick-banned-row';
+
+            const name = document.createElement('span');
+            name.className = 'quick-banned-name';
+            name.textContent = nickname; // textContent — never innerHTML for peer-controlled text
+            row.appendChild(name);
+
+            const unbanBtn = document.createElement('button');
+            unbanBtn.type = 'button';
+            unbanBtn.className = 'quick-banned-unban-btn';
+            unbanBtn.textContent = 'Unban';
+            unbanBtn.dataset.tip = `Unban ${nickname}`;
+            unbanBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.peerManager.unbanPeer(banId);
+            });
+            row.appendChild(unbanBtn);
+
+            list.appendChild(row);
+        });
     }
 }

@@ -247,10 +247,32 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                     if (manager.getSessionId(to) !== sessionId) break;
                     const target = manager.getPeerSocket(to);
                     if (target) {
-                        manager.recordBan(sessionId, target.clientIp);
+                        // nickname is display-only for the ban-list UI below, supplied by
+                        // the banning creator's client (they're the one who can see it) —
+                        // capped and never trusted for anything but rendering.
+                        const nickname = typeof payload?.nickname === 'string' ? payload.nickname.slice(0, 60) : null;
+                        manager.recordBan(sessionId, target.clientIp, nickname);
                         target.send(JSON.stringify({ type: 'banned' }));
                         target.close();
                     }
+                    break;
+                }
+
+                // Ban-list management — creator-only, same tier as kick/ban themselves.
+                // The raw IP never leaves the server; listBans() only returns opaque
+                // banIds, so 'unban' is the sole way a client can reference one.
+                case 'list-bans': {
+                    const sessionId = manager.getSessionId(peerId);
+                    if (!manager.isCreator(sessionId, peerId)) break;
+                    ws.send(JSON.stringify({ type: 'ban-list', bans: manager.listBans(sessionId) }));
+                    break;
+                }
+
+                case 'unban': {
+                    const sessionId = manager.getSessionId(peerId);
+                    if (!manager.isCreator(sessionId, peerId)) break;
+                    manager.unban(sessionId, payload?.banId);
+                    ws.send(JSON.stringify({ type: 'ban-list', bans: manager.listBans(sessionId) }));
                     break;
                 }
 
