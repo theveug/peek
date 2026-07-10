@@ -46,6 +46,10 @@ export class PeerManager {
         this.status = 'online';
         this._manualStatus = null;
         this.dataChannels = {};
+        // messageId → authoring peerId, for chat-edit/chat-delete authorization.
+        // Capped at 600 entries; reset on 'init' (peerIds don't survive reconnects,
+        // so stale entries could never match a live sender anyway).
+        this._chatMessageOwners = new Map();
         this.incomingTransfers = {};
         this._offeredFiles = {};
         this._pendingFileOffers = {};
@@ -172,6 +176,7 @@ export class PeerManager {
                 // participant cards are now orphaned and must be cleared explicitly.
                 Object.keys(this.peers).forEach(id => this.removePeer(id));
                 this.ui.clearAllParticipants();
+                this._chatMessageOwners.clear();
 
                 this.peerId = peerId;
                 if (iceServers) this.iceServers = iceServers;
@@ -1132,8 +1137,30 @@ export class PeerManager {
                 this.ui.updatePollVote(msg.pollId, msg.optionIndex, peerId);
             } else if (msg.type === 'chat') {
                 if (this.ui.isBlocked(peerId)) return;
+                // Record which connection authored this messageId so chat-edit/
+                // chat-delete below can be restricted to the original author.
+                if (typeof msg.messageId === 'string') {
+                    this._chatMessageOwners.set(msg.messageId, peerId);
+                    for (const key of this._chatMessageOwners.keys()) {
+                        if (this._chatMessageOwners.size <= 600) break;
+                        this._chatMessageOwners.delete(key);
+                    }
+                }
                 this.ui.addChatMessage(this.ui._peerNickname(peerId), msg.text, msg.messageId, msg.replyTo || null);
                 this.ui.updateTypingIndicator(peerId, false);
+            } else if (msg.type === 'chat-edit') {
+                if (this.ui.isBlocked(peerId)) return;
+                if (typeof msg.messageId !== 'string' || typeof msg.text !== 'string' || !msg.text.trim()) return;
+                // Author-only: the ownership map is keyed by the connection's real
+                // peerId, so a peer can't forge edits of someone else's message.
+                if (this._chatMessageOwners.get(msg.messageId) !== peerId) return;
+                this.ui.applyChatEdit(msg.messageId, msg.text);
+            } else if (msg.type === 'chat-delete') {
+                if (this.ui.isBlocked(peerId)) return;
+                if (typeof msg.messageId !== 'string') return;
+                if (this._chatMessageOwners.get(msg.messageId) !== peerId) return;
+                this._chatMessageOwners.delete(msg.messageId);
+                this.ui.applyChatDelete(msg.messageId);
             } else if (msg.type === 'reaction') {
                 if (this.ui.isBlocked(peerId)) return;
                 this.ui.addReaction(msg.messageId, msg.emoji, msg.nickname, peerId);
@@ -1421,6 +1448,22 @@ export class PeerManager {
      */
     broadcastChat(text, nickname, messageId, replyTo) {
         const msg = JSON.stringify({ type: 'chat', text, nickname, messageId, replyTo: replyTo || null });
+        for (const dc of Object.values(this.dataChannels)) {
+            if (dc.readyState === 'open') dc.send(msg);
+        }
+    }
+
+    /** Broadcasts an edit of one of our own messages. Receivers verify authorship. */
+    broadcastChatEdit(messageId, text) {
+        const msg = JSON.stringify({ type: 'chat-edit', messageId, text });
+        for (const dc of Object.values(this.dataChannels)) {
+            if (dc.readyState === 'open') dc.send(msg);
+        }
+    }
+
+    /** Broadcasts a delete of one of our own messages. Receivers verify authorship. */
+    broadcastChatDelete(messageId) {
+        const msg = JSON.stringify({ type: 'chat-delete', messageId });
         for (const dc of Object.values(this.dataChannels)) {
             if (dc.readyState === 'open') dc.send(msg);
         }

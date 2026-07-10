@@ -22,7 +22,9 @@
     "test:quality-tiers": "node tests/quality-tier-verify.mjs",
     "test:caption-file-group": "node tests/caption-file-group.mjs",
     "test:file-transfer-concurrency": "node tests/file-transfer-concurrency.mjs",
-    "test:noise-suppression": "node tests/noise-suppression-lifecycle.mjs"
+    "test:noise-suppression": "node tests/noise-suppression-lifecycle.mjs",
+    "test:chat-edit": "node tests/chat-edit-delete.mjs",
+    "test:kick-sticky": "node tests/kick-sticky.mjs"
   },
   "author": "",
   "license": "ISC",

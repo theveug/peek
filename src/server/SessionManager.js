@@ -31,7 +31,7 @@ export class SessionManager {
     createSession(sessionId, { name = null, password = null, maxPeers = 6, creatorToken = null } = {}) {
         if (!this.sessions.has(sessionId)) {
             const clampedMaxPeers = Math.min(12, Math.max(2, parseInt(maxPeers, 10) || 6));
-            this.sessions.set(sessionId, { peers: new Set(), name, password, maxPeers: clampedMaxPeers, createdAt: Date.now(), creatorToken, creatorPeerId: null, moderatorPeerIds: new Set() });
+            this.sessions.set(sessionId, { peers: new Set(), name, password, maxPeers: clampedMaxPeers, createdAt: Date.now(), creatorToken, creatorPeerId: null, moderatorPeerIds: new Set(), kickedIps: new Set() });
         }
     }
 
@@ -141,6 +141,48 @@ export class SessionManager {
         if (targetPeerId === s.creatorPeerId) return false; // can't demote the creator
         s.moderatorPeerIds.delete(targetPeerId);
         return true;
+    }
+
+    /**
+     * True if the presented token matches the session's creator token — a pure
+     * check with no side effects, unlike claimModerator(). Used by the
+     * sticky-kick gate so the creator can never be locked out of their own
+     * room (e.g. after kicking someone who shares their NAT/IP).
+     * @param {string} sessionId
+     * @param {string|null} token
+     * @returns {boolean}
+     */
+    isCreatorTokenValid(sessionId, token) {
+        const s = this.sessions.get(sessionId);
+        return !!(s && s.creatorToken && token && s.creatorToken === token);
+    }
+
+    /**
+     * Remembers a kicked peer's IP for the session's lifetime, so a kick can't
+     * be undone by simply rejoining — peerIds are reassigned on every
+     * connection, so the IP is the only server-visible identifier that
+     * survives a reconnect. In-memory only, dies with the room (nothing
+     * persisted, per the design principles). Best-effort by design: peers
+     * behind one shared NAT share an IP, so kicking one may exclude others
+     * behind it — the creator-token bypass in the join gate keeps the creator
+     * themselves immune.
+     * @param {string} sessionId
+     * @param {string|null|undefined} ip
+     * @returns {void}
+     */
+    recordKick(sessionId, ip) {
+        const s = this.sessions.get(sessionId);
+        if (s && ip) s.kickedIps.add(ip);
+    }
+
+    /**
+     * @param {string} sessionId
+     * @param {string|null|undefined} ip
+     * @returns {boolean} true if this IP was kicked from the session.
+     */
+    isKickBanned(sessionId, ip) {
+        const s = this.sessions.get(sessionId);
+        return !!(s && ip && s.kickedIps && s.kickedIps.has(ip));
     }
 
     /**

@@ -174,7 +174,11 @@ export class UIController {
 
     set _onReaction(fn) { this.chat._onReaction = fn; }
     set onPollVote(fn) { this.chat.onPollVote = fn; }
+    set onEditMessage(fn) { this.chat.onEditMessage = fn; }
+    set onDeleteMessage(fn) { this.chat.onDeleteMessage = fn; }
     addChatMessage(...a) { return this.chat.addChatMessage(...a); }
+    applyChatEdit(...a) { return this.chat.applyChatEdit(...a); }
+    applyChatDelete(...a) { return this.chat.applyChatDelete(...a); }
     addSystemMessage(...a) { return this.chat.addSystemMessage(...a); }
     addPollMessage(...a) { return this.chat.addPollMessage(...a); }
     updatePollVote(...a) { return this.chat.updatePollVote(...a); }

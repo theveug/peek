@@ -26,6 +26,12 @@ export class ChatUI {
         this._replyTo = null;
         this._polls = new Map(); // keyed by peer-supplied pollId — Map, not {}, so a "__proto__" id can't poison lookups
         this.onPollVote = null;
+        // messageId → { isSelf, rawText } for plain chat messages — powers the
+        // Copy button (post-edit), inline editing, and the self-only edit/delete
+        // action-bar buttons. Session-scoped, capped in addChatMessage.
+        this._messageMeta = new Map();
+        this.onEditMessage = null;   // (messageId, newText) — wired to PeerManager.broadcastChatEdit
+        this.onDeleteMessage = null; // (messageId) — wired to PeerManager.broadcastChatDelete
     }
 
     /**
@@ -177,14 +183,16 @@ export class ChatUI {
     _emojiSet = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
     /**
-     * Attaches the hover action bar (Copy + Reply + React) to a rendered message
-     * element, including the emoji picker popover's open/close/pick wiring.
+     * Attaches the hover action bar (Copy + Reply + React, plus Edit + Delete
+     * on the local user's own messages) to a rendered message element,
+     * including the emoji picker popover's open/close/pick wiring.
      * @param {HTMLElement} msgEl
      * @param {string} messageId
      * @param {string} [rawText] - the original markdown source, for the Copy button.
+     * @param {boolean} [isSelf=false] - adds the Edit/Delete buttons when true.
      * @returns {void}
      */
-    _setupEmojiPicker(msgEl, messageId, rawText) {
+    _setupEmojiPicker(msgEl, messageId, rawText, isSelf = false) {
         const actionBar = document.createElement('div');
         actionBar.className = 'msg-action-bar';
 
@@ -195,7 +203,9 @@ export class ChatUI {
         copyBtn.dataset.tip = 'Copy message';
         copyBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            let toCopy = (rawText ?? msgEl.querySelector('.chat-markdown')?.textContent ?? '').trim();
+            // Prefer the meta map over the captured rawText param — an edit
+            // updates the map, while the closure would copy the stale original.
+            let toCopy = (this._messageMeta.get(messageId)?.rawText ?? rawText ?? msgEl.querySelector('.chat-markdown')?.textContent ?? '').trim();
             // A message that is entirely one inline-code span (`token`) is almost
             // always a value meant for pasting into a field — unwrap the backticks.
             const inlineCode = toCopy.match(/^`([^`]+)`$/);
@@ -226,6 +236,44 @@ export class ChatUI {
         btn.textContent = '😀';
         btn.dataset.tip = 'React';
         actionBar.appendChild(btn);
+
+        if (isSelf) {
+            const editBtn = document.createElement('button');
+            editBtn.className = 'msg-action-btn';
+            editBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path d="m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" /><path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" /></svg>';
+            editBtn.dataset.tip = 'Edit';
+            editBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._beginEdit(messageId);
+            });
+            actionBar.appendChild(editBtn);
+
+            // Two-step delete: first click arms the button for 3s (tooltip
+            // live-updates via Tooltip.js), second click actually deletes —
+            // same in-app confirm pattern as Settings' "Clear all local data".
+            const delBtn = document.createElement('button');
+            delBtn.className = 'msg-action-btn msg-action-danger';
+            delBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd" /></svg>';
+            delBtn.dataset.tip = 'Delete';
+            let armTimer = 0;
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!delBtn.classList.contains('is-armed')) {
+                    delBtn.classList.add('is-armed');
+                    delBtn.dataset.tip = 'Click again to delete';
+                    armTimer = setTimeout(() => {
+                        delBtn.classList.remove('is-armed');
+                        delBtn.dataset.tip = 'Delete';
+                    }, 3000);
+                    return;
+                }
+                clearTimeout(armTimer);
+                this.applyChatDelete(messageId);
+                this.onDeleteMessage?.(messageId);
+            });
+            actionBar.appendChild(delBtn);
+        }
+
         msgEl.appendChild(actionBar);
 
         btn.addEventListener('click', (e) => {
@@ -770,7 +818,15 @@ export class ChatUI {
         this._wireReplyQuote(msgContainer);
 
         const msg = msgContainer.querySelector('.chat-message');
-        this._setupEmojiPicker(msg, messageId, text);
+        this._messageMeta.set(messageId, { isSelf, rawText: text });
+        // Cap independently of the DOM prune below — other message types
+        // (system/file/poll) also evict chat messages from the log's front,
+        // so DOM pruning alone would let the map grow all session.
+        for (const key of this._messageMeta.keys()) {
+            if (this._messageMeta.size <= 300) break;
+            this._messageMeta.delete(key);
+        }
+        this._setupEmojiPicker(msg, messageId, text, isSelf);
         chatLog.appendChild(msgContainer);
 
         while (chatLog.children.length > this.maxMessages) {
@@ -798,6 +854,109 @@ export class ChatUI {
         }
 
         this._scrollIfAtBottom(chatLog);
+    }
+
+    /**
+     * Swaps a self message's rendered body for an inline textarea (Discord-style)
+     * prefilled with the original markdown. Enter saves, Escape cancels; saving
+     * applies locally and fires onEditMessage so App.js broadcasts it.
+     * @param {string} messageId
+     * @returns {void}
+     */
+    _beginEdit(messageId) {
+        const container = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+        const meta = this._messageMeta.get(messageId);
+        const body = container?.querySelector('.chat-markdown');
+        if (!container || !meta || !body) return;
+        if (container.querySelector('.chat-edit-area')) return;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'chat-edit-area ml-7';
+        const ta = document.createElement('textarea');
+        ta.className = 'chat-edit-input';
+        ta.value = meta.rawText;
+        ta.rows = 1;
+        const hint = document.createElement('div');
+        hint.className = 'chat-edit-hint';
+        hint.innerHTML = 'escape to <button type="button" class="chat-edit-cancel">cancel</button> &middot; enter to <button type="button" class="chat-edit-save">save</button>';
+        wrap.appendChild(ta);
+        wrap.appendChild(hint);
+
+        body.style.display = 'none';
+        body.after(wrap);
+
+        const grow = () => { ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight}px`; };
+        ta.addEventListener('input', grow);
+
+        const endEdit = () => { wrap.remove(); body.style.display = ''; };
+        const save = () => {
+            const text = ta.value.trim();
+            if (!text || text === meta.rawText) { endEdit(); return; }
+            endEdit();
+            this.applyChatEdit(messageId, text);
+            this.onEditMessage?.(messageId, text);
+        };
+        ta.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
+            else if (e.key === 'Escape') { e.preventDefault(); endEdit(); }
+        });
+        hint.querySelector('.chat-edit-cancel').addEventListener('click', endEdit);
+        hint.querySelector('.chat-edit-save').addEventListener('click', save);
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+        grow();
+    }
+
+    /**
+     * Re-renders a message's body with new markdown text and tags it "(edited)".
+     * Used for both the local echo of an own edit and remote peers' edits —
+     * the same marked → DOMPurify → _finalizeMarkdownBody pipeline as the
+     * original render, so an edit can't smuggle anything a new message couldn't.
+     * Unknown messageIds no-op (peers who joined after the original was sent,
+     * or messages already pruned by the log cap).
+     * @param {string} messageId
+     * @param {string} newText - raw markdown.
+     * @returns {void}
+     */
+    applyChatEdit(messageId, newText) {
+        const container = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+        const body = container?.querySelector('.chat-markdown');
+        if (!container || !body) return;
+        const meta = this._messageMeta.get(messageId);
+        if (meta) meta.rawText = newText;
+
+        // A remote edit racing a local inline-edit session: drop the editor
+        // rather than leave it saving over text the user can no longer see.
+        container.querySelector('.chat-edit-area')?.remove();
+        body.style.display = '';
+        body.innerHTML = DOMPurify.sanitize(marked.parse(newText));
+        const mentionedMe = this._finalizeMarkdownBody(container);
+
+        const msg = container.querySelector('.chat-message');
+        if (!msg) return;
+        if (!meta?.isSelf) msg.classList.toggle('chat-message-mentioned', mentionedMe);
+        if (!msg.querySelector('.chat-edited-tag')) {
+            const ts = msg.querySelector('.chat-timestamp');
+            if (ts) {
+                const tag = document.createElement('span');
+                tag.className = 'chat-edited-tag';
+                tag.textContent = '(edited)';
+                ts.after(tag);
+            }
+        }
+    }
+
+    /**
+     * Removes a message from the log entirely (Discord-style — no tombstone;
+     * ephemeral chat has nothing to memorialize). Reply quotes pointing at it
+     * keep their snapshot text; their click-to-scroll just no-ops.
+     * @param {string} messageId
+     * @returns {void}
+     */
+    applyChatDelete(messageId) {
+        document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`)?.remove();
+        this._messageMeta.delete(messageId);
+        this._reactions.delete(messageId);
     }
 
     /**

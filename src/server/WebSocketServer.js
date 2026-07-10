@@ -69,6 +69,9 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
     wss.on('connection', (ws, req) => {
         const forwardedFor = trustProxy ? req.headers['x-forwarded-for'] : null;
         const ip = forwardedFor ? String(forwardedFor).split(',')[0].trim() : req.socket.remoteAddress;
+        // Stamped on the socket so the 'kick' case (which runs in the *kicker's*
+        // connection scope) can read the kick target's IP for the sticky-kick set.
+        ws.clientIp = ip;
         ws.isAlive = true;
         ws.on('pong', () => { ws.isAlive = true; });
 
@@ -97,6 +100,16 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
 
                     if ((failedJoinsByIp.get(ip) || 0) >= FAILED_JOIN_LIMIT) {
                         ws.send(JSON.stringify({ type: 'join-error', reason: 'invalid-password' }));
+                        ws.close();
+                        return;
+                    }
+
+                    // Sticky kick: a kicked IP stays out for the rest of the session's
+                    // lifetime (the set dies with the room). The creator token bypasses
+                    // the gate so the creator can never lock themselves out by kicking
+                    // someone who shares their NAT/IP.
+                    if (manager.isKickBanned(sessionId, ip) && !manager.isCreatorTokenValid(sessionId, msg.creatorToken || null)) {
+                        ws.send(JSON.stringify({ type: 'join-error', reason: 'kicked' }));
                         ws.close();
                         return;
                     }
@@ -209,6 +222,7 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                     if (manager.getSessionId(to) !== sessionId) break;
                     const target = manager.getPeerSocket(to);
                     if (target) {
+                        manager.recordKick(sessionId, target.clientIp);
                         target.send(JSON.stringify({ type: 'kicked' }));
                         target.close();
                     }

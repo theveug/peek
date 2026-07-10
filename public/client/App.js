@@ -20,6 +20,8 @@ const ui = new UIController();
 const peerManager = new PeerManager(null, ui);
 const debug = new DebugPanel(peerManager);
 ui.onWatchChange = (streamKey, watched) => peerManager.setWatched(streamKey, watched);
+ui.onEditMessage = (messageId, text) => peerManager.broadcastChatEdit(messageId, text);
+ui.onDeleteMessage = (messageId) => peerManager.broadcastChatDelete(messageId);
 ui.onPipExit = () => peerManager.handleTabVisibility(document.hidden);
 ui.onModeratorAction = (action, peerId) => {
     if (action === 'stop-stream') peerManager.requestStopStream(peerId);
@@ -80,6 +82,13 @@ function connect() {
             }
             if (msg.reason === 'invalid-room') {
                 location.href = '/';
+                return;
+            }
+            if (msg.reason === 'kicked') {
+                // Same lobby message as the live-kick path; leavingRoom stops
+                // the onclose auto-reconnect from re-attempting the banned join.
+                leavingRoom = true;
+                location.href = '/?kicked=1';
                 return;
             }
             showPasswordPrompt();
