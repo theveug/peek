@@ -1,6 +1,6 @@
 // --- src/server/WebSocketServer.js ---
 import { v4 as uuidv4 } from 'uuid';
-import { createHmac } from 'crypto';
+import { createHmac, randomBytes } from 'crypto';
 
 // No hardcoded public STUN (this used to default to Google's) — every
 // participant's IP pinging a third party on each call cut against the
@@ -139,16 +139,26 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                         });
                     }
 
-                    manager.addPeer(sessionId, peerId, ws, { password: msg.password || null, creatorToken: msg.creatorToken || null });
+                    // A join for a code with no live session lazily creates the room —
+                    // whoever triggers that creation becomes its owner. Mint a creator
+                    // token for them (unless they brought their own, i.e. the original
+                    // creator reconnecting after a server restart) and hand it back in
+                    // 'init' so the client can store it like /api/create-room's.
+                    const mintedCreatorToken = (!manager.hasSession(sessionId) && !msg.creatorToken)
+                        ? randomBytes(16).toString('hex')
+                        : null;
+                    const presentedToken = msg.creatorToken || mintedCreatorToken;
+
+                    manager.addPeer(sessionId, peerId, ws, { password: msg.password || null, creatorToken: presentedToken });
                     const peers = manager.getPeersInSession(sessionId).filter(p => p !== peerId);
 
                     // A claim can flip creatorPeerId/moderatorPeerIds, so this must run
                     // before reading getSessionMeta() below for the init payload to reflect it.
-                    const claimedModerator = msg.creatorToken ? manager.claimModerator(sessionId, peerId, msg.creatorToken) : false;
+                    const claimedModerator = presentedToken ? manager.claimModerator(sessionId, peerId, presentedToken) : false;
                     const meta = manager.getSessionMeta(sessionId);
 
                     const iceServers = generateIceServers(iceConfig);
-                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, creatorPeerId: meta?.creatorPeerId || null, moderatorPeerIds: meta?.moderatorPeerIds || [], buildId }));
+                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, creatorPeerId: meta?.creatorPeerId || null, moderatorPeerIds: meta?.moderatorPeerIds || [], creatorToken: mintedCreatorToken || undefined, buildId }));
 
                     peers.forEach(pid => {
                         const socket = manager.getPeerSocket(pid);

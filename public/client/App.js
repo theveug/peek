@@ -37,7 +37,10 @@ let socket;
 let reconnectTimer;
 let leavingRoom = false;
 let roomPassword = sessionStorage.getItem('roomPassword') || null;
-const creatorToken = sessionStorage.getItem('creatorToken') || null;
+// `let`, not `const`: joining a code with no live session lazily creates the
+// room, and the server mints + returns a creator token in 'init' — it must be
+// adopted here so reconnects within this tab re-claim ownership.
+let creatorToken = sessionStorage.getItem('creatorToken') || null;
 
 // Server sends a fresh buildId (regenerated every process start) in every 'init'
 // message. If it changes between our first connect and a later reconnect, the
@@ -105,6 +108,12 @@ function connect() {
         if (msg.type === 'init') {
             checkBuildId(msg.buildId);
             ui.setRoomMeta({ name: msg.roomName, code: sessionId, hasPassword: msg.hasPassword, maxPeers: msg.maxPeers });
+            // Present only when this join lazily created the room, making us
+            // its owner — persist like lobby.js does for /api/create-room.
+            if (msg.creatorToken) {
+                creatorToken = msg.creatorToken;
+                sessionStorage.setItem('creatorToken', msg.creatorToken);
+            }
         }
         peerManager.handleSignal(msg);
     };

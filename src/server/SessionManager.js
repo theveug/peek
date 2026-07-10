@@ -63,11 +63,18 @@ export class SessionManager {
      * @returns {void}
      */
     addPeer(sessionId, peerId, socket, { password = null, creatorToken = null } = {}) {
-        if (!this.sessions.has(sessionId)) {
-            this.sessions.set(sessionId, { peers: new Set(), name: null, password, maxPeers: 6, createdAt: Date.now(), creatorToken, creatorPeerId: null, moderatorPeerIds: new Set() });
-        }
+        // Lazy-create goes through createSession — a second inline session
+        // literal here silently drifted from createSession's shape once
+        // already (missing bannedIps, crashing recordBan in lazily-created
+        // rooms), so there is deliberately only one place that builds one.
+        this.createSession(sessionId, { password, creatorToken });
         this.sessions.get(sessionId).peers.add(peerId);
         this.peerMap.set(peerId, { sessionId, socket });
+    }
+
+    /** @param {string} sessionId @returns {boolean} true if the session currently exists. */
+    hasSession(sessionId) {
+        return this.sessions.has(sessionId);
     }
 
     /**

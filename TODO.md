@@ -13,7 +13,7 @@ Living backlog for Peek. Check this at the start of a session for pending work; 
 
 ## Security (open items only — patched items are in CHANGELOG.md, most recently the 2026-07-07 offline/self-host pass)
 
-- [ ] **Accepted risk, documented not fixed — saved-code squatting** — the lazy room-recreation path means anyone who ever learned a room code can recreate that room with *their own* password after it empties, and `/api/validate-room` returns `valid:true` for unknown codes. A griefer could squat a group's saved code. Acceptable under the current threat model (codes are shared secrets, same as the manual-join flow), but it's a conscious acceptance now, not an oversight. Revisit only if room codes ever become long-lived/advertised.
+- [ ] **Accepted risk, documented not fixed — saved-code squatting** — the lazy room-recreation path means anyone who ever learned a room code can recreate that room with *their own* password after it empties (and, since the 2026-07-11 lazy-owner fix, becomes its owner — deliberately the same trust level), and `/api/validate-room` returns `valid:true` for unknown codes. A griefer could squat a group's saved code. Acceptable under the current threat model (codes are shared secrets, same as the manual-join flow), but it's a conscious acceptance now, not an oversight. Revisit only if room codes ever become long-lived/advertised.
 
 ## Desktop / Electron
 
