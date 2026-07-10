@@ -1514,6 +1514,52 @@ body:has(#members-sidebar.collapsed) .members-tab {
   min-width: 14px;
 }
 
+/* Per-peer action buttons (volume/block/mod kebab) collapse behind a hover
+   reveal so each member row stays one icon tall — only the passive status
+   icons (signal/mic) are always visible. The :has() clauses keep the cluster
+   (and the popover anchored inside it) alive while a popover is open, since
+   the popover floats below the card and the pointer leaves the card's :hover
+   on the way down to it. */
+.participant-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.participant-card:hover .participant-actions,
+.participant-actions:has(.participant-mod-popover:not(.hidden)),
+.participant-actions:has(.participant-volume-popover:not(.hidden)) {
+  display: flex;
+}
+
+.participant-passive-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* While the action cluster is shown, the passive icons swap out instead of
+   stacking alongside it — keeps the width jump small so the name doesn't get
+   crushed. Conditions mirror the reveal rules above exactly. */
+.participant-card:hover .participant-actions ~ .participant-passive-icons,
+.participant-right-col:has(.participant-mod-popover:not(.hidden)) .participant-passive-icons,
+.participant-right-col:has(.participant-volume-popover:not(.hidden)) .participant-passive-icons {
+  display: none;
+}
+
+/* No hover on touch — keep the actions always visible on mobile, and let the
+   passive icons sit alongside them (the drawer is wider than the desktop
+   sidebar, so both fit). */
+@media (max-width: 767px) {
+  .participant-actions {
+    display: flex;
+  }
+
+  .participant-card:hover .participant-actions ~ .participant-passive-icons {
+    display: flex;
+  }
+}
+
 /* ===== Room moderator (stop-stream / kick) ===== */
 .participant-crown {
   position: absolute;
@@ -1532,10 +1578,10 @@ body:has(#members-sidebar.collapsed) .members-tab {
 }
 
 .participant-mod-btn {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: var(--t3);
   cursor: pointer;
@@ -1550,7 +1596,7 @@ body:has(#members-sidebar.collapsed) .members-tab {
 }
 
 .participant-mod-btn .material-symbols-rounded {
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
 }
 
@@ -1593,10 +1639,10 @@ body:has(#members-sidebar.collapsed) .members-tab {
 }
 
 .participant-volume-btn {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: var(--t3);
   cursor: pointer;
@@ -1611,15 +1657,15 @@ body:has(#members-sidebar.collapsed) .members-tab {
 }
 
 .participant-volume-btn .material-symbols-rounded {
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
 }
 
 .participant-block-btn {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: var(--t3);
   cursor: pointer;
@@ -1634,7 +1680,7 @@ body:has(#members-sidebar.collapsed) .members-tab {
 }
 
 .participant-block-btn .material-symbols-rounded {
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
 }
 

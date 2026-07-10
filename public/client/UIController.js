@@ -903,37 +903,48 @@ export class UIController {
         info.appendChild(statusRow);
 
         const rightCol = document.createElement('div');
-        rightCol.className = 'participant-right-col flex flex-col items-end gap-1 flex-shrink-0';
+        rightCol.className = 'participant-right-col flex items-center gap-1 flex-shrink-0';
+
+        if (!isSelf) {
+            // Action cluster (volume/block/mod kebab) is hover-revealed via
+            // .participant-actions CSS so the always-visible row stays one icon
+            // tall. It goes first so the persistent status icons (signal/mic)
+            // keep their spot at the far right when the cluster appears.
+            const actions = document.createElement('div');
+            actions.className = 'participant-actions';
+            actions.appendChild(this._buildVolumeControl(peerId));
+            actions.appendChild(this._buildBlockControl(peerId));
+            const modMenu = this._buildModeratorMenu(peerId);
+            const iAmModerator = !!this.selfPeerId && this.moderatorPeerIds.has(this.selfPeerId);
+            modMenu.style.display = iAmModerator ? 'flex' : 'none';
+            actions.appendChild(modMenu);
+            rightCol.appendChild(actions);
+        }
+
+        // Passive status icons (signal/mic) live in one group so the CSS can
+        // hide them while the action cluster is shown — the two swap in place
+        // rather than stacking up side by side and squeezing the name.
+        const passiveIcons = document.createElement('div');
+        passiveIcons.className = 'participant-passive-icons';
 
         if (!isSelf) {
             const sigIcon = document.createElement('span');
             sigIcon.className = 'participant-signal-icon inline-flex items-center';
             sigIcon.title = 'Connection: Unknown';
             sigIcon.innerHTML = this._signalBarsSvg('unknown');
-            rightCol.appendChild(sigIcon);
+            passiveIcons.appendChild(sigIcon);
         }
 
         const micIcon = document.createElement('span');
         micIcon.className = 'participant-mic inline-flex items-center';
         micIcon.style.color = '#ef4444';
         micIcon.innerHTML = this._micOffSvg();
-        rightCol.appendChild(micIcon);
-
-        if (!isSelf) {
-            rightCol.appendChild(this._buildVolumeControl(peerId));
-            rightCol.appendChild(this._buildBlockControl(peerId));
-        }
+        passiveIcons.appendChild(micIcon);
+        rightCol.appendChild(passiveIcons);
 
         card.appendChild(avatarWrap);
         card.appendChild(info);
         card.appendChild(rightCol);
-
-        if (!isSelf) {
-            const modMenu = this._buildModeratorMenu(peerId);
-            const iAmModerator = !!this.selfPeerId && this.moderatorPeerIds.has(this.selfPeerId);
-            modMenu.style.display = iAmModerator ? 'flex' : 'none';
-            card.appendChild(modMenu);
-        }
 
         if (isSelf) {
             container.prepend(card);

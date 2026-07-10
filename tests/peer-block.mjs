@@ -84,7 +84,10 @@ async function main() {
         console.log('STEP 2 - pre-block chat message delivered: PASS');
 
         // --- Block ---
+        // The action buttons are hover-revealed (.participant-actions), so the
+        // card must be hovered before the block button is clickable.
         const blockBtn = pageB.locator(`#participant-${remotePeerId} .participant-block-btn`);
+        await pageB.hover(`#participant-${remotePeerId}`);
         await blockBtn.click();
 
         // With only 2 participants, blocking the sole remote peer drops remoteStreams
@@ -117,6 +120,7 @@ async function main() {
         if (audioVolume !== null) assert(audioVolume === 0, `blocked peer's audio.volume should be 0, got ${audioVolume}`);
 
         // --- Unblock ---
+        await pageB.hover(`#participant-${remotePeerId}`);
         await blockBtn.click();
         await pageB.waitForSelector(`#grid-view [data-peer-id="${remotePeerId}"]`, { timeout: 8000 });
         console.log('STEP 6 - A\'s grid tile reappears on B after unblock (no reload): PASS');
@@ -129,6 +133,7 @@ async function main() {
         console.log('STEP 7 - chat resumes after unblock: PASS');
 
         // 🔍 probe: double-block (click twice fast) shouldn't throw or desync state.
+        await pageB.hover(`#participant-${remotePeerId}`);
         await blockBtn.click();
         await blockBtn.click();
         await pageB.waitForTimeout(500);
