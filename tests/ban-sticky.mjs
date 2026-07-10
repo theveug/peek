@@ -1,13 +1,15 @@
-// Sticky-kick coverage with raw ws clients (no browser):
-//   1. the creator kicks a peer → that peer's rejoin attempt is rejected with
-//      join-error/kicked and the socket is closed (the kick actually sticks),
-//   2. the creator token bypasses the IP gate — on localhost every client
+// Kick vs. ban semantics with raw ws clients (no browser):
+//   1. kick is a one-time removal — the kicked peer can rejoin immediately,
+//   2. ban sticks — the banned peer's rejoin is rejected with
+//      join-error/banned and the socket is closed, for the session's lifetime,
+//   3. a non-creator's 'ban' request is ignored server-side,
+//   4. the creator token bypasses the IP gate — on localhost every client
 //      shares one IP, so this test would deadlock itself without the bypass,
 //      which is exactly the shared-NAT scenario the bypass exists for,
-//   3. the ban is session-scoped: once the room empties (set dies with the
+//   5. the ban is session-scoped: once the room empties (set dies with the
 //      session), the same "IP" can join a lazily-recreated room again.
 //
-// Run with: npm run test:kick-sticky
+// Run with: npm run test:ban-sticky
 
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -81,47 +83,53 @@ async function main() {
         const { code, creatorToken } = await createResp.json();
         console.log('room:', code);
 
-        // Creator + victim join.
         const creator = await connectAndJoin(code, { creatorToken });
         const creatorInit = await creator.waitFor('init');
-        const victim = await connectAndJoin(code);
-        const victimInit = await victim.waitFor('init');
+
+        // --- Kick does not stick ---
+        const victim1 = await connectAndJoin(code);
+        const victim1Init = await victim1.waitFor('init');
         await creator.waitFor('peer-joined');
+        creator.ws.send(JSON.stringify({ type: 'kick', to: victim1Init.peerId }));
+        await victim1.waitFor('kicked');
+        await sleep(300);
+        const victim1Back = await connectAndJoin(code);
+        await victim1Back.waitFor('init');
+        console.log('STEP 1 - kick is one-time, kicked peer can rejoin: PASS');
 
-        // Creator kicks the victim.
-        creator.ws.send(JSON.stringify({ type: 'kick', to: victimInit.peerId }));
-        await victim.waitFor('kicked');
-        console.log('STEP 1 - victim received kicked: PASS');
+        // --- Non-creator ban attempts are ignored server-side ---
+        victim1Back.ws.send(JSON.stringify({ type: 'ban', to: creatorInit.peerId }));
+        await sleep(300);
+        assert(creator.ws.readyState === WebSocket.OPEN, 'non-creator ban request is ignored (creator still connected)');
+
+        // --- Ban sticks ---
+        const victim2Init = victim1Back.messages.find(m => m.type === 'init');
+        creator.ws.send(JSON.stringify({ type: 'ban', to: victim2Init.peerId }));
+        await victim1Back.waitFor('banned');
+        console.log('STEP 2 - banned peer received banned: PASS');
         await sleep(300);
 
-        // Victim rejoins from the same IP → rejected and closed.
-        const victimRetry = await connectAndJoin(code);
-        const err = await victimRetry.waitFor('join-error');
-        assert(err.reason === 'kicked', `rejoin after kick is rejected with reason kicked, got "${err.reason}"`);
+        const banRetry = await connectAndJoin(code);
+        const err = await banRetry.waitFor('join-error');
+        assert(err.reason === 'banned', `rejoin after ban is rejected with reason banned, got "${err.reason}"`);
         await sleep(300);
-        assert(victimRetry.ws.readyState === WebSocket.CLOSED, 'rejected socket is closed by the server');
+        assert(banRetry.ws.readyState === WebSocket.CLOSED, 'rejected socket is closed by the server');
 
-        // Creator token bypasses the IP gate (localhost = same IP as the victim,
-        // i.e. the shared-NAT case): a second creator socket still gets in.
+        // --- Creator token bypasses the shared-IP gate ---
         const creatorAgain = await connectAndJoin(code, { creatorToken });
         await creatorAgain.waitFor('init');
-        console.log('STEP 2 - creator token bypasses the shared-IP ban: PASS');
+        console.log('STEP 3 - creator token bypasses the shared-IP ban: PASS');
 
-        // A plain joiner (no token, same IP) is still banned while the session lives.
-        const bystander = await connectAndJoin(code);
-        const err2 = await bystander.waitFor('join-error');
-        assert(err2.reason === 'kicked', 'tokenless join from the kicked IP stays banned while the session lives');
-
-        // Session-scoped: empty the room, let the session die, rejoin freely.
+        // --- Ban dies with the session ---
         creator.ws.close();
         creatorAgain.ws.close();
         await sleep(500);
         const fresh = await connectAndJoin(code);
         await fresh.waitFor('init');
-        console.log('STEP 3 - ban dies with the session (lazy-recreated room is open again): PASS');
+        console.log('STEP 4 - ban dies with the session (lazy-recreated room is open again): PASS');
         fresh.ws.close();
 
-        console.log('All sticky-kick checks passed.');
+        console.log('All kick/ban checks passed.');
     } finally {
         server.kill();
         await sleep(200);

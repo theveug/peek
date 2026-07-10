@@ -104,12 +104,12 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                         return;
                     }
 
-                    // Sticky kick: a kicked IP stays out for the rest of the session's
+                    // Ban gate: a banned IP stays out for the rest of the session's
                     // lifetime (the set dies with the room). The creator token bypasses
-                    // the gate so the creator can never lock themselves out by kicking
+                    // the gate so the creator can never lock themselves out by banning
                     // someone who shares their NAT/IP.
-                    if (manager.isKickBanned(sessionId, ip) && !manager.isCreatorTokenValid(sessionId, msg.creatorToken || null)) {
-                        ws.send(JSON.stringify({ type: 'join-error', reason: 'kicked' }));
+                    if (manager.isBanned(sessionId, ip) && !manager.isCreatorTokenValid(sessionId, msg.creatorToken || null)) {
+                        ws.send(JSON.stringify({ type: 'join-error', reason: 'banned' }));
                         ws.close();
                         return;
                     }
@@ -213,17 +213,32 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                     break;
                 }
 
-                // Kick stays owner-only (isCreator, not the broader isModerator) — a
-                // promoted moderator can stop anyone's stream (including the creator's)
-                // but cannot remove anyone from the room.
+                // Kick and ban both stay owner-only (isCreator, not the broader
+                // isModerator) — a promoted moderator can stop anyone's stream
+                // (including the creator's) but cannot remove anyone from the room.
+                // Kick is a one-time removal (the peer may rejoin); ban additionally
+                // remembers the target's IP for the session's lifetime (see the
+                // ban gate in 'join' above).
                 case 'kick': {
                     const sessionId = manager.getSessionId(peerId);
                     if (!manager.isCreator(sessionId, peerId)) break;
                     if (manager.getSessionId(to) !== sessionId) break;
                     const target = manager.getPeerSocket(to);
                     if (target) {
-                        manager.recordKick(sessionId, target.clientIp);
                         target.send(JSON.stringify({ type: 'kicked' }));
+                        target.close();
+                    }
+                    break;
+                }
+
+                case 'ban': {
+                    const sessionId = manager.getSessionId(peerId);
+                    if (!manager.isCreator(sessionId, peerId)) break;
+                    if (manager.getSessionId(to) !== sessionId) break;
+                    const target = manager.getPeerSocket(to);
+                    if (target) {
+                        manager.recordBan(sessionId, target.clientIp);
+                        target.send(JSON.stringify({ type: 'banned' }));
                         target.close();
                     }
                     break;

@@ -1008,6 +1008,7 @@ export class UIController {
                 const isTargetMod = this.moderatorPeerIds.has(peerId);
                 addMenuItem(isTargetMod ? 'Remove moderator' : 'Make moderator', isTargetMod ? 'demote' : 'promote');
                 addMenuItem('Kick from room', 'kick', 'participant-mod-kick');
+                addMenuItem('Ban from room', 'ban', 'participant-mod-kick');
             }
         };
 

@@ -1916,9 +1916,14 @@ export class PeerManager {
         this.send('force-stop-stream', targetPeerId, {});
     }
 
-    /** Requests the server kick a peer from the room. Requires creator status server-side. */
+    /** Requests the server kick a peer from the room (one-time removal — they can rejoin). Requires creator status server-side. */
     kickPeer(targetPeerId) {
         this.send('kick', targetPeerId, {});
+    }
+
+    /** Requests the server ban a peer (kick + their IP stays out for the session's lifetime). Requires creator status server-side. */
+    banPeer(targetPeerId) {
+        this.send('ban', targetPeerId, {});
     }
 
     /** Requests the server promote a peer to moderator. Requires creator status server-side. */

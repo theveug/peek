@@ -24,7 +24,7 @@
     "test:file-transfer-concurrency": "node tests/file-transfer-concurrency.mjs",
     "test:noise-suppression": "node tests/noise-suppression-lifecycle.mjs",
     "test:chat-edit": "node tests/chat-edit-delete.mjs",
-    "test:kick-sticky": "node tests/kick-sticky.mjs"
+    "test:ban-sticky": "node tests/ban-sticky.mjs"
   },
   "author": "",
   "license": "ISC",

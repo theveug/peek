@@ -26,6 +26,12 @@ if (new URLSearchParams(location.search).get('kicked')) {
     kickedError.classList.remove('hidden');
 }
 
+if (new URLSearchParams(location.search).get('banned')) {
+    const bannedError = document.getElementById('join-error');
+    bannedError.textContent = 'You were banned from that room by the moderator.';
+    bannedError.classList.remove('hidden');
+}
+
 // Max-participants stepper (min 2, max 12, default 6)
 const maxPeersInput = document.getElementById('create-max-peers');
 document.getElementById('create-max-peers-dec').addEventListener('click', () => {

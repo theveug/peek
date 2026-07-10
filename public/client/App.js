@@ -26,6 +26,7 @@ ui.onPipExit = () => peerManager.handleTabVisibility(document.hidden);
 ui.onModeratorAction = (action, peerId) => {
     if (action === 'stop-stream') peerManager.requestStopStream(peerId);
     else if (action === 'kick') peerManager.kickPeer(peerId);
+    else if (action === 'ban') peerManager.banPeer(peerId);
     else if (action === 'promote') peerManager.promotePeer(peerId);
     else if (action === 'demote') peerManager.demotePeer(peerId);
 };
@@ -84,21 +85,21 @@ function connect() {
                 location.href = '/';
                 return;
             }
-            if (msg.reason === 'kicked') {
-                // Same lobby message as the live-kick path; leavingRoom stops
-                // the onclose auto-reconnect from re-attempting the banned join.
+            if (msg.reason === 'banned') {
+                // leavingRoom stops the onclose auto-reconnect from
+                // re-attempting the banned join.
                 leavingRoom = true;
-                location.href = '/?kicked=1';
+                location.href = '/?banned=1';
                 return;
             }
             showPasswordPrompt();
             return;
         }
-        if (msg.type === 'kicked') {
+        if (msg.type === 'kicked' || msg.type === 'banned') {
             leavingRoom = true;
             clearTimeout(reconnectTimer);
             socket.close();
-            location.href = '/?kicked=1';
+            location.href = msg.type === 'banned' ? '/?banned=1' : '/?kicked=1';
             return;
         }
         if (msg.type === 'init') {
