@@ -1178,9 +1178,10 @@ a.link-preview:hover {
 
 /* ===== Chat markdown ===== */
 .chat-markdown pre {
-  background-color: var(--chat-code-bg);
-  padding: 0.5em;
-  border-radius: 4px;
+  background-color: var(--bg1);
+  border: 1px solid var(--border);
+  padding: 0.6em 0.75em;
+  border-radius: 8px;
   overflow-x: auto;
   margin-top: 0.25em;
   font-size: 0.9em;
@@ -1201,7 +1202,7 @@ a.link-preview:hover {
 }
 
 .chat-markdown :not(pre) > code {
-  background: var(--chat-code-bg);
+  background: var(--bg1);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.1em 0.35em;
@@ -1224,9 +1225,75 @@ a.link-preview:hover {
   @apply absolute top-1 right-2 bg-gray-700 text-white px-2 py-1 rounded text-xs opacity-75 hover:opacity-100 transition;
 }
 
+/* Syntax highlighting palette — replaces the vendored base16-material hljs
+   theme (its <link> was removed from index.html 2026-07-10; the file stays in
+   assets/vendor). Built entirely from design tokens so code blocks follow the
+   accent picker, background tint, and dark/light theme at runtime. */
 .hljs {
   background: transparent;
-  color: inherit;
+  color: var(--t1);
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--t3);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-subst,
+.hljs-doctag,
+.hljs-formula,
+.hljs-meta {
+  color: var(--accent);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string {
+  color: var(--green);
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-built_in,
+.hljs-type {
+  color: var(--amber);
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-attr {
+  color: var(--accentH);
+}
+
+.hljs-name,
+.hljs-tag,
+.hljs-deletion {
+  color: var(--red);
+}
+
+.hljs-variable,
+.hljs-template-variable,
+.hljs-property,
+.hljs-params {
+  color: var(--t2);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
 }
 
 /* ===== Resizable chat panel ===== */
