@@ -15,11 +15,13 @@ export class ChatUI {
      * @param {() => string} deps.getNickname - resolves a peerId to its current display nickname.
      * @param {(name: string) => string} [deps.avatarInitials] - derives avatar initials from a display name; defaults to just the first letter.
      * @param {() => string[]} [deps.getAllNicknames] - every current participant's nickname, used for @mention detection.
+     * @param {() => boolean} [deps.isModerator] - whether the local user currently holds creator/moderator status; gates the per-message Pin button.
      */
-    constructor({ getNickname, avatarInitials, getAllNicknames }) {
+    constructor({ getNickname, avatarInitials, getAllNicknames, isModerator }) {
         this._getNickname = getNickname;
         this._avatarInitials = avatarInitials || ((name) => name.charAt(0).toUpperCase());
         this._getAllNicknames = getAllNicknames || (() => []);
+        this._isModerator = isModerator || (() => false);
         this.maxMessages = 100;
         this._typingPeers = new Set();
         this._reactions = new Map();
@@ -27,12 +29,46 @@ export class ChatUI {
         this._replyTo = null;
         this._polls = new Map(); // keyed by peer-supplied pollId — Map, not {}, so a "__proto__" id can't poison lookups
         this.onPollVote = null;
-        // messageId → { isSelf, rawText } for plain chat messages — powers the
-        // Copy button (post-edit), inline editing, and the self-only edit/delete
-        // action-bar buttons. Session-scoped, capped in addChatMessage.
+        // messageId → { isSelf, rawText, sender } for plain chat messages — powers the
+        // Copy button (post-edit), inline editing, the self-only edit/delete
+        // action-bar buttons, and pin snapshots (sender). Session-scoped, capped in addChatMessage.
         this._messageMeta = new Map();
         this.onEditMessage = null;   // (messageId, newText) — wired to PeerManager.broadcastChatEdit
         this.onDeleteMessage = null; // (messageId) — wired to PeerManager.broadcastChatDelete
+        // messageId → { sender, rawText, pinnedAt } — independent of _messageMeta's cap
+        // and the DOM log's maxMessages cap, since a pin is meant to survive both.
+        this._pinned = new Map();
+        this._pinnedCap = 50;
+        this.onPinMessage = null;   // (messageId) — wired to PeerManager.broadcastPin
+        this.onUnpinMessage = null; // (messageId) — wired to PeerManager.broadcastUnpin
+        this._wirePinnedPanel();
+    }
+
+    /**
+     * Wires the `#pinned-messages-btn` trigger open/close (static markup in
+     * index.html, same click-outside/Escape convention as
+     * App.js's composer-plus-menu). Self-contained inside ChatUI since it
+     * owns all the pinned-message state; no App.js wiring needed.
+     * @returns {void}
+     */
+    _wirePinnedPanel() {
+        const btn = document.getElementById('pinned-messages-btn');
+        const panel = document.getElementById('pinned-messages-panel');
+        if (!btn || !panel) return;
+
+        const close = () => panel.classList.add('hidden');
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            panel.classList.toggle('hidden');
+        });
+        document.addEventListener('click', (e) => {
+            if (panel.classList.contains('hidden')) return;
+            if (panel.contains(e.target) || e.target === btn) return;
+            close();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !panel.classList.contains('hidden')) close();
+        });
     }
 
     /**
@@ -235,6 +271,27 @@ export class ChatUI {
         btn.textContent = '😀';
         btn.dataset.tip = 'React';
         actionBar.appendChild(btn);
+
+        if (this._isModerator()) {
+            // A message's action bar is built exactly once, at addChatMessage
+            // time — before it's possible for this messageId to already be
+            // pinned (pinning requires this very button to exist first), so
+            // there's no initial state to sync here. applyPin() below owns
+            // updating this button's pinned/unpinned visual state from then
+            // on, for both the local click path and a remote peer's pin.
+            const pinBtn = document.createElement('button');
+            pinBtn.className = 'msg-action-btn msg-action-pin-btn';
+            pinBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" clip-rule="evenodd" d="M10 2C8.28365 2 6.5916 2.10551 4.93005 2.31046C3.80579 2.44913 3 3.41374 3 4.51661V17.25C3 17.5078 3.13239 17.7475 3.35057 17.8848C3.56875 18.0221 3.84215 18.0377 4.07455 17.9261L10 15.0819L15.9255 17.9261C16.1578 18.0377 16.4312 18.0221 16.6494 17.8848C16.8676 17.7475 17 17.5078 17 17.25V4.51661C17 3.41374 16.1942 2.44913 15.07 2.31046C13.4084 2.10551 11.7163 2 10 2Z" /></svg>';
+            pinBtn.dataset.tip = 'Pin message';
+            pinBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const pinned = this._pinned.has(messageId);
+                this.applyPin(messageId, !pinned);
+                if (pinned) this.onUnpinMessage?.(messageId);
+                else this.onPinMessage?.(messageId);
+            });
+            actionBar.appendChild(pinBtn);
+        }
 
         if (isSelf) {
             const editBtn = document.createElement('button');
@@ -798,7 +855,7 @@ export class ChatUI {
         this._wireReplyQuote(msgContainer);
 
         const msg = msgContainer.querySelector('.chat-message');
-        this._messageMeta.set(messageId, { isSelf, rawText: text });
+        this._messageMeta.set(messageId, { isSelf, rawText: text, sender });
         // Cap independently of the DOM prune below — other message types
         // (system/file/poll) also evict chat messages from the log's front,
         // so DOM pruning alone would let the map grow all session.
@@ -937,6 +994,126 @@ export class ChatUI {
         document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`)?.remove();
         this._messageMeta.delete(messageId);
         this._reactions.delete(messageId);
+        if (this._pinned.delete(messageId)) this._renderPinnedPanel();
+    }
+
+    _pinBadgeSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3"><path fill-rule="evenodd" clip-rule="evenodd" d="M10 2C8.28365 2 6.5916 2.10551 4.93005 2.31046C3.80579 2.44913 3 3.41374 3 4.51661V17.25C3 17.5078 3.13239 17.7475 3.35057 17.8848C3.56875 18.0221 3.84215 18.0377 4.07455 17.9261L10 15.0819L15.9255 17.9261C16.1578 18.0377 16.4312 18.0221 16.6494 17.8848C16.8676 17.7475 17 17.5078 17 17.25V4.51661C17 3.41374 16.1942 2.44913 15.07 2.31046C13.4084 2.10551 11.7163 2 10 2Z" /></svg>';
+
+    /**
+     * Local-apply entry point for a pin/unpin — called both for the local
+     * moderator's own action (from the action-bar button above) and for an
+     * already-authorized remote peer's pin/unpin (PeerManager checks
+     * moderator status before ever calling this, see the receive-side
+     * `pin-message`/`unpin-message` handling). Snapshots sender/text into
+     * `_pinned` independently of `_messageMeta`'s cap and the DOM log's
+     * `maxMessages` cap, since a pin is meant to survive both — a pruned
+     * original just means the panel's click-to-scroll no-ops, same graceful
+     * miss as reply quotes pointing at a pruned message.
+     * @param {string} messageId
+     * @param {boolean} pinned
+     * @returns {void}
+     */
+    applyPin(messageId, pinned) {
+        const container = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+
+        if (pinned) {
+            const meta = this._messageMeta.get(messageId);
+            this._pinned.set(messageId, {
+                sender: meta?.sender ?? container?.querySelector('.chat-sender')?.textContent ?? '?',
+                rawText: meta?.rawText ?? container?.querySelector('.chat-markdown')?.textContent ?? '',
+                pinnedAt: Date.now(),
+            });
+            for (const key of this._pinned.keys()) {
+                if (this._pinned.size <= this._pinnedCap) break;
+                this._pinned.delete(key);
+            }
+        } else {
+            this._pinned.delete(messageId);
+        }
+
+        const msg = container?.querySelector('.chat-message');
+        if (msg) {
+            msg.classList.toggle('chat-message-pinned', pinned);
+            let badge = msg.querySelector('.chat-pinned-badge');
+            if (pinned && !badge) {
+                badge = document.createElement('span');
+                badge.className = 'chat-pinned-badge';
+                badge.dataset.tip = 'Pinned';
+                badge.innerHTML = this._pinBadgeSvg;
+                msg.querySelector('.chat-timestamp')?.insertAdjacentElement('beforebegin', badge);
+            } else if (!pinned && badge) {
+                badge.remove();
+            }
+            const pinBtn = msg.querySelector('.msg-action-pin-btn');
+            if (pinBtn) {
+                pinBtn.classList.toggle('msg-action-pinned', pinned);
+                pinBtn.dataset.tip = pinned ? 'Unpin message' : 'Pin message';
+            }
+        }
+
+        this._renderPinnedPanel();
+    }
+
+    /**
+     * Repopulates the "Pinned messages" popover (`#pinned-messages-panel`)
+     * from `_pinned` and updates the trigger button's count badge. Called
+     * after every pin/unpin/delete that touches `_pinned` — cheap since
+     * pins are rare and the list is capped at `_pinnedCap`.
+     * @returns {void}
+     */
+    _renderPinnedPanel() {
+        const badge = document.getElementById('pinned-messages-badge');
+        const panel = document.getElementById('pinned-messages-panel');
+        if (!badge || !panel) return;
+
+        const count = this._pinned.size;
+        badge.textContent = String(count);
+        badge.style.display = count > 0 ? '' : 'none';
+
+        panel.innerHTML = '';
+        if (count === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'pinned-panel-empty';
+            empty.textContent = 'No pinned messages yet';
+            panel.appendChild(empty);
+            return;
+        }
+
+        const iAmModerator = this._isModerator();
+        // Most-recently-pinned first.
+        [...this._pinned.entries()].reverse().forEach(([messageId, entry]) => {
+            const row = document.createElement('div');
+            row.className = 'pinned-panel-row';
+
+            const main = document.createElement('div');
+            main.className = 'pinned-panel-row-main';
+            const preview = entry.rawText.length > 120 ? entry.rawText.slice(0, 120) + '…' : entry.rawText;
+            main.innerHTML = `<span class="pinned-panel-sender">${escapeHtml(entry.sender)}</span><span class="pinned-panel-preview">${escapeHtml(preview)}</span>`;
+            main.addEventListener('click', () => {
+                const target = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+                if (!target) return;
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                target.querySelector('.chat-message')?.classList.add('chat-message-highlight');
+                setTimeout(() => target.querySelector('.chat-message')?.classList.remove('chat-message-highlight'), 1500);
+            });
+            row.appendChild(main);
+
+            if (iAmModerator) {
+                const unpinBtn = document.createElement('button');
+                unpinBtn.type = 'button';
+                unpinBtn.className = 'pinned-panel-unpin-btn';
+                unpinBtn.dataset.tip = 'Unpin';
+                unpinBtn.textContent = '×';
+                unpinBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.applyPin(messageId, false);
+                    this.onUnpinMessage?.(messageId);
+                });
+                row.appendChild(unpinBtn);
+            }
+
+            panel.appendChild(row);
+        });
     }
 
     /**

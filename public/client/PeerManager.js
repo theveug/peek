@@ -1168,6 +1168,16 @@ export class PeerManager {
                 if (this._chatMessageOwners.get(msg.messageId) !== peerId) return;
                 this._chatMessageOwners.delete(msg.messageId);
                 this.ui.applyChatDelete(msg.messageId);
+            } else if (msg.type === 'pin-message' || msg.type === 'unpin-message') {
+                if (this.ui.isBlocked(peerId)) return;
+                if (typeof msg.messageId !== 'string') return;
+                // Moderator-gated, but checked against our own synced knowledge of
+                // who's a moderator (kept current via 'moderator-update'/'init'), not
+                // anything the sender claims — same P2P trust boundary already used
+                // for chat-edit/chat-delete's author check just above, applied to
+                // moderator status instead of message ownership.
+                if (!this.ui.moderatorPeerIds.has(peerId)) return;
+                this.ui.applyPin(msg.messageId, msg.type === 'pin-message');
             } else if (msg.type === 'reaction') {
                 if (this.ui.isBlocked(peerId)) return;
                 this.ui.addReaction(msg.messageId, msg.emoji, msg.nickname, peerId);
@@ -1479,6 +1489,21 @@ export class PeerManager {
     /** Sends a reaction toggle to every peer. */
     broadcastReaction(messageId, emoji, nickname) {
         const msg = JSON.stringify({ type: 'reaction', messageId, emoji, nickname });
+        for (const dc of Object.values(this.dataChannels)) {
+            if (dc.readyState === 'open') dc.send(msg);
+        }
+    }
+
+    /** Pins/unpins a message for every peer. Receivers verify the sender is a moderator. */
+    broadcastPin(messageId) {
+        const msg = JSON.stringify({ type: 'pin-message', messageId });
+        for (const dc of Object.values(this.dataChannels)) {
+            if (dc.readyState === 'open') dc.send(msg);
+        }
+    }
+
+    broadcastUnpin(messageId) {
+        const msg = JSON.stringify({ type: 'unpin-message', messageId });
         for (const dc of Object.values(this.dataChannels)) {
             if (dc.readyState === 'open') dc.send(msg);
         }

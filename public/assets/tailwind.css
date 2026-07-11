@@ -672,6 +672,10 @@ body:hover #controls {
   color: var(--red);
 }
 
+.msg-action-pin-btn.msg-action-pinned {
+  color: var(--accent);
+}
+
 /* Two-step delete confirm — armed state after the first click. */
 .msg-action-btn.is-armed {
   color: #fff;
@@ -726,6 +730,105 @@ body:hover #controls {
 
 .chat-edit-hint button:hover {
   text-decoration: underline;
+}
+
+/* ===== Pinned messages (see client/ChatUI.js applyPin/_renderPinnedPanel) ===== */
+.chat-message-pinned {
+  box-shadow: inset 2px 0 0 var(--accent);
+  border-radius: 0.5rem;
+}
+
+.chat-pinned-badge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.pinned-badge-count {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+}
+
+.pinned-panel {
+  position: absolute;
+  top: 45px;
+  right: 8px;
+  width: 300px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  z-index: 40;
+  padding: 6px;
+}
+
+.pinned-panel.hidden {
+  display: none;
+}
+
+.pinned-panel-empty {
+  padding: 20px 8px;
+  text-align: center;
+  color: var(--t3);
+  font-size: 12px;
+}
+
+.pinned-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.pinned-panel-row:hover {
+  background: var(--bg4);
+}
+
+.pinned-panel-row-main {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pinned-panel-sender {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t1);
+}
+
+.pinned-panel-preview {
+  font-size: 12px;
+  color: var(--t2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pinned-panel-unpin-btn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--t3);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.pinned-panel-unpin-btn:hover {
+  background: var(--bg5);
+  color: var(--red);
 }
 
 /* ===== Reactions ===== */
@@ -1049,6 +1152,7 @@ a.link-preview:hover {
    .collapsed state removes the whole header from layout), so no extra
    show/hide logic is needed here. */
 .panel-close-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -24,6 +24,8 @@ const debug = new DebugPanel(peerManager);
 ui.onWatchChange = (streamKey, watched) => peerManager.setWatched(streamKey, watched);
 ui.onEditMessage = (messageId, text) => peerManager.broadcastChatEdit(messageId, text);
 ui.onDeleteMessage = (messageId) => peerManager.broadcastChatDelete(messageId);
+ui.onPinMessage = (messageId) => peerManager.broadcastPin(messageId);
+ui.onUnpinMessage = (messageId) => peerManager.broadcastUnpin(messageId);
 ui.onPipExit = () => peerManager.handleTabVisibility(document.hidden);
 ui.onModeratorAction = (action, peerId) => {
     if (action === 'stop-stream') peerManager.requestStopStream(peerId);

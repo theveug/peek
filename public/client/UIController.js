@@ -40,6 +40,7 @@ export class UIController {
             getNickname: (id) => this._peerNickname(id),
             avatarInitials: (name) => this._avatarInitials(name),
             getAllNicknames: () => this._allNicknames(),
+            isModerator: () => !!this.selfPeerId && this.moderatorPeerIds.has(this.selfPeerId),
         });
         // A dragged self-view PiP's saved left/top can end up off-screen after the
         // window shrinks (e.g. undocking to a smaller monitor) — reclamp on resize.
@@ -176,9 +177,12 @@ export class UIController {
     set onPollVote(fn) { this.chat.onPollVote = fn; }
     set onEditMessage(fn) { this.chat.onEditMessage = fn; }
     set onDeleteMessage(fn) { this.chat.onDeleteMessage = fn; }
+    set onPinMessage(fn) { this.chat.onPinMessage = fn; }
+    set onUnpinMessage(fn) { this.chat.onUnpinMessage = fn; }
     addChatMessage(...a) { return this.chat.addChatMessage(...a); }
     applyChatEdit(...a) { return this.chat.applyChatEdit(...a); }
     applyChatDelete(...a) { return this.chat.applyChatDelete(...a); }
+    applyPin(...a) { return this.chat.applyPin(...a); }
     addSystemMessage(...a) { return this.chat.addSystemMessage(...a); }
     addPollMessage(...a) { return this.chat.addPollMessage(...a); }
     updatePollVote(...a) { return this.chat.updatePollVote(...a); }
