@@ -1,5 +1,6 @@
 import { playSound } from './SoundPlayer.js';
 import { escapeHtml } from './escapeHtml.js';
+import { openEmojiPicker } from './EmojiPicker.js';
 
 /**
  * Chat panel behavior: messages, typing indicators, reactions, polls,
@@ -180,8 +181,6 @@ export class ChatUI {
         preview.classList.remove('hidden');
     }
 
-    _emojiSet = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
-
     /**
      * Attaches the hover action bar (Copy + Reply + React, plus Edit + Delete
      * on the local user's own messages) to a rendered message element,
@@ -278,28 +277,9 @@ export class ChatUI {
 
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            document.querySelectorAll('.emoji-picker').forEach(p => p.remove());
-            const picker = document.createElement('div');
-            picker.className = 'emoji-picker';
-            const chatLog = document.getElementById('chat-log');
-            if (chatLog && msgEl.getBoundingClientRect().top - chatLog.getBoundingClientRect().top < 40) {
-                picker.classList.add('emoji-picker-below');
-            }
-            this._emojiSet.forEach(emoji => {
-                const eb = document.createElement('button');
-                eb.textContent = emoji;
-                eb.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    picker.remove();
-                    if (this._onReaction) this._onReaction(messageId, emoji);
-                });
-                picker.appendChild(eb);
+            openEmojiPicker(btn, (emoji) => {
+                if (this._onReaction) this._onReaction(messageId, emoji);
             });
-            msgEl.appendChild(picker);
-            setTimeout(() => {
-                const close = () => { picker.remove(); document.removeEventListener('click', close); };
-                document.addEventListener('click', close);
-            }, 0);
         });
     }
 

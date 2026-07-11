@@ -8,6 +8,7 @@ import { QuickRoomSettings } from './QuickRoomSettings.js';
 import { InvitePopover } from './InvitePopover.js';
 import { TopbarIdentity } from './TopbarIdentity.js';
 import { initTooltips } from './Tooltip.js';
+import { openEmojiPicker } from './EmojiPicker.js';
 import { getOwnerToken, setOwnerToken } from './ownerTokens.js';
 
 initTooltips();
@@ -252,6 +253,27 @@ if (fileAttachBtn && fileInput) {
         if (e.key === 'Escape' && !menu.classList.contains('hidden')) close();
     });
 })();
+
+function insertAtCaret(el, text) {
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    el.value = el.value.slice(0, start) + text + el.value.slice(end);
+    el.selectionStart = el.selectionEnd = start + text.length;
+}
+
+document.getElementById('composer-emoji-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // Anchor to the persistent "+" trigger, not this button itself — by the
+    // time this listener runs, initComposerPlusMenu's own generic
+    // close-on-any-option-click listener (registered first, so it runs
+    // first) has already hidden the menu this button lives in, which would
+    // zero out this button's own getBoundingClientRect().
+    openEmojiPicker(document.getElementById('composer-plus-btn'), (emoji) => {
+        insertAtCaret(input, emoji);
+        autoGrowMessageInput();
+        input.focus();
+    });
+});
 
 document.getElementById('files-dropzone-card')?.addEventListener('click', () => fileInput?.click());
 

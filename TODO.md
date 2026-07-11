@@ -37,10 +37,9 @@ Not yet scoped/estimated — captured here so they don't get lost; move into a p
 
 ## Meeting-recap workflow (planned 2026-07-11 — build in this order, each item depends on the last)
 
-Grew out of wanting Session recap export to double as a lightweight "meeting minutes" tool for small groups (mark comments as decisions, not just archive the raw log). Each item below is a prerequisite for the next.
+Grew out of wanting Session recap export to double as a lightweight "meeting minutes" tool for small groups (mark comments as decisions, not just archive the raw log). Each item below is a prerequisite for the next. **1. Emoji picker (browsable/searchable) shipped 2026-07-11** — see `CHANGELOG.md`.
 
-- [ ] **1. Emoji picker (browsable/searchable)** — the existing reaction picker (`ChatUI.js`'s `_emojiSet`) is a hardcoded 6-emoji array; needed a real picker so reactions can double as an informal "upvote" signal on a decision, and so chat composing gets a Discord-style emoji browser at the same time (same component, two call sites: the reaction popover and a new composer "+"-menu button). Stays offline-compliant since emoji render via the OS's native font (no images/network) — only needs a small vendored static emoji-metadata JSON (name/category/search keywords, the same solved dataset libraries like `emoji-picker-element` ship) for search/category browsing.
-- [ ] **2. Pinned messages** — session-lifetime, gated behind the existing moderator tiers (`SessionManager.js`'s creator/moderator split). This becomes the "mark as decision/sticky" mechanism for meetings, rather than building a bespoke decisions/voting data model — reuses reactions (from item 1) as the informal upvote signal instead of a dedicated vote count.
+- [ ] **2. Pinned messages** — session-lifetime, gated behind the existing moderator tiers (`SessionManager.js`'s creator/moderator split). This becomes the "mark as decision/sticky" mechanism for meetings, rather than building a bespoke decisions/voting data model — reuses reactions (now backed by the real emoji picker) as the informal upvote signal instead of a dedicated vote count.
 - [ ] **3. Session recap export** — before a session ends, bundle the in-memory chat log + shared files into a single local client-side zip download. With pinned messages (item 2) in place, the export can surface a "Decisions" section built from pinned messages, turning the recap into real meeting minutes rather than just a raw log dump. Doesn't violate no-persistence since nothing is stored server-side or between sessions.
 
 ## Moderation
