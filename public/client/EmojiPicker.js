@@ -261,7 +261,14 @@ function initGlobalListeners() {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isOpen) close();
     });
-    window.addEventListener('scroll', close, true);
+    // capture:true so this sees scrolls on any scrollable ancestor of the
+    // anchor (e.g. the chat log) even though `scroll` doesn't bubble — but
+    // that also means it sees scrolls *inside the popover itself* (the
+    // emoji grid, or even a text input's internal caret-scroll on click),
+    // which must not close it.
+    window.addEventListener('scroll', (e) => {
+        if (isOpen && !popover.contains(e.target)) close();
+    }, true);
     window.addEventListener('resize', () => {
         // offsetParent is null once the anchor (or an ancestor, e.g. a
         // closed composer-plus-menu) goes display:none — its rect would
