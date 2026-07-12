@@ -199,15 +199,50 @@ export class DebugPanel {
         }
 
         const audioLines = [];
+        let audioInbound = null;
+        let videoInbound = null;
         stats.forEach((r) => {
             if (r.type === 'outbound-rtp' && r.kind === 'audio') {
                 audioLines.push(`<span style="color:#888;">mic out:</span> ${(r.bytesSent / 1024).toFixed(1)}KB`);
             }
             if (r.type === 'inbound-rtp' && r.kind === 'audio') {
                 audioLines.push(`<span style="color:#888;">audio in (${r.trackIdentifier?.slice(0, 6) || '?'}):</span> ${(r.bytesReceived / 1024).toFixed(1)}KB, lost ${r.packetsLost ?? '?'}`);
+                audioInbound = r;
+            }
+            if (r.type === 'inbound-rtp' && r.kind === 'video') {
+                videoInbound = r;
             }
         });
 
-        return `<br>${pairHtml}${audioLines.length ? '<br>' + audioLines.join('<br>') : ''}`;
+        return `<br>${pairHtml}${audioLines.length ? '<br>' + audioLines.join('<br>') : ''}${this._describeAvSync(audioInbound, videoInbound)}`;
+    }
+
+    // Temporary diagnostic (see the "audio out of sync with webcam" report) —
+    // audio and video are always separate MediaStreams/elements in this app
+    // (one mic feed has to cover both cam and screen contexts, so it's never
+    // bundled into either video stream's msid), so the browser has no shared
+    // basis to sync their playout. `estimatedPlayoutTimestamp` is a common
+    // wall-clock field on both audio and video inbound-rtp stats, so diffing
+    // it directly is the actual current A/V gap, not a guess — a large or
+    // growing number here is the smoking gun; a small/flat number means the
+    // desync is coming from somewhere else (e.g. blur/noise-suppression
+    // processing latency, or perception). `jitterBufferDelay /
+    // jitterBufferEmittedCount` shows how much each stream is independently
+    // buffering, which is the mechanism behind that gap.
+    _describeAvSync(audioInbound, videoInbound) {
+        if (!audioInbound && !videoInbound) return '';
+        const fmtBuf = (r) => (r && r.jitterBufferEmittedCount)
+            ? `${(r.jitterBufferDelay / r.jitterBufferEmittedCount * 1000).toFixed(0)}ms`
+            : 'n/a';
+        let line = `<br><span style="color:#888;">jitter buf — audio:</span> ${fmtBuf(audioInbound)} <span style="color:#888;">video:</span> ${fmtBuf(videoInbound)}`;
+
+        if (audioInbound?.estimatedPlayoutTimestamp && videoInbound?.estimatedPlayoutTimestamp) {
+            const gapMs = audioInbound.estimatedPlayoutTimestamp - videoInbound.estimatedPlayoutTimestamp;
+            const color = Math.abs(gapMs) > 150 ? '#f44' : Math.abs(gapMs) > 60 ? '#ff0' : '#0f0';
+            line += `<br><span style="color:#888;">A/V playout gap:</span> <span style="color:${color};">${gapMs > 0 ? '+' : ''}${gapMs.toFixed(0)}ms</span> ${gapMs > 0 ? '(audio ahead)' : '(video ahead)'}`;
+        } else {
+            line += `<br><span style="color:#666;">A/V playout gap: estimatedPlayoutTimestamp unsupported in this browser</span>`;
+        }
+        return line;
     }
 }
