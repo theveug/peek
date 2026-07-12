@@ -53,6 +53,7 @@ export class UIController {
         this._sharedFiles = [];
         this.maxPeers = 6;
         this.roomName = null;
+        this.roomCode = null;
         // Local-only playback volume per remote peer (0-1, default 1). Not
         // persisted: peerIds are freshly assigned every reconnect, so a
         // localStorage entry keyed by peerId would never be looked up again.
@@ -74,11 +75,12 @@ export class UIController {
 
     // --- Files tab ---
 
-    /** Wires the chat/files tab switcher and the "download all" button. */
+    /** Wires the chat/files tab switcher, the "download all" button, and the recap export button. */
     _initFilesTab() {
         document.getElementById('tab-chat').addEventListener('click', () => this._switchTab('chat'));
         document.getElementById('tab-files').addEventListener('click', () => this._switchTab('files'));
         document.getElementById('files-download-all').addEventListener('click', () => this._downloadAllFiles());
+        document.getElementById('export-recap-btn')?.addEventListener('click', () => this.exportSessionRecap());
     }
 
     /** @param {'chat'|'files'} tab */
@@ -135,10 +137,16 @@ export class UIController {
         document.getElementById('files-list').appendChild(row);
     }
 
-    /** Zips (client-side, via JSZip) and downloads every file shared this session. */
-    async _downloadAllFiles() {
-        if (!this._sharedFiles.length || typeof JSZip === 'undefined') return;
-        const zip = new JSZip();
+    /**
+     * Adds every entry in `this._sharedFiles` into `zip` under `folder`
+     * (root if omitted), de-duplicating identically-named files as
+     * "name (1).ext", "name (2).ext", etc. Shared by `_downloadAllFiles()`
+     * and `exportSessionRecap()` so the naming logic exists exactly once.
+     * @param {JSZip} zip
+     * @param {string} [folder='']
+     * @returns {void}
+     */
+    _addFilesToZip(zip, folder = '') {
         const seen = {};
         this._sharedFiles.forEach(f => {
             let name = f.fileName;
@@ -151,15 +159,87 @@ export class UIController {
             } else {
                 seen[name] = 0;
             }
-            zip.file(name, f.blob);
+            zip.file(folder ? `${folder}/${name}` : name, f.blob);
         });
+    }
+
+    /**
+     * Generates `zip` and triggers a browser download as `filename` — the
+     * blob-URL-and-`<a download>` dance shared by `_downloadAllFiles()` and
+     * `exportSessionRecap()`.
+     * @param {JSZip} zip
+     * @param {string} filename
+     * @returns {Promise<void>}
+     */
+    async _downloadZip(zip, filename) {
         const content = await zip.generateAsync({ type: 'blob' });
         const url = URL.createObjectURL(content);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'peek-files.zip';
+        a.download = filename;
         a.click();
         URL.revokeObjectURL(url);
+    }
+
+    /** Zips (client-side, via JSZip) and downloads every file shared this session. */
+    async _downloadAllFiles() {
+        if (!this._sharedFiles.length || typeof JSZip === 'undefined') return;
+        const zip = new JSZip();
+        this._addFilesToZip(zip);
+        await this._downloadZip(zip, 'peek-files.zip');
+    }
+
+    /**
+     * Builds the `recap.md` text for exportSessionRecap(): a "Decisions"
+     * section from pinned messages, then a "Chat transcript" section from
+     * the retained message history — both supplied by ChatUI's read-only
+     * accessors (`getPinnedMessages()`/`getMessageHistory()`).
+     * @param {{sender: string, text: string, pinnedAt: number}[]} pinned
+     * @param {{sender: string, text: string, timestamp: string}[]} history
+     * @returns {string}
+     */
+    _buildRecapText(pinned, history) {
+        const title = this.roomName || this.roomCode || 'Peek session';
+        const lines = [`# ${title} — session recap`, `_Exported ${new Date().toLocaleString()}_`, ''];
+
+        lines.push('## Decisions', '');
+        if (pinned.length) {
+            pinned.forEach(p => lines.push(`- **${p.sender}**: ${p.text}`));
+        } else {
+            lines.push('_No messages were pinned this session._');
+        }
+        lines.push('');
+
+        lines.push('## Chat transcript', '');
+        lines.push('_Only the most recent messages still held in memory are included — Peek keeps no server-side chat history._', '');
+        if (history.length) {
+            history.forEach(m => lines.push(`_[${m.timestamp}]_ **${m.sender}**: ${m.text}`));
+        } else {
+            lines.push('_No chat messages this session._');
+        }
+        lines.push('');
+
+        return lines.join('\n');
+    }
+
+    /**
+     * Bundles the retained chat transcript, pinned "Decisions", and every
+     * shared file into one zip download — the client-side "session recap"
+     * (`TODO.md`'s meeting-recap workflow, step 3). Available with zero
+     * files/pins too (a text-only recap is still useful), unlike
+     * `_downloadAllFiles()` which only ever appears once 2+ files exist.
+     * Exports only what this local peer has personally already seen — no
+     * moderator gating, same trust level as a local screenshot.
+     * @returns {Promise<void>}
+     */
+    async exportSessionRecap() {
+        if (typeof JSZip === 'undefined') return;
+        const zip = new JSZip();
+        zip.file('recap.md', this._buildRecapText(this.chat.getPinnedMessages(), this.chat.getMessageHistory()));
+        this._addFilesToZip(zip, 'files');
+        const dateStamp = new Date().toISOString().slice(0, 10);
+        const slug = (this.roomName || this.roomCode || 'session').replace(/[^a-z0-9-]+/gi, '-');
+        await this._downloadZip(zip, `peek-recap-${slug}-${dateStamp}.zip`);
     }
 
     /** @param {number} bytes @returns {string} human-readable size, e.g. "1.2 MB". */
@@ -1210,6 +1290,7 @@ export class UIController {
      */
     setRoomMeta({ name, code, hasPassword, maxPeers }) {
         this.roomName = name || null;
+        this.roomCode = code || null;
         this.maxPeers = maxPeers || 6;
 
         const nameEl = document.getElementById('topbar-room-name');

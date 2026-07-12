@@ -29,9 +29,12 @@ export class ChatUI {
         this._replyTo = null;
         this._polls = new Map(); // keyed by peer-supplied pollId — Map, not {}, so a "__proto__" id can't poison lookups
         this.onPollVote = null;
-        // messageId → { isSelf, rawText, sender } for plain chat messages — powers the
-        // Copy button (post-edit), inline editing, the self-only edit/delete
-        // action-bar buttons, and pin snapshots (sender). Session-scoped, capped in addChatMessage.
+        // messageId → { isSelf, rawText, sender, timestamp } for plain chat messages —
+        // powers the Copy button (post-edit), inline editing, the self-only edit/delete
+        // action-bar buttons, pin snapshots, and getMessageHistory()'s recap-export
+        // transcript. Session-scoped, capped in addChatMessage. A Map, not {}, so
+        // iteration order is insertion order (chronological) for free — overwriting an
+        // existing key (an edit) doesn't move its position.
         this._messageMeta = new Map();
         this.onEditMessage = null;   // (messageId, newText) — wired to PeerManager.broadcastChatEdit
         this.onDeleteMessage = null; // (messageId) — wired to PeerManager.broadcastChatDelete
@@ -855,7 +858,7 @@ export class ChatUI {
         this._wireReplyQuote(msgContainer);
 
         const msg = msgContainer.querySelector('.chat-message');
-        this._messageMeta.set(messageId, { isSelf, rawText: text, sender });
+        this._messageMeta.set(messageId, { isSelf, rawText: text, sender, timestamp });
         // Cap independently of the DOM prune below — other message types
         // (system/file/poll) also evict chat messages from the log's front,
         // so DOM pruning alone would let the map grow all session.
@@ -995,6 +998,25 @@ export class ChatUI {
         this._messageMeta.delete(messageId);
         this._reactions.delete(messageId);
         if (this._pinned.delete(messageId)) this._renderPinnedPanel();
+    }
+
+    /**
+     * Read-only chat transcript for session-recap export (UIController.js's
+     * exportSessionRecap()) — chronological (Map insertion order), one entry
+     * per plain chat message still held in `_messageMeta`'s 300-message cap.
+     * @returns {{sender: string, text: string, timestamp: string}[]}
+     */
+    getMessageHistory() {
+        return [...this._messageMeta.values()].map(({ sender, rawText, timestamp }) => ({ sender, text: rawText, timestamp }));
+    }
+
+    /**
+     * Read-only pinned-message list for session-recap export's "Decisions"
+     * section — chronological by pin time (Map insertion order).
+     * @returns {{sender: string, text: string, pinnedAt: number}[]}
+     */
+    getPinnedMessages() {
+        return [...this._pinned.values()].map(({ sender, rawText, pinnedAt }) => ({ sender, text: rawText, pinnedAt }));
     }
 
     _pinBadgeSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3"><path fill-rule="evenodd" clip-rule="evenodd" d="M10 2C8.28365 2 6.5916 2.10551 4.93005 2.31046C3.80579 2.44913 3 3.41374 3 4.51661V17.25C3 17.5078 3.13239 17.7475 3.35057 17.8848C3.56875 18.0221 3.84215 18.0377 4.07455 17.9261L10 15.0819L15.9255 17.9261C16.1578 18.0377 16.4312 18.0221 16.6494 17.8848C16.8676 17.7475 17 17.5078 17 17.25V4.51661C17 3.41374 16.1942 2.44913 15.07 2.31046C13.4084 2.10551 11.7163 2 10 2Z" /></svg>';
