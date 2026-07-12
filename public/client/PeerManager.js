@@ -46,6 +46,10 @@ export class PeerManager {
         this.deafened = false;
         this.status = 'online';
         this._manualStatus = null;
+        // Free-text caption alongside the online/away/dnd enum (e.g. "In a meeting"),
+        // persisted like nickname and broadcast bundled into the same status-update
+        // message — untouched by _reconcileAwayStatus's automatic enum flips.
+        this.statusText = (localStorage.getItem('statusText') || '').trim().slice(0, 60);
         this.dataChannels = {};
         // messageId → authoring peerId, for chat-edit/chat-delete authorization.
         // Capped at 600 entries; reset on 'init' (peerIds don't survive reconnects,
@@ -200,6 +204,7 @@ export class PeerManager {
                     this.broadcastDeafenStatus();
                     this.broadcastNickname();
                     this.broadcastStatus();
+                    this.broadcastAvatar();
                 }, 500);
                 break;
 
@@ -248,6 +253,7 @@ export class PeerManager {
                 this.broadcastDeafenStatus();
                 this.broadcastNickname();
                 this.broadcastStatus();
+                this.broadcastAvatar();
                 this.broadcastCamStreamId();
                 this.applyQualitySettings();
                 this.applyCamQualitySettings();
@@ -313,8 +319,23 @@ export class PeerManager {
                 this.ui.updateParticipantNickname(from, payload.nickname);
                 break;
 
+            case 'avatar-update':
+                // Never trust a peer's declared avatarDataUrl, even though our
+                // own broadcastAvatar() only ever sends a canvas-re-encoded
+                // image — a modified client could send anything. An empty
+                // string is the valid "avatar removed" signal; anything else
+                // must pass the strict allowlist or gets dropped outright.
+                if (payload.avatarDataUrl === '' || this._isValidAvatarDataUrl(payload.avatarDataUrl)) {
+                    this.ui.updateParticipantAvatar(from, payload.avatarDataUrl);
+                }
+                break;
+
             case 'status-update':
-                this.ui.updateParticipantStatus(from, payload.status);
+                // Defensive cap on receive too — a modified client could send an
+                // arbitrarily long string; rendered via textContent (see
+                // UIController.updateParticipantStatus), so this is a length/DoS
+                // guard, not an XSS one.
+                this.ui.updateParticipantStatus(from, payload.status, String(payload.statusText || '').slice(0, 60));
                 break;
 
             case 'typing':
@@ -846,6 +867,18 @@ export class PeerManager {
     }
 
     /**
+     * Sends the current (localStorage-persisted) avatar to every peer, or an
+     * empty string if none is set (the "no custom avatar" signal). Like
+     * nickname/status, this is relayed via the WebSocket signaling server
+     * (WebSocketServer.js's broadcast fall-through), not a P2P data channel —
+     * blind-relayed to every other peer in the session, never stored.
+     */
+    broadcastAvatar() {
+        const avatarDataUrl = localStorage.getItem('avatarDataUrl') || '';
+        this.send('avatar-update', null, { avatarDataUrl });
+    }
+
+    /**
      * Sets and broadcasts the local presence status, and updates the local
      * UI to match. Does not touch `_manualStatus` — callers that represent a
      * deliberate user choice should use `setManualStatus` instead.
@@ -854,8 +887,8 @@ export class PeerManager {
      */
     setStatus(status) {
         this.status = status;
-        this.send('status-update', null, { status });
-        this.ui.updateParticipantStatus(this.peerId, status);
+        this.send('status-update', null, { status, statusText: this.statusText });
+        this.ui.updateParticipantStatus(this.peerId, status, this.statusText);
         this.ui.updateIdentityStatus?.(status);
     }
 
@@ -872,9 +905,23 @@ export class PeerManager {
         this.setStatus(status);
     }
 
+    /**
+     * Sets, persists, and broadcasts the free-text status caption — separate
+     * from the online/away/dnd enum, so it's untouched by the automatic
+     * away-status reconciliation in `_reconcileAwayStatus`.
+     * @param {string} text
+     * @returns {void}
+     */
+    setStatusText(text) {
+        this.statusText = (text || '').trim().slice(0, 60);
+        localStorage.setItem('statusText', this.statusText);
+        this.send('status-update', null, { status: this.status, statusText: this.statusText });
+        this.ui.updateParticipantStatus(this.peerId, this.status, this.statusText);
+    }
+
     /** Re-sends the current status to every peer (e.g. on a new peer joining). */
     broadcastStatus() {
-        this.send('status-update', null, { status: this.status });
+        this.send('status-update', null, { status: this.status, statusText: this.statusText });
     }
 
     /**
@@ -1248,6 +1295,31 @@ export class PeerManager {
     _safeMimeType(fileName) {
         const ext = (fileName || '').split('.').pop().toLowerCase();
         return this._rasterMimeByExt[ext] || 'application/octet-stream';
+    }
+
+    // Strict allowlist for avatar-update payloads — see the receive-side
+    // 'avatar-update' case. Only real raster MIME prefixes are accepted, and
+    // the base64 alphabet ([A-Za-z0-9+/=]) structurally can't contain '"',
+    // '<', or '>', so a validated string can never break out of an `img.src`
+    // assignment even before considering that we only ever assign it via a
+    // DOM property, never string-interpolated HTML.
+    _avatarDataUrlPattern = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/;
+    _maxAvatarDataUrlLength = 40000; // well under the WS server's 64KB maxPayload, leaving room for the JSON envelope
+
+    /**
+     * Validates a peer-supplied avatar data URL before it's ever used as an
+     * `img.src` — our own `broadcastAvatar()` only ever sends a
+     * canvas-re-encoded image (see SettingsPanel._processAvatarFile), but a
+     * modified client could send anything, so this re-derives trust from
+     * scratch rather than believing the sender.
+     * @param {unknown} value
+     * @returns {boolean}
+     */
+    _isValidAvatarDataUrl(value) {
+        return typeof value === 'string'
+            && value.length > 0
+            && value.length <= this._maxAvatarDataUrlLength
+            && this._avatarDataUrlPattern.test(value);
     }
 
     /**

@@ -51,6 +51,13 @@ export class UIController {
             });
         });
         this._sharedFiles = [];
+        // Every nickname seen this session (self + every peer who ever sent a real
+        // nickname), for session-recap export's "Attendees" section — deliberately
+        // never pruned on leave/removeParticipant, unlike peerVolumes/blockedPeerIds
+        // above, since someone who left mid-session still attended it. Not reset in
+        // clearAllParticipants() either: an 'init' there is a reconnect within the
+        // same session (fresh peerIds, not a new room), so past attendees still count.
+        this._attendees = new Set();
         this.maxPeers = 6;
         this.roomName = null;
         this.roomCode = null;
@@ -62,6 +69,10 @@ export class UIController {
         // until unblocked. Same non-persistence rationale as peerVolumes above — cleared
         // in clearAllParticipants(), never written to localStorage.
         this.blockedPeerIds = new Set();
+        // peerId → validated `data:image/(webp|jpeg|png);base64,...` avatar, received
+        // via PeerManager's 'avatar-update' (already allowlist-validated there before
+        // this map ever sees it). Same non-persistence rationale as peerVolumes above.
+        this.peerAvatars = new Map();
         // Overall call volume, multiplied with each peer's own volume. This one
         // *is* persisted — it's a personal preference, not tied to any peer/session.
         this.masterCallVolume = parseFloat(localStorage.getItem('masterCallVolume'));
@@ -190,23 +201,57 @@ export class UIController {
     }
 
     /**
-     * Builds the `recap.md` text for exportSessionRecap(): a "Decisions"
-     * section from pinned messages, then a "Chat transcript" section from
-     * the retained message history — both supplied by ChatUI's read-only
-     * accessors (`getPinnedMessages()`/`getMessageHistory()`).
+     * Every nickname seen this session, for session-recap export's
+     * "Attendees" section — sorted for a stable, readable list.
+     * @returns {string[]}
+     */
+    getAttendees() {
+        return [...this._attendees].sort((a, b) => a.localeCompare(b));
+    }
+
+    /**
+     * Builds the `recap.md` text for exportSessionRecap(): an "Attendees"
+     * list, a "Decisions" section from pinned messages, a "Polls" section,
+     * then a "Chat transcript" section from the retained message history —
+     * supplied by `getAttendees()` and ChatUI's read-only accessors
+     * (`getPinnedMessages()`/`getPollSummaries()`/`getMessageHistory()`).
+     * @param {string[]} attendees
      * @param {{sender: string, text: string, pinnedAt: number}[]} pinned
+     * @param {{sender: string, question: string, totalVotes: number, options: {text: string, count: number, voters: string[]}[]}[]} polls
      * @param {{sender: string, text: string, timestamp: string}[]} history
      * @returns {string}
      */
-    _buildRecapText(pinned, history) {
+    _buildRecapText(attendees, pinned, polls, history) {
         const title = this.roomName || this.roomCode || 'Peek session';
         const lines = [`# ${title} — session recap`, `_Exported ${new Date().toLocaleString()}_`, ''];
+
+        lines.push('## Attendees', '');
+        if (attendees.length) {
+            attendees.forEach(name => lines.push(`- ${name}`));
+        } else {
+            lines.push('_No attendees recorded._');
+        }
+        lines.push('');
 
         lines.push('## Decisions', '');
         if (pinned.length) {
             pinned.forEach(p => lines.push(`- **${p.sender}**: ${p.text}`));
         } else {
             lines.push('_No messages were pinned this session._');
+        }
+        lines.push('');
+
+        lines.push('## Polls', '');
+        if (polls.length) {
+            polls.forEach(poll => {
+                lines.push(`- **${poll.question}** (by ${poll.sender}, ${poll.totalVotes} ${poll.totalVotes === 1 ? 'vote' : 'votes'})`);
+                poll.options.forEach(o => {
+                    const who = o.voters.length ? ` — ${o.voters.join(', ')}` : '';
+                    lines.push(`  - ${o.text}: ${o.count}${who}`);
+                });
+            });
+        } else {
+            lines.push('_No polls were created this session._');
         }
         lines.push('');
 
@@ -223,19 +268,20 @@ export class UIController {
     }
 
     /**
-     * Bundles the retained chat transcript, pinned "Decisions", and every
-     * shared file into one zip download — the client-side "session recap"
-     * (`TODO.md`'s meeting-recap workflow, step 3). Available with zero
-     * files/pins too (a text-only recap is still useful), unlike
-     * `_downloadAllFiles()` which only ever appears once 2+ files exist.
-     * Exports only what this local peer has personally already seen — no
-     * moderator gating, same trust level as a local screenshot.
+     * Bundles the attendee list, retained chat transcript, pinned
+     * "Decisions", poll results, and every shared file into one zip
+     * download — the client-side "session recap" (`TODO.md`'s meeting-recap
+     * workflow, step 3). Available with zero files/pins/polls too (a
+     * text-only recap is still useful), unlike `_downloadAllFiles()` which
+     * only ever appears once 2+ files exist. Exports only what this local
+     * peer has personally already seen — no moderator gating, same trust
+     * level as a local screenshot.
      * @returns {Promise<void>}
      */
     async exportSessionRecap() {
         if (typeof JSZip === 'undefined') return;
         const zip = new JSZip();
-        zip.file('recap.md', this._buildRecapText(this.chat.getPinnedMessages(), this.chat.getMessageHistory()));
+        zip.file('recap.md', this._buildRecapText(this.getAttendees(), this.chat.getPinnedMessages(), this.chat.getPollSummaries(), this.chat.getMessageHistory()));
         this._addFilesToZip(zip, 'files');
         const dateStamp = new Date().toISOString().slice(0, 10);
         const slug = (this.roomName || this.roomCode || 'session').replace(/[^a-z0-9-]+/gi, '-');
@@ -865,14 +911,15 @@ export class UIController {
         if (document.getElementById(`participant-${peerId}`)) return;
         this.selfPeerId = peerId;
         const nickname = localStorage.getItem('nickname') || 'You';
+        this._attendees.add(nickname);
         this._createParticipantCard(peerId, nickname, true);
 
         const topbarName = document.getElementById('topbar-identity-name');
         const topbarAvatar = document.getElementById('topbar-identity-avatar');
         if (topbarName) topbarName.textContent = nickname;
         if (topbarAvatar) {
-            topbarAvatar.textContent = this._avatarInitials(nickname);
             topbarAvatar.style.background = this._avatarSquareColor(peerId, true);
+            this._renderAvatarInto(topbarAvatar, peerId, nickname);
         }
     }
 
@@ -906,6 +953,70 @@ export class UIController {
     _avatarInitials(displayName) {
         return displayName.split(/\s+/).map(w => w[0]).join('').substring(0, 2).toUpperCase()
             || displayName.substring(0, 2).toUpperCase();
+    }
+
+    /**
+     * Fills an avatar container (`.participant-avatar` or
+     * `#topbar-identity-avatar`) with either the peer's custom avatar image
+     * or the initials fallback — the single call site every avatar-render
+     * spot (`_createParticipantCard`, `addSelf`, `updateParticipantNickname`,
+     * `updateParticipantAvatar`) goes through, so "image vs. initials" logic
+     * exists exactly once. `el`'s own `background`/`textContent` still drive
+     * the initials look; an `<img class="avatar-img">` is layered in instead
+     * when a validated avatar exists (`.avatar-img` fills the container via
+     * `object-fit: cover`, see tailwind.css).
+     * @param {HTMLElement} el
+     * @param {string} peerId
+     * @param {string} displayName
+     * @returns {void}
+     */
+    _renderAvatarInto(el, peerId, displayName) {
+        if (!el) return;
+        const avatarDataUrl = this.peerAvatars.get(peerId);
+        if (avatarDataUrl) {
+            el.textContent = '';
+            let img = el.querySelector('.avatar-img');
+            if (!img) {
+                img = document.createElement('img');
+                img.className = 'avatar-img';
+                el.appendChild(img);
+            }
+            img.src = avatarDataUrl; // DOM property assignment, not string-interpolated HTML
+        } else {
+            el.querySelector('.avatar-img')?.remove();
+            el.textContent = this._avatarInitials(displayName);
+        }
+    }
+
+    /**
+     * Applies a peer's avatar-update (already allowlist-validated by
+     * PeerManager before this is ever called — see its `_isValidAvatarDataUrl`)
+     * to every avatar surface that shows peerId directly: participant cards
+     * and, for the local user, the top-bar identity pill. Chat-message
+     * avatars are a deliberate scope cut — ChatUI.addChatMessage() only ever
+     * receives a resolved nickname string, never a peerId (same limitation
+     * already documented for why per-peer block can't retroactively hide
+     * chat history).
+     * @param {string} peerId
+     * @param {string} avatarDataUrl - validated data URL, or '' to clear.
+     * @returns {void}
+     */
+    updateParticipantAvatar(peerId, avatarDataUrl) {
+        if (avatarDataUrl) this.peerAvatars.set(peerId, avatarDataUrl);
+        else this.peerAvatars.delete(peerId);
+
+        const card = document.getElementById(`participant-${peerId}`);
+        const cardAvatar = card?.querySelector('.participant-avatar');
+        if (cardAvatar) {
+            const nameEl = card.querySelector('.participant-name');
+            this._renderAvatarInto(cardAvatar, peerId, nameEl?.textContent || '?');
+        }
+
+        if (peerId === this.selfPeerId) {
+            const identityAvatar = document.getElementById('topbar-identity-avatar');
+            const identityName = document.getElementById('topbar-identity-name');
+            this._renderAvatarInto(identityAvatar, peerId, identityName?.textContent || '?');
+        }
     }
 
     /**
@@ -950,7 +1061,7 @@ export class UIController {
         const avatar = document.createElement('div');
         avatar.className = 'participant-avatar flex items-center justify-center w-9 h-9 text-white text-xs font-bold select-none';
         avatar.style.background = this._avatarSquareColor(peerId, isSelf);
-        avatar.textContent = this._avatarInitials(displayName);
+        this._renderAvatarInto(avatar, peerId, displayName);
 
         const statusDot = document.createElement('div');
         statusDot.className = 'participant-status-dot absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2';
@@ -1196,18 +1307,22 @@ export class UIController {
      * Updates one participant card's status dot color/icon and text label.
      * @param {string} peerId
      * @param {'online'|'away'|'dnd'|'offline'} status
+     * @param {string} [statusText] - free-text caption (e.g. "In a meeting");
+     *   shown instead of the plain enum label when set, same as Discord's
+     *   custom status message. The dot's color still always follows `status`.
      * @returns {void}
      */
-    updateParticipantStatus(peerId, status) {
+    updateParticipantStatus(peerId, status, statusText) {
         let el = document.getElementById(`participant-${peerId}`);
         if (!el) return;
         const dot = el.querySelector('.participant-status-dot');
         const label = el.querySelector('.participant-status-label');
         const color = this._statusColors[status] || this._statusColors.online;
         const text = this._statusLabels[status] || 'Online';
+        const displayText = statusText || text;
         if (dot) {
             dot.style.background = color;
-            dot.dataset.tip = text;
+            dot.dataset.tip = displayText;
             if (status === 'dnd') {
                 dot.innerHTML = `<svg viewBox="0 0 10 10" class="w-1.5 h-1.5" style="margin:auto"><rect x="2" y="4" width="6" height="2" rx="1" fill="white"/></svg>`;
             } else {
@@ -1215,7 +1330,7 @@ export class UIController {
             }
         }
         if (label) {
-            label.textContent = text;
+            label.textContent = displayText;
             label.className = `participant-status-label text-[10px]`;
             if (status === 'online') label.classList.add('text-emerald-400');
             else if (status === 'away') label.classList.add('text-yellow-400');
@@ -1268,6 +1383,7 @@ export class UIController {
         this.selfPeerId = null;
         this.peerVolumes.clear();
         this.blockedPeerIds.clear();
+        this.peerAvatars.clear();
         this._updateMemberCount();
     }
 
@@ -1480,16 +1596,17 @@ export class UIController {
             el = document.getElementById(`participant-${peerId}`);
         }
         if (!nickname) return;
+        this._attendees.add(nickname);
         const nameEl = el.querySelector('.participant-name');
         if (nameEl) nameEl.textContent = nickname;
         const avatar = el.querySelector('.flex-shrink-0 > div:first-child');
-        if (avatar) avatar.textContent = this._avatarInitials(nickname);
+        if (avatar) this._renderAvatarInto(avatar, peerId, nickname);
 
         if (peerId === this.selfPeerId) {
             const identityName = document.getElementById('topbar-identity-name');
             const identityAvatar = document.getElementById('topbar-identity-avatar');
             if (identityName) identityName.textContent = nickname;
-            if (identityAvatar) identityAvatar.textContent = this._avatarInitials(nickname);
+            if (identityAvatar) this._renderAvatarInto(identityAvatar, peerId, nickname);
         }
 
         if (this._pendingJoinToasts && this._pendingJoinToasts.has(peerId)) {

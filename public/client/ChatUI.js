@@ -45,6 +45,7 @@ export class ChatUI {
         this.onPinMessage = null;   // (messageId) — wired to PeerManager.broadcastPin
         this.onUnpinMessage = null; // (messageId) — wired to PeerManager.broadcastUnpin
         this._wirePinnedPanel();
+        this._wireSearchPanel();
     }
 
     /**
@@ -62,7 +63,9 @@ export class ChatUI {
         const close = () => panel.classList.add('hidden');
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            panel.classList.toggle('hidden');
+            const opening = panel.classList.contains('hidden');
+            this._closeSidePanels();
+            if (opening) panel.classList.remove('hidden');
         });
         document.addEventListener('click', (e) => {
             if (panel.classList.contains('hidden')) return;
@@ -71,6 +74,109 @@ export class ChatUI {
         });
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && !panel.classList.contains('hidden')) close();
+        });
+    }
+
+    /**
+     * Closes both `#pinned-messages-panel` and `#chat-search-panel` — the
+     * two chat-tab-bar popovers share the same on-screen position
+     * (`.pinned-panel`'s `top`/`right`), so opening one must close the
+     * other rather than stacking on top of it.
+     * @returns {void}
+     */
+    _closeSidePanels() {
+        document.getElementById('pinned-messages-panel')?.classList.add('hidden');
+        document.getElementById('chat-search-panel')?.classList.add('hidden');
+    }
+
+    /**
+     * Wires the `#chat-search-btn` trigger open/close plus live filtering —
+     * same open/close convention as `_wirePinnedPanel()` above. Purely
+     * local: filters `_messageMeta` (already-retained chat history), no
+     * broadcast, no server involvement.
+     * @returns {void}
+     */
+    _wireSearchPanel() {
+        const btn = document.getElementById('chat-search-btn');
+        const panel = document.getElementById('chat-search-panel');
+        const input = document.getElementById('chat-search-input');
+        if (!btn || !panel || !input) return;
+
+        const close = () => panel.classList.add('hidden');
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const opening = panel.classList.contains('hidden');
+            this._closeSidePanels();
+            if (opening) {
+                panel.classList.remove('hidden');
+                input.focus();
+                this._renderSearchResults(input.value);
+            }
+        });
+        input.addEventListener('input', () => this._renderSearchResults(input.value));
+        document.addEventListener('click', (e) => {
+            if (panel.classList.contains('hidden')) return;
+            if (panel.contains(e.target) || e.target === btn) return;
+            close();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !panel.classList.contains('hidden')) close();
+        });
+    }
+
+    /**
+     * Live-filters `_messageMeta` (case-insensitive substring on message
+     * text) into `#chat-search-results` — re-run on every keystroke, cheap
+     * since the dataset is capped at 300 messages. Each result scrolls to
+     * and highlights the original via the same snippet `_wireReplyQuote()`/
+     * `_renderPinnedPanel()` use.
+     * @param {string} query
+     * @returns {void}
+     */
+    _renderSearchResults(query) {
+        const results = document.getElementById('chat-search-results');
+        if (!results) return;
+        results.innerHTML = '';
+
+        const q = query.trim().toLowerCase();
+        if (!q) {
+            const hint = document.createElement('div');
+            hint.className = 'pinned-panel-empty';
+            hint.textContent = 'Type to search this session’s chat';
+            results.appendChild(hint);
+            return;
+        }
+
+        const matches = [...this._messageMeta.entries()]
+            .filter(([, m]) => m.rawText.toLowerCase().includes(q))
+            .reverse(); // most recent first, same convention as the pinned panel
+
+        if (!matches.length) {
+            const empty = document.createElement('div');
+            empty.className = 'pinned-panel-empty';
+            empty.textContent = 'No matching messages';
+            results.appendChild(empty);
+            return;
+        }
+
+        matches.forEach(([messageId, m]) => {
+            const row = document.createElement('div');
+            row.className = 'pinned-panel-row';
+
+            const main = document.createElement('div');
+            main.className = 'pinned-panel-row-main';
+            const preview = m.rawText.length > 120 ? m.rawText.slice(0, 120) + '…' : m.rawText;
+            main.innerHTML = `<span class="pinned-panel-sender">${escapeHtml(m.sender)}</span><span class="pinned-panel-preview">${escapeHtml(preview)}</span>`;
+            main.addEventListener('click', () => {
+                const target = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+                if (!target) return;
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                target.querySelector('.chat-message')?.classList.add('chat-message-highlight');
+                setTimeout(() => target.querySelector('.chat-message')?.classList.remove('chat-message-highlight'), 1500);
+            });
+            row.appendChild(main);
+
+            results.appendChild(row);
         });
     }
 
@@ -413,7 +519,7 @@ export class ChatUI {
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         this._polls.set(pollId, {
-            question, options, myPeerId, myVote: null,
+            sender, question, options, myPeerId, myVote: null,
             votes: Object.fromEntries(options.map((_, i) => [i, new Set()])),
         });
 
@@ -479,6 +585,23 @@ export class ChatUI {
         });
 
         if (footerEl) footerEl.textContent = `${totalVotes} ${totalVotes === 1 ? 'vote' : 'votes'}`;
+    }
+
+    /**
+     * Read-only poll summary list for session-recap export's "Polls"
+     * section — each poll's question, its options with vote tallies, and
+     * resolved voter nicknames (via `getNickname()`, same shortened-peerId
+     * fallback as everywhere else for a voter who has since left).
+     * @returns {{sender: string, question: string, totalVotes: number, options: {text: string, count: number, voters: string[]}[]}[]}
+     */
+    getPollSummaries() {
+        return [...this._polls.values()].map(({ sender, question, options, votes }) => {
+            const opts = options.map((text, i) => {
+                const voterIds = [...(votes[i] || [])];
+                return { text, count: voterIds.length, voters: voterIds.map(id => this._getNickname(id)) };
+            });
+            return { sender, question, options: opts, totalVotes: opts.reduce((s, o) => s + o.count, 0) };
+        });
     }
 
     /**

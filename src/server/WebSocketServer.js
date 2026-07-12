@@ -196,7 +196,8 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                 case 'mic-status':
                 case 'deafen-status':
                 case 'nickname-update':
-                case 'status-update': {
+                case 'status-update':
+                case 'avatar-update': {
                     const sessionId = manager.getSessionId(peerId);
                     const peers = manager.getPeersInSession(sessionId).filter(id => id !== peerId);
                     peers.forEach(pid => {

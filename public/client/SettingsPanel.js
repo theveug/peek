@@ -97,12 +97,123 @@ export class SettingsPanel {
                 this._highlightStatus();
             });
         });
+
+        const statusText = document.getElementById('settings-status-text');
+        statusText?.addEventListener('change', () => {
+            const value = statusText.value.trim().slice(0, 60);
+            statusText.value = value;
+            localStorage.setItem('statusText', value);
+            this.peerManager?.setStatusText(value);
+        });
+
+        this._wireAvatar();
     }
 
     _refreshProfile() {
         const nickname = document.getElementById('settings-nickname');
         if (nickname) nickname.value = localStorage.getItem('nickname') || '';
+        const statusText = document.getElementById('settings-status-text');
+        if (statusText) statusText.value = localStorage.getItem('statusText') || '';
         this._highlightStatus();
+        this._refreshAvatarPreview();
+    }
+
+    /**
+     * Wires the avatar picker: "Change photo" opens the hidden file input,
+     * "Remove" clears it. The picked file never leaves this method as raw
+     * bytes — see _processAvatarFile()'s canvas round-trip.
+     * @returns {void}
+     */
+    _wireAvatar() {
+        const pickBtn = document.getElementById('settings-avatar-pick');
+        const removeBtn = document.getElementById('settings-avatar-remove');
+        const input = document.getElementById('settings-avatar-input');
+        if (!pickBtn || !removeBtn || !input) return;
+
+        pickBtn.addEventListener('click', () => input.click());
+
+        input.addEventListener('change', async () => {
+            const file = input.files?.[0];
+            input.value = ''; // allow re-picking the same file later
+            if (!file) return;
+            let dataUrl;
+            try {
+                dataUrl = await this._processAvatarFile(file);
+            } catch {
+                return; // not a readable image — silently no-op, same as a cancelled picker
+            }
+            localStorage.setItem('avatarDataUrl', dataUrl);
+            this._refreshAvatarPreview();
+            this.peerManager?.broadcastAvatar();
+            if (this.peerManager?.peerId) {
+                this.ui.updateParticipantAvatar(this.peerManager.peerId, dataUrl);
+            }
+        });
+
+        removeBtn.addEventListener('click', () => {
+            localStorage.removeItem('avatarDataUrl');
+            this._refreshAvatarPreview();
+            this.peerManager?.broadcastAvatar();
+            if (this.peerManager?.peerId) {
+                this.ui.updateParticipantAvatar(this.peerManager.peerId, '');
+            }
+        });
+    }
+
+    /**
+     * Downscales/re-encodes a picked image file through an off-screen
+     * canvas before it's ever broadcast — this is the actual security
+     * boundary, not just a size optimization. Loading the file into
+     * `createImageBitmap` and drawing it never executes embedded script
+     * content (browsers treat images as non-executable regardless of
+     * format, e.g. an SVG with an embedded `<script>`), and `toDataURL`
+     * can only ever emit genuine re-encoded raster bytes in the format we
+     * ask for — never SVG/HTML/anything else. Receivers additionally
+     * distrust the result (see PeerManager's avatar-update validation) in
+     * case a modified client skips this step entirely.
+     * @param {File} file
+     * @returns {Promise<string>} a `data:image/webp` (or `image/jpeg` fallback) URL.
+     */
+    async _processAvatarFile(file) {
+        const bitmap = await createImageBitmap(file);
+        const size = 96;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        // Cover-crop: scale so the shorter side fills `size`, center-crop the rest.
+        const scale = Math.max(size / bitmap.width, size / bitmap.height);
+        const w = bitmap.width * scale;
+        const h = bitmap.height * scale;
+        ctx.drawImage(bitmap, (size - w) / 2, (size - h) / 2, w, h);
+        bitmap.close?.();
+
+        let dataUrl = canvas.toDataURL('image/webp', 0.85);
+        // Browsers that can't encode WebP silently fall back to PNG from
+        // toDataURL — detect that and force JPEG (smaller than PNG) instead.
+        if (!dataUrl.startsWith('data:image/webp')) {
+            dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        }
+        return dataUrl;
+    }
+
+    /** Syncs the settings preview circle + Remove button visibility from localStorage. */
+    _refreshAvatarPreview() {
+        const preview = document.getElementById('settings-avatar-preview');
+        const removeBtn = document.getElementById('settings-avatar-remove');
+        if (!preview) return;
+        const dataUrl = localStorage.getItem('avatarDataUrl');
+        if (dataUrl) {
+            preview.innerHTML = '';
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            preview.appendChild(img);
+            if (removeBtn) removeBtn.style.display = '';
+        } else {
+            const nickname = localStorage.getItem('nickname') || '?';
+            preview.textContent = nickname.charAt(0).toUpperCase();
+            if (removeBtn) removeBtn.style.display = 'none';
+        }
     }
 
     _highlightStatus() {

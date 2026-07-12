@@ -182,6 +182,12 @@
                         <span id="files-tab-badge"
                             class="hidden items-center justify-center text-[10px] rounded-full min-w-4.5 h-4.5 px-1 leading-none panel-tab-badge">0</span>
                     </button>
+                    <button id="chat-search-btn" data-tip="Search chat" type="button" class="panel-close-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+                            <path fill-rule="evenodd" clip-rule="evenodd"
+                                d="M9 3.5C5.96243 3.5 3.5 5.96243 3.5 9C3.5 12.0376 5.96243 14.5 9 14.5C10.519 14.5 11.893 13.8852 12.8891 12.8891C13.8852 11.893 14.5 10.519 14.5 9C14.5 5.96243 12.0376 3.5 9 3.5ZM2 9C2 5.13401 5.13401 2 9 2C12.866 2 16 5.13401 16 9C16 10.6625 15.4197 12.1906 14.4517 13.3911L17.7803 16.7197C18.0732 17.0126 18.0732 17.4874 17.7803 17.7803C17.4874 18.0732 17.0126 18.0732 16.7197 17.7803L13.3911 14.4517C12.1906 15.4197 10.6625 16 9 16C5.13401 16 2 12.866 2 9Z" />
+                        </svg>
+                    </button>
                     <button id="pinned-messages-btn" data-tip="Pinned messages" type="button" class="panel-close-btn">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
                             <path fill-rule="evenodd" clip-rule="evenodd"
@@ -199,6 +205,10 @@
                     </button>
                 </div>
                 <div id="pinned-messages-panel" class="pinned-panel hidden"></div>
+                <div id="chat-search-panel" class="pinned-panel hidden">
+                    <input type="text" id="chat-search-input" class="chat-search-input" placeholder="Search chat" />
+                    <div id="chat-search-results"></div>
+                </div>
                 <!-- Chat tab -->
                 <div id="chat-tab-content" class="flex flex-col flex-1 min-h-0">
                     <div class="flex-1 overflow-auto" id="chat-log"></div>
@@ -562,6 +572,15 @@
                         <h1>Profile</h1>
                         <p class="settings-section-subcopy">Your name and status, visible to everyone in the room.</p>
                         <div class="settings-field">
+                            <div class="settings-label">Avatar</div>
+                            <div class="settings-avatar-row">
+                                <div id="settings-avatar-preview" class="settings-avatar-preview">?</div>
+                                <button type="button" id="settings-avatar-pick" class="settings-avatar-btn">Change photo</button>
+                                <button type="button" id="settings-avatar-remove" class="settings-avatar-btn" style="display:none">Remove</button>
+                                <input type="file" id="settings-avatar-input" accept="image/*" class="hidden" />
+                            </div>
+                        </div>
+                        <div class="settings-field">
                             <label for="settings-nickname" class="settings-label">Nickname</label>
                             <input type="text" id="settings-nickname" class="settings-text-input" />
                         </div>
@@ -584,6 +603,11 @@
                                     <span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> DND
                                 </button>
                             </div>
+                        </div>
+                        <div class="settings-field">
+                            <label for="settings-status-text" class="settings-label">Status message</label>
+                            <input type="text" id="settings-status-text" class="settings-text-input"
+                                placeholder="e.g. In a meeting" maxlength="60" />
                         </div>
                     </div>
 

@@ -160,6 +160,15 @@
                             <h1>Profile</h1>
                             <p class="settings-section-subcopy">Your name, saved on this device — status is set once you're in a room.</p>
                             <div class="settings-field">
+                                <div class="settings-label">Avatar</div>
+                                <div class="settings-avatar-row">
+                                    <div id="settings-avatar-preview" class="settings-avatar-preview">?</div>
+                                    <button type="button" id="settings-avatar-pick" class="settings-avatar-btn">Change photo</button>
+                                    <button type="button" id="settings-avatar-remove" class="settings-avatar-btn" style="display:none">Remove</button>
+                                    <input type="file" id="settings-avatar-input" accept="image/*" class="hidden" />
+                                </div>
+                            </div>
+                            <div class="settings-field">
                                 <label for="settings-nickname" class="settings-label">Nickname</label>
                                 <input type="text" id="settings-nickname" class="settings-text-input" />
                             </div>
@@ -176,6 +185,11 @@
                                         <span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> DND
                                     </button>
                                 </div>
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-status-text" class="settings-label">Status message</label>
+                                <input type="text" id="settings-status-text" class="settings-text-input"
+                                    placeholder="e.g. In a meeting" maxlength="60" />
                             </div>
                         </div>
 
