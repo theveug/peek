@@ -1027,6 +1027,12 @@ export class ChatUI {
      * omitted for contexts that never had one plumbed through (e.g. a poll's
      * own vote-tracking `myPeerId` is a different concept than the poll
      * creator's peerId), in which case this is just the old initials look.
+     * The image variant deliberately has no `background` — some custom
+     * avatars are uploaded with a transparent background specifically so a
+     * non-square logo/shape shows through as its own silhouette (same
+     * `UIController._renderAvatarInto()` convention for participant
+     * cards/the top-bar pill), which a solid color square behind it would
+     * otherwise defeat.
      * @param {string|null|undefined} peerId
      * @param {string} initial
      * @param {string} color
@@ -1035,7 +1041,7 @@ export class ChatUI {
     _avatarHtml(peerId, initial, color) {
         const avatarUrl = peerId ? this._getAvatar(peerId) : null;
         return avatarUrl
-            ? `<span class="chat-avatar" style="background:${color}"><img class="avatar-img" src="${avatarUrl}" alt="" /></span>`
+            ? `<span class="chat-avatar"><img class="avatar-img" src="${avatarUrl}" alt="" /></span>`
             : `<span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span>`;
     }
 

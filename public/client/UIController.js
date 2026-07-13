@@ -1015,10 +1015,19 @@ export class UIController {
      * or the initials fallback — the single call site every avatar-render
      * spot (`_createParticipantCard`, `addSelf`, `updateParticipantNickname`,
      * `updateParticipantAvatar`) goes through, so "image vs. initials" logic
-     * exists exactly once. `el`'s own `background`/`textContent` still drive
-     * the initials look; an `<img class="avatar-img">` is layered in instead
-     * when a validated avatar exists (`.avatar-img` fills the container via
-     * `object-fit: cover`, see tailwind.css).
+     * exists exactly once. In initials mode, `el`'s own colored `background`
+     * square + `textContent` drive the look. In image mode, an
+     * `<img class="avatar-img">` is layered in instead, and the container's
+     * background is cleared to transparent — some custom avatars are
+     * uploaded with a transparent background specifically so a non-square
+     * logo/shape shows through as its own silhouette, which the initials
+     * color square would otherwise defeat by showing solid color through
+     * the "transparent" parts. The speaking-ring CSS (`.status-talking`,
+     * `tailwind.css`) relies on this too: it targets the ring at `.avatar-img`
+     * itself via `filter: drop-shadow()` (which traces the image's actual
+     * alpha channel) rather than `box-shadow` on the square container, so the
+     * ring only looks right once the container background isn't showing
+     * through and fighting it.
      * @param {HTMLElement} el
      * @param {string} peerId
      * @param {string} displayName
@@ -1029,6 +1038,7 @@ export class UIController {
         const avatarDataUrl = this.peerAvatars.get(peerId);
         if (avatarDataUrl) {
             el.textContent = '';
+            el.style.background = 'transparent';
             let img = el.querySelector('.avatar-img');
             if (!img) {
                 img = document.createElement('img');
@@ -1038,6 +1048,7 @@ export class UIController {
             img.src = avatarDataUrl; // DOM property assignment, not string-interpolated HTML
         } else {
             el.querySelector('.avatar-img')?.remove();
+            el.style.background = this._avatarSquareColor(peerId, peerId === this.selfPeerId);
             el.textContent = this._avatarInitials(displayName);
         }
     }

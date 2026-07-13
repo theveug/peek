@@ -2197,8 +2197,40 @@ body:has(#members-sidebar.collapsed) .members-tab {
   }
 }
 
-.status-talking {
+/* box-shadow traces an element's (square) border-box regardless of what's
+   actually visible inside it — fine for an initials avatar (a solid color
+   square, no transparency) or a grid tile (real video, always a genuine
+   rectangle), but wrong for a custom avatar image: a transparent-background
+   or non-square logo would get a mismatched square ring around empty space
+   instead of hugging its actual visible pixels. filter: drop-shadow()
+   traces the rendered element's own alpha channel instead of its bounding
+   box, so applying the ring via drop-shadow directly to the <img> (rather
+   than box-shadow on its container) makes the ring follow the image's real
+   silhouette. Same expand-and-fade feel as pulse-ring, just via blur-radius
+   instead of box-shadow's spread-radius (drop-shadow has no spread param).
+*/
+@keyframes pulse-ring-img {
+  0% {
+    filter: drop-shadow(0 0 0 rgba(2, 252, 93, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 4px rgba(2, 252, 93, 0.65));
+  }
+  100% {
+    filter: drop-shadow(0 0 0 rgba(2, 252, 93, 0.4));
+  }
+}
+
+/* Only one of these two ever actually applies to a given .status-talking
+   element: :has(.avatar-img) picks the shape-hugging drop-shadow version,
+   everything else (initials avatars, grid tiles) gets the original
+   box-shadow ring. */
+.status-talking:not(:has(.avatar-img)) {
   animation: pulse-ring 1.5s ease-out infinite;
+}
+
+.status-talking .avatar-img {
+  animation: pulse-ring-img 1.5s ease-out infinite;
 }
 
 /* ===== Status dot DND minus bar ===== */
