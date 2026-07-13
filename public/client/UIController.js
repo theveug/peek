@@ -956,6 +956,16 @@ export class UIController {
         this.selfPeerId = peerId;
         const nickname = localStorage.getItem('nickname') || 'You';
         this._attendees.add(nickname);
+        // Seed our own avatar from localStorage before anything renders — unlike a
+        // remote peer's avatar (which only ever arrives via their 'avatar-update'
+        // broadcast, handled by updateParticipantAvatar()), nothing else populates
+        // peerAvatars for our own peerId this early. Without this, a previously-set
+        // avatar (from this session's own Settings change, or a prior session) never
+        // shows on our own card/topbar-pill/chat messages until we change it again
+        // while already connected (SettingsPanel._wireAvatar() applies it locally
+        // going forward, but has nothing to apply retroactively at load time).
+        const savedAvatar = localStorage.getItem('avatarDataUrl');
+        if (savedAvatar) this.peerAvatars.set(peerId, savedAvatar);
         this._createParticipantCard(peerId, nickname, true);
 
         const topbarName = document.getElementById('topbar-identity-name');
