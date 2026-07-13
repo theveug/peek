@@ -173,6 +173,12 @@ export class PeerManager {
         // console.groupCollapsed(`PeerManager.handleSignal(${type})`);
         // console.log('[SIGNAL]', type, { peerId, peers, from, payload });
 
+        // The server relays payload verbatim, so another peer controls its type,
+        // not just its contents — a missing/null payload used to throw on every
+        // `payload.x` property read below (an unhandled rejection per message).
+        // Every legitimate payload is an object; normalize anything else to {}.
+        if (!payload || typeof payload !== 'object') payload = {};
+
         switch (type) {
             case 'init':
                 // Clean up stale connections/UI from a previous session (e.g. a server
@@ -316,7 +322,9 @@ export class PeerManager {
                 break;
 
             case 'nickname-update':
-                this.ui.updateParticipantNickname(from, payload.nickname);
+                // Same defensive receive-side cap as statusText below — rendered
+                // via textContent everywhere, so this is a length/DoS guard.
+                this.ui.updateParticipantNickname(from, typeof payload.nickname === 'string' ? payload.nickname.slice(0, 60) : '');
                 break;
 
             case 'avatar-update':
@@ -1124,6 +1132,13 @@ export class PeerManager {
                     return;
                 }
 
+                // The declared name is attacker-controlled like everything else in
+                // an offer: reduce it to a plain basename before ANY consumer sees
+                // it — a name like "../../evil.png" passes the extension allowlist
+                // (which only looks at the final extension) and would otherwise end
+                // up verbatim as a zip path in the recap/download-all export
+                // (classic zip-slip against permissive extractors).
+                const fileName = this._sanitizeFileName(msg.fileName);
                 const fileSize = Number(msg.fileSize);
                 const nickname = this.ui._peerNickname(peerId);
                 // Ensured here, before the allow/size checks below, so the caption
@@ -1133,26 +1148,26 @@ export class PeerManager {
                     groupId: msg.groupId, caption: msg.caption, replyTo: msg.replyTo, messageId: msg.messageId,
                 }, false, peerId);
 
-                if (!this._isFileAllowed(msg.fileName)) {
-                    this.ui.addSystemMessage(`Blocked incoming file: ${msg.fileName}`, 'leave');
+                if (!this._isFileAllowed(fileName)) {
+                    this.ui.addSystemMessage(`Blocked incoming file: ${fileName || '(unnamed)'}`, 'leave');
                     this._respondToOffer(peerId, msg.fileId, false);
                     return;
                 }
                 if (!Number.isFinite(fileSize) || fileSize < 0 || fileSize > this._maxFileSize) {
-                    this.ui.addSystemMessage(`Blocked incoming file: ${msg.fileName} (too large)`, 'leave');
+                    this.ui.addSystemMessage(`Blocked incoming file: ${fileName} (too large)`, 'leave');
                     this._respondToOffer(peerId, msg.fileId, false);
                     return;
                 }
 
                 this._offeredFiles[msg.fileId] = {
-                    fileName: msg.fileName, fileSize, fileType: this._safeMimeType(msg.fileName), from: peerId,
-                    groupId: msg.groupId,
+                    fileName, fileSize, fileType: this._safeMimeType(fileName), from: peerId,
+                    groupId: msg.groupId, accepted: false,
                 };
 
                 if (this._autoAcceptFiles()) {
                     this._respondToOffer(peerId, msg.fileId, true);
                 } else {
-                    this.ui.showFileOffer(nickname, msg.fileId, msg.fileName, fileSize,
+                    this.ui.showFileOffer(nickname, msg.fileId, fileName, fileSize,
                         () => this._respondToOffer(peerId, msg.fileId, true),
                         () => this._respondToOffer(peerId, msg.fileId, false),
                         msg.groupId);
@@ -1163,7 +1178,14 @@ export class PeerManager {
                 delete this._pendingFileOffers[key];
             } else if (msg.type === 'file-start') {
                 const offer = this._offeredFiles[msg.fileId];
-                if (!offer) return; // we never offered-accepted this fileId — ignore
+                // Three receive-side gates, all attacker-relevant: the offer must
+                // exist; it must have come from THIS sender (sendFileToAll hands the
+                // same fileId to every recipient, so in a 3+ room another peer knows
+                // it and could hijack the slot with substituted content); and the
+                // local user must have actually accepted it — the sender waiting
+                // for file-accept is honor-system, a modified client can skip
+                // straight to file-start and bypass the consent prompt entirely.
+                if (!offer || offer.from !== peerId || !offer.accepted) return;
                 delete this._offeredFiles[msg.fileId];
                 this.incomingTransfers[msg.fileId] = {
                     fileName: offer.fileName, fileSize: offer.fileSize, fileType: offer.fileType,
@@ -1173,7 +1195,10 @@ export class PeerManager {
                 this.ui.updateFileProgress(msg.fileId, 0, 'download', offer.fileName, offer.groupId);
             } else if (msg.type === 'file-end') {
                 const t = this.incomingTransfers[msg.fileId];
-                if (!t) return;
+                // Same sender check as file-start: only the peer actually streaming
+                // this transfer may finalize it (a forged early file-end from someone
+                // else would deliver a truncated file under the real sender's name).
+                if (!t || t.from !== peerId) return;
                 const blob = new Blob(t.chunks, { type: t.fileType });
                 const url = URL.createObjectURL(blob);
                 const nickname = this.ui._peerNickname(peerId);
@@ -1182,8 +1207,15 @@ export class PeerManager {
                 delete this.incomingTransfers[msg.fileId];
             } else if (msg.type === 'poll-create') {
                 if (this.ui.isBlocked(peerId)) return;
+                // Shape-validate on receive, same convention as poll-vote's bounds
+                // check below: a non-array `options` threw inside addPollMessage,
+                // and nothing capped what a modified client could stuff into the
+                // question/options (DOM-spam). Honest clients are far within these.
+                if (typeof msg.pollId !== 'string' || typeof msg.question !== 'string') return;
+                if (!Array.isArray(msg.options) || msg.options.length < 2 || msg.options.length > 20) return;
+                if (!msg.options.every(o => typeof o === 'string')) return;
                 const nickname = this.ui._peerNickname(peerId);
-                this.ui.addPollMessage(nickname, msg.pollId, msg.question, msg.options, this.peerId, false, peerId);
+                this.ui.addPollMessage(nickname, msg.pollId, msg.question.slice(0, 300), msg.options.map(o => o.slice(0, 150)), this.peerId, false, peerId);
             } else if (msg.type === 'poll-vote') {
                 if (this.ui.isBlocked(peerId)) return;
                 // Use the connection's real peerId, not the sender-supplied voterId —
@@ -1191,6 +1223,7 @@ export class PeerManager {
                 this.ui.updatePollVote(msg.pollId, msg.optionIndex, peerId);
             } else if (msg.type === 'chat') {
                 if (this.ui.isBlocked(peerId)) return;
+                if (typeof msg.text !== 'string' || !msg.text) return;
                 // Record which connection authored this messageId so chat-edit/
                 // chat-delete below can be restricted to the original author.
                 if (typeof msg.messageId === 'string') {
@@ -1227,6 +1260,10 @@ export class PeerManager {
                 this.ui.applyPin(msg.messageId, msg.type === 'pin-message');
             } else if (msg.type === 'reaction') {
                 if (this.ui.isBlocked(peerId)) return;
+                // Rendered via textContent (no XSS), but an unbounded "emoji"
+                // string is a layout/DoS vector — 32 units covers even long
+                // ZWJ-sequence emoji with room to spare.
+                if (typeof msg.messageId !== 'string' || typeof msg.emoji !== 'string' || !msg.emoji || msg.emoji.length > 32) return;
                 this.ui.addReaction(msg.messageId, msg.emoji, msg.nickname, peerId);
             } else if (msg.type === 'typing') {
                 if (this.ui.isBlocked(peerId)) return;
@@ -1273,8 +1310,24 @@ export class PeerManager {
 
     /** @returns {boolean} true if the file's extension is on the allowlist. */
     _isFileAllowed(fileName) {
+        if (typeof fileName !== 'string' || !fileName) return false;
         const ext = fileName.split('.').pop().toLowerCase();
         return this._allowedExtensions.has(ext);
+    }
+
+    /**
+     * Reduces a peer-declared filename to a safe plain basename: non-strings
+     * become '' (a malformed offer used to throw in _isFileAllowed), path
+     * segments and leading dots are stripped (zip-slip / traversal via the
+     * recap export's zip paths), control characters removed, length capped.
+     * '' fails _isFileAllowed, so anything unsalvageable is auto-declined.
+     * @param {*} name
+     * @returns {string}
+     */
+    _sanitizeFileName(name) {
+        if (typeof name !== 'string') return '';
+        const base = name.split(/[/\\]/).pop().trim();
+        return base.replace(/^\.+/, '').replace(/[\x00-\x1f]/g, '').slice(0, 200);
     }
 
     _maxFileSize = 500 * 1024 * 1024;
@@ -1331,9 +1384,19 @@ export class PeerManager {
         return localStorage.getItem('autoAcceptFiles') === '1';
     }
 
-    /** Sends a file-accept or file-decline reply for an incoming offer. */
+    /**
+     * Sends a file-accept or file-decline reply for an incoming offer.
+     * Accepting also records `accepted` on the stored offer — the receive-side
+     * `file-start` gate requires it, so bytes can never flow for an offer the
+     * local user hasn't answered (see the file-start handler).
+     */
     _respondToOffer(peerId, fileId, accepted) {
-        if (!accepted) delete this._offeredFiles[fileId];
+        if (accepted) {
+            const offer = this._offeredFiles[fileId];
+            if (offer) offer.accepted = true;
+        } else {
+            delete this._offeredFiles[fileId];
+        }
         const dc = this.dataChannels[peerId];
         if (!dc || dc.readyState !== 'open') return;
         dc.send(JSON.stringify({ type: accepted ? 'file-accept' : 'file-decline', fileId }));

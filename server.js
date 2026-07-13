@@ -149,12 +149,25 @@ app.get('/', (req, res) => {
 app.post('/api/create-room', rateLimit(60_000, 10), (req, res) => {
     const { name, password, maxPeers } = req.body || {};
     const code = generateUniqueShortCode();
-    const cleanName = name ? name.replace(/[<>]/g, '').trim().substring(0, 50) : null;
+    // JSON bodies can carry any type — a non-string password stored here used
+    // to reach Buffer.from() in validatePassword and throw (a process-killing
+    // uncaught exception on the WS join path). Only strings are ever stored.
+    const cleanName = typeof name === 'string' ? name.replace(/[<>]/g, '').trim().substring(0, 50) : null;
+    const cleanPassword = (typeof password === 'string' && password) ? password.slice(0, 200) : null;
     const creatorToken = randomBytes(16).toString('hex');
-    manager.createSession(code, { name: cleanName || null, password: password || null, maxPeers, creatorToken });
+    manager.createSession(code, { name: cleanName || null, password: cleanPassword, maxPeers, creatorToken });
     Debug.log(`Room created: ${code}${cleanName ? ` (${cleanName})` : ''}${password ? ' [password]' : ''}`);
     res.json({ code, creatorToken });
 });
+
+// Failed-password lockout for the HTTP validation path, mirroring the WS
+// join throttle (WebSocketServer.js's failedJoinsByIp): the generic 30/min
+// request limiter alone let this endpoint act as a sustained password oracle
+// (~43k guesses/day/IP) while the WS side was capped at 20 per 10 minutes.
+// Same fixed-window in-memory shape, nothing persisted.
+const FAILED_VALIDATE_LIMIT = 20;
+const failedValidationsByIp = new Map();
+setInterval(() => failedValidationsByIp.clear(), 10 * 60_000).unref();
 
 // API: Validate room (check if it exists / needs password)
 app.post('/api/validate-room', rateLimit(60_000, 30), (req, res) => {
@@ -164,11 +177,16 @@ app.post('/api/validate-room', rateLimit(60_000, 30), (req, res) => {
         res.json({ valid: true, needsPassword: false, name: null });
         return;
     }
+    if (meta.hasPassword && (failedValidationsByIp.get(req.ip) || 0) >= FAILED_VALIDATE_LIMIT) {
+        res.status(429).json({ error: 'Too many password attempts' });
+        return;
+    }
     if (meta.hasPassword && !password) {
         res.json({ valid: false, needsPassword: true, name: meta.name });
         return;
     }
-    if (meta.hasPassword && !manager.validatePassword(code, password)) {
+    if (meta.hasPassword && !manager.validatePassword(code, typeof password === 'string' ? password : null)) {
+        failedValidationsByIp.set(req.ip, (failedValidationsByIp.get(req.ip) || 0) + 1);
         res.json({ valid: false, needsPassword: true, name: meta.name, wrongPassword: true });
         return;
     }

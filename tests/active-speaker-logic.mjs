@@ -3,7 +3,16 @@
 //
 // Run with: node tests/active-speaker-logic.mjs
 
-import { PeerManager } from '../public/client/PeerManager.js';
+// The PeerManager constructor reads a few localStorage-backed preferences
+// (statusText, etc.) — stub it so this browserless unit test can instantiate.
+const storage = new Map();
+globalThis.localStorage = {
+    getItem: (k) => (storage.has(k) ? storage.get(k) : null),
+    setItem: (k, v) => storage.set(k, String(v)),
+    removeItem: (k) => storage.delete(k),
+};
+
+const { PeerManager } = await import('../public/client/PeerManager.js');
 
 function assert(cond, msg) {
     if (!cond) throw new Error('FAIL: ' + msg);

@@ -104,17 +104,23 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                         return;
                     }
 
+                    // Non-string junk (JSON can carry any type) is normalized to null
+                    // before it can reach validatePassword's Buffer.from() or get
+                    // stored by a lazy-create as a session's password.
+                    const joinPassword = typeof msg.password === 'string' ? msg.password.slice(0, 200) : null;
+                    const joinCreatorToken = typeof msg.creatorToken === 'string' ? msg.creatorToken : null;
+
                     // Ban gate: a banned IP stays out for the rest of the session's
                     // lifetime (the set dies with the room). The creator token bypasses
                     // the gate so the creator can never lock themselves out by banning
                     // someone who shares their NAT/IP.
-                    if (manager.isBanned(sessionId, ip) && !manager.isCreatorTokenValid(sessionId, msg.creatorToken || null)) {
+                    if (manager.isBanned(sessionId, ip) && !manager.isCreatorTokenValid(sessionId, joinCreatorToken)) {
                         ws.send(JSON.stringify({ type: 'join-error', reason: 'banned' }));
                         ws.close();
                         return;
                     }
 
-                    if (!manager.validatePassword(sessionId, msg.password || null)) {
+                    if (!manager.validatePassword(sessionId, joinPassword)) {
                         ws.send(JSON.stringify({ type: 'join-error', reason: 'invalid-password' }));
                         failedJoinsByIp.set(ip, (failedJoinsByIp.get(ip) || 0) + 1);
                         if (++failedJoins >= 5) ws.close();
@@ -144,12 +150,12 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                     // token for them (unless they brought their own, i.e. the original
                     // creator reconnecting after a server restart) and hand it back in
                     // 'init' so the client can store it like /api/create-room's.
-                    const mintedCreatorToken = (!manager.hasSession(sessionId) && !msg.creatorToken)
+                    const mintedCreatorToken = (!manager.hasSession(sessionId) && !joinCreatorToken)
                         ? randomBytes(16).toString('hex')
                         : null;
-                    const presentedToken = msg.creatorToken || mintedCreatorToken;
+                    const presentedToken = joinCreatorToken || mintedCreatorToken;
 
-                    manager.addPeer(sessionId, peerId, ws, { password: msg.password || null, creatorToken: presentedToken });
+                    manager.addPeer(sessionId, peerId, ws, { password: joinPassword, creatorToken: presentedToken });
                     const peers = manager.getPeersInSession(sessionId).filter(p => p !== peerId);
 
                     // A claim can flip creatorPeerId/moderatorPeerIds, so this must run

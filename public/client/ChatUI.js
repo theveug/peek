@@ -471,6 +471,10 @@ export class ChatUI {
 
         if (!this._reactions.has(messageId)) this._reactions.set(messageId, new Map());
         const msgReactions = this._reactions.get(messageId);
+        // Cap distinct reactions per message — a modified client could otherwise
+        // grow this map (and the badge bar) without bound. Toggling an existing
+        // reaction is always allowed; only NEW emoji keys are capped.
+        if (!msgReactions.has(emoji) && msgReactions.size >= 20) return;
         if (!msgReactions.has(emoji)) msgReactions.set(emoji, new Set());
         const reactors = msgReactions.get(emoji);
 

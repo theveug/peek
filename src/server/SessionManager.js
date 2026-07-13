@@ -317,6 +317,11 @@ export class SessionManager {
         if (!s) return true;
         if (!s.password) return true;
         if (typeof password !== 'string') return false;
+        // Defense-in-depth: both intake points (create-room API, WS join) only
+        // store string passwords now, but a non-string here would throw in
+        // Buffer.from() — inside a ws 'message' listener that's an uncaught
+        // exception that kills the process. Fail closed instead.
+        if (typeof s.password !== 'string') return false;
         const expected = Buffer.from(s.password);
         const given = Buffer.from(password);
         // Constant-time compare so response timing doesn't leak how much of a
