@@ -236,7 +236,8 @@ body {
   font-family: "Fira Code", ui-monospace, monospace;
 }
 
-body:hover #controls {
+body:hover #controls,
+body:focus-within #controls {
   display: flex;
 }
 
@@ -1902,6 +1903,7 @@ body:has(#members-sidebar.collapsed) .members-tab {
 }
 
 .participant-card:hover .participant-actions,
+.participant-card:focus-within .participant-actions,
 .participant-actions:has(.participant-mod-popover:not(.hidden)),
 .participant-actions:has(.participant-volume-popover:not(.hidden)) {
   display: flex;

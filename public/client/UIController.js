@@ -1170,6 +1170,14 @@ export class UIController {
         rightCol.className = 'participant-right-col flex items-center gap-1 flex-shrink-0';
 
         if (!isSelf) {
+            // Reveal is otherwise hover-only (see the .participant-actions CSS
+            // rule) which a keyboard-only user can never trigger — nothing else
+            // in the card is focusable to land on first. tabindex makes the
+            // card itself a tab stop so :focus-within can reveal the cluster,
+            // same effect a mouse hover already gets.
+            card.tabIndex = 0;
+            card.setAttribute('aria-label', `${displayName} — show actions`);
+
             // Action cluster (volume/block/mod kebab) is hover-revealed via
             // .participant-actions CSS so the always-visible row stays one icon
             // tall. It goes first so the persistent status icons (signal/mic)
