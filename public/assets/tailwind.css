@@ -2252,25 +2252,35 @@ body:has(#members-sidebar.collapsed) .members-tab {
   fill: var(--spinner-fill);
 }
 
-/* ===== Scrollbar styling ===== */
-#chat-log::-webkit-scrollbar,
-#participants::-webkit-scrollbar {
-  width: 0.25rem;
+/* ===== Scrollbar styling (every scrollable surface, not just chat/members) =====
+   scrollbar-width/-color are inherited CSS properties, so setting them once on
+   :root covers Firefox everywhere for free. ::-webkit-scrollbar has no such
+   inheritance (Chromium/Safari need the pseudo-element on the actual scrolling
+   box), hence the universal selector — this is what previously left #files-list,
+   .pinned-panel, .emoji-picker-grid-wrap, .quick-banned-list, .settings-content,
+   and .quick-settings-popover on the default OS scrollbar while #chat-log/
+   #participants got the thin styled one; a shared rule can't drift out of sync
+   the way a per-ID list already had. */
+:root {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
-#chat-log::-webkit-scrollbar-track,
-#participants::-webkit-scrollbar-track {
+*::-webkit-scrollbar {
+  width: 0.25rem;
+  height: 0.25rem;
+}
+
+*::-webkit-scrollbar-track {
   background: transparent;
 }
 
-#chat-log::-webkit-scrollbar-thumb,
-#participants::-webkit-scrollbar-thumb {
+*::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   border-radius: 0.125rem;
 }
 
-#chat-log::-webkit-scrollbar-thumb:hover,
-#participants::-webkit-scrollbar-thumb:hover {
+*::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-hover);
 }
 
