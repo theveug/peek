@@ -1819,12 +1819,12 @@ export class UIController {
         // A manually-dragged PiP (dataset.dragged) keeps its own explicit
         // left/top — don't snap it back into the auto right-edge stacking.
         if (screenView && camView) {
-            if (!screenView.dataset.dragged) screenView.style.right = '170px';
-            if (!camView.dataset.dragged) camView.style.right = '10px';
+            if (!screenView.dataset.dragged) screenView.style.right = '10.625rem';
+            if (!camView.dataset.dragged) camView.style.right = '0.625rem';
         } else if (screenView && !screenView.dataset.dragged) {
-            screenView.style.right = '10px';
+            screenView.style.right = '0.625rem';
         } else if (camView && !camView.dataset.dragged) {
-            camView.style.right = '10px';
+            camView.style.right = '0.625rem';
         }
     }
 
@@ -2123,7 +2123,7 @@ export class UIController {
                 placeholder = document.createElement('div');
                 placeholder.id = 'stream-placeholder';
                 placeholder.textContent = '\u{1F7E2} Still Streaming...';
-                placeholder.style.cssText = 'position:fixed; bottom:10px; right:10px; padding:10px 15px; background:#000; color:#fff; border-radius:4px; font-size:14px; z-index:1000;';
+                placeholder.style.cssText = 'position:fixed; bottom:0.625rem; right:0.625rem; padding:0.625rem 0.9375rem; background:#000; color:#fff; border-radius:0.25rem; font-size:0.875rem; z-index:1000;';
                 this.videoContainer.appendChild(placeholder);
             }
         } else {

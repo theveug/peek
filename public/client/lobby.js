@@ -266,7 +266,7 @@ function renderSavedRooms() {
         const rejoinBtn = document.createElement('button');
         rejoinBtn.type = 'button';
         rejoinBtn.className = 'lobby-recent-rejoin';
-        rejoinBtn.innerHTML = 'Rejoin <span class="material-symbols-rounded" style="font-size:16px;">arrow_forward</span>';
+        rejoinBtn.innerHTML = 'Rejoin <span class="material-symbols-rounded" style="font-size:1rem;">arrow_forward</span>';
         rejoinBtn.addEventListener('click', async () => {
             savedError.classList.add('hidden');
             rejoinBtn.disabled = true;
