@@ -1828,8 +1828,12 @@ body:has(#members-sidebar.collapsed) .members-tab {
 }
 
 @keyframes tooltip-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .participant-card {
@@ -1913,8 +1917,10 @@ body:has(#members-sidebar.collapsed) .members-tab {
    stacking alongside it — keeps the width jump small so the name doesn't get
    crushed. Conditions mirror the reveal rules above exactly. */
 .participant-card:hover .participant-actions ~ .participant-passive-icons,
-.participant-right-col:has(.participant-mod-popover:not(.hidden)) .participant-passive-icons,
-.participant-right-col:has(.participant-volume-popover:not(.hidden)) .participant-passive-icons {
+.participant-right-col:has(.participant-mod-popover:not(.hidden))
+  .participant-passive-icons,
+.participant-right-col:has(.participant-volume-popover:not(.hidden))
+  .participant-passive-icons {
   display: none;
 }
 
@@ -2181,13 +2187,13 @@ body:has(#members-sidebar.collapsed) .members-tab {
 /* ===== Status ring animation ===== */
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgba(2, 252, 93, 1);
+    box-shadow: 0 0 0 0 rgba(2, 252, 93, 0.25);
   }
-  70% {
-    box-shadow: 0 0 0 5px rgba(2, 252, 93, 0.6);
+  50% {
+    box-shadow: 0 0 0 5px rgba(2, 252, 93, 0.1);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(2, 252, 93, 0.3);
+    box-shadow: 0 0 0 0 rgba(2, 252, 93, 0.25);
   }
 }
 
