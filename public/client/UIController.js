@@ -41,6 +41,7 @@ export class UIController {
             avatarInitials: (name) => this._avatarInitials(name),
             getAllNicknames: () => this._allNicknames(),
             isModerator: () => !!this.selfPeerId && this.moderatorPeerIds.has(this.selfPeerId),
+            getAvatar: (id) => this.peerAvatars.get(id) || null,
         });
         // A dragged self-view PiP's saved left/top can end up off-screen after the
         // window shrinks (e.g. undocking to a smaller monitor) — reclamp on resize.
@@ -210,11 +211,15 @@ export class UIController {
     }
 
     /**
-     * Builds the `recap.md` text for exportSessionRecap(): an "Attendees"
-     * list, a "Decisions" section from pinned messages, a "Polls" section,
-     * then a "Chat transcript" section from the retained message history —
-     * supplied by `getAttendees()` and ChatUI's read-only accessors
-     * (`getPinnedMessages()`/`getPollSummaries()`/`getMessageHistory()`).
+     * Builds the recap markdown text (source for both `recap.md` and
+     * `recap.html` — see `exportSessionRecap()`): an "Attendees" list, a
+     * "Pinned messages" section from `ChatUI.getPinnedMessages()`, a "Polls"
+     * section, then a "Chat transcript" section from the retained message
+     * history — supplied by `getAttendees()` and ChatUI's read-only
+     * accessors (`getPinnedMessages()`/`getPollSummaries()`/`getMessageHistory()`).
+     * Named "Pinned messages" rather than "Decisions" since pinning isn't
+     * specific to decision-tracking/team-meeting use — any message worth
+     * flagging can be pinned.
      * @param {string[]} attendees
      * @param {{sender: string, text: string, pinnedAt: number}[]} pinned
      * @param {{sender: string, question: string, totalVotes: number, options: {text: string, count: number, voters: string[]}[]}[]} polls
@@ -233,7 +238,7 @@ export class UIController {
         }
         lines.push('');
 
-        lines.push('## Decisions', '');
+        lines.push('## Pinned messages', '');
         if (pinned.length) {
             pinned.forEach(p => lines.push(`- **${p.sender}**: ${p.text}`));
         } else {
@@ -268,20 +273,59 @@ export class UIController {
     }
 
     /**
-     * Bundles the attendee list, retained chat transcript, pinned
-     * "Decisions", poll results, and every shared file into one zip
-     * download — the client-side "session recap" (`TODO.md`'s meeting-recap
-     * workflow, step 3). Available with zero files/pins/polls too (a
-     * text-only recap is still useful), unlike `_downloadAllFiles()` which
-     * only ever appears once 2+ files exist. Exports only what this local
-     * peer has personally already seen — no moderator gating, same trust
-     * level as a local screenshot.
+     * Renders the recap markdown (from `_buildRecapText()`) to a
+     * self-contained `recap.html` — same `marked` + `DOMPurify` pipeline
+     * chat messages already go through, so it's exactly as safe, wrapped in
+     * a minimal inline-styled page (light/dark via `prefers-color-scheme`,
+     * no external assets) that opens by double-clicking in any browser.
+     * Added alongside `recap.md`, not instead of it — not everyone has a
+     * markdown reader, but some people specifically want the plain-text
+     * source too (e.g. to paste elsewhere).
+     * @param {string} markdown
+     * @param {string} title
+     * @returns {string}
+     */
+    _buildRecapHtml(markdown, title) {
+        const bodyHtml = DOMPurify.sanitize(marked.parse(markdown));
+        return `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #1a1a1a; background: #fff; }
+  h1, h2 { border-bottom: 1px solid #ddd; padding-bottom: 0.3rem; }
+  code { background: #f0f0f0; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.9em; }
+  ul { padding-left: 1.4rem; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #16181d; color: #e5e7eb; }
+    h1, h2 { border-color: #333; }
+    code { background: #2a2d35; }
+  }
+</style></head>
+<body>${bodyHtml}</body></html>`;
+    }
+
+    /**
+     * Bundles the attendee list, retained chat transcript, pinned messages,
+     * poll results, and every shared file into one zip download — the
+     * client-side "session recap" (`TODO.md`'s meeting-recap workflow, step
+     * 3). Available with zero files/pins/polls too (a text-only recap is
+     * still useful), unlike `_downloadAllFiles()` which only ever appears
+     * once 2+ files exist. Exports only what this local peer has personally
+     * already seen — no moderator gating, same trust level as a local
+     * screenshot. Bundles both `recap.md` (plain markdown source) and
+     * `recap.html` (self-contained, styled, opens in any browser without a
+     * markdown reader) built from the exact same text, so neither format
+     * can drift from the other.
      * @returns {Promise<void>}
      */
     async exportSessionRecap() {
         if (typeof JSZip === 'undefined') return;
         const zip = new JSZip();
-        zip.file('recap.md', this._buildRecapText(this.getAttendees(), this.chat.getPinnedMessages(), this.chat.getPollSummaries(), this.chat.getMessageHistory()));
+        const title = this.roomName || this.roomCode || 'Peek session';
+        const markdown = this._buildRecapText(this.getAttendees(), this.chat.getPinnedMessages(), this.chat.getPollSummaries(), this.chat.getMessageHistory());
+        zip.file('recap.md', markdown);
+        zip.file('recap.html', this._buildRecapHtml(markdown, `${title} — session recap`));
         this._addFilesToZip(zip, 'files');
         const dateStamp = new Date().toISOString().slice(0, 10);
         const slug = (this.roomName || this.roomCode || 'session').replace(/[^a-z0-9-]+/gi, '-');
@@ -319,8 +363,8 @@ export class UIController {
      * here with extra behavior beyond forwarding, since the Files tab is a
      * UIController concern, not ChatUI's.
      */
-    addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, blob, groupId) {
-        this.chat.addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, groupId);
+    addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, blob, groupId, isSelf = false) {
+        this.chat.addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, groupId, isSelf);
         if (blob) this._addFileToTab({ fileId, fileName, fileSize, fileType, blob, sender });
     }
     ensureFileGroup(...a) { return this.chat.ensureFileGroup(...a); }
@@ -1349,7 +1393,10 @@ export class UIController {
             poor:      ['#ef4444', dim, dim],
             unknown:   [dim, dim, dim],
         }[tier] || [dim, dim, dim];
-        return `<svg width="12" height="10" viewBox="0 0 12 10" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="6" width="3" height="4" rx="0.5" fill="${c[0]}"/><rect x="4.5" y="3" width="3" height="7" rx="0.5" fill="${c[1]}"/><rect x="9" y="0" width="3" height="10" rx="0.5" fill="${c[2]}"/></svg>`;
+        // Scaled up alongside the mic/deafen icons (w-4, 16px) so the passive-icons
+        // row stays visually consistent rather than mixing a tiny signal icon with
+        // much larger mic/deafen ones.
+        return `<svg width="16" height="13" viewBox="0 0 12 10" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="6" width="3" height="4" rx="0.5" fill="${c[0]}"/><rect x="4.5" y="3" width="3" height="7" rx="0.5" fill="${c[1]}"/><rect x="9" y="0" width="3" height="10" rx="0.5" fill="${c[2]}"/></svg>`;
     }
 
     /** Updates one participant card's signal-bars icon + tooltip. */
@@ -1477,12 +1524,21 @@ export class UIController {
 
     /** @returns {string} mic-on icon SVG markup. */
     _micOnSvg() {
-        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-2.5 h-2.5"><path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 1 1-6 0V4Z" /><path d="M5.5 9.643a.75.75 0 0 1 .75.75v.357a3.75 3.75 0 0 0 7.5 0v-.357a.75.75 0 0 1 1.5 0v.357a5.25 5.25 0 0 1-4.5 5.196V17.5a.75.75 0 0 1-1.5 0v-1.554a5.25 5.25 0 0 1-4.5-5.196v-.357a.75.75 0 0 1 .75-.75Z" /></svg>`;
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 1 1-6 0V4Z" /><path d="M5.5 9.643a.75.75 0 0 1 .75.75v.357a3.75 3.75 0 0 0 7.5 0v-.357a.75.75 0 0 1 1.5 0v.357a5.25 5.25 0 0 1-4.5 5.196V17.5a.75.75 0 0 1-1.5 0v-1.554a5.25 5.25 0 0 1-4.5-5.196v-.357a.75.75 0 0 1 .75-.75Z" /></svg>`;
     }
 
+    // Discord-style mic-off: the same mic glyph as _micOnSvg (so "muted" reads
+    // as "the mic icon, but slashed" rather than an unrelated shape), plus a
+    // bold diagonal slash — not a plain X, which used to be easy to mistake
+    // for a generic close/dismiss icon rather than "this person is muted".
     /** @returns {string} mic-off icon SVG markup. */
     _micOffSvg() {
-        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-2.5 h-2.5"><path d="M7.22 3.22a.75.75 0 0 1 1.06 0L12 6.94l3.72-3.72a.75.75 0 1 1 1.06 1.06L13.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L12 9.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06L10.94 8 7.22 4.28a.75.75 0 0 1 0-1.06Z" /></svg>`;
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 1 1-6 0V4Z" /><path d="M5.5 9.643a.75.75 0 0 1 .75.75v.357a3.75 3.75 0 0 0 7.5 0v-.357a.75.75 0 0 1 1.5 0v.357a5.25 5.25 0 0 1-4.5 5.196V17.5a.75.75 0 0 1-1.5 0v-1.554a5.25 5.25 0 0 1-4.5-5.196v-.357a.75.75 0 0 1 .75-.75Z" /><line x1="3" y1="3" x2="17" y2="17" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" /></svg>`;
+    }
+
+    /** @returns {string} deafened icon SVG markup (headphones with a slash) — shared by every render spot so the icon only exists once. */
+    _deafenSvg() {
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M10.047 3.062a.75.75 0 0 1 .453.688v12.5a.75.75 0 0 1-1.264.546L5.203 13H2.667a.75.75 0 0 1-.7-.48A6.985 6.985 0 0 1 1.5 10c0-.622.082-1.225.234-1.798a.75.75 0 0 1 .467-.512L5.203 7l4.033-3.796a.75.75 0 0 1 .811-.142ZM13.78 7.22a.75.75 0 1 0-1.06 1.06L14.44 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 1 0 1.06-1.06L16.56 10l1.72-1.72a.75.75 0 1 0-1.06-1.06l-1.72 1.72-1.72-1.72Z" /></svg>`;
     }
 
     /**
@@ -1569,9 +1625,9 @@ export class UIController {
         if (deafened) {
             if (!deafIcon) {
                 deafIcon = document.createElement('span');
-                deafIcon.className = 'participant-deafen-icon';
+                deafIcon.className = 'participant-deafen-icon inline-flex items-center text-red-400';
                 deafIcon.dataset.tip = 'Deafened';
-                deafIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3 text-red-400"><path d="M10.047 3.062a.75.75 0 0 1 .453.688v12.5a.75.75 0 0 1-1.264.546L5.203 13H2.667a.75.75 0 0 1-.7-.48A6.985 6.985 0 0 1 1.5 10c0-.622.082-1.225.234-1.798a.75.75 0 0 1 .467-.512L5.203 7l4.033-3.796a.75.75 0 0 1 .811-.142ZM13.78 7.22a.75.75 0 1 0-1.06 1.06L14.44 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 1 0 1.06-1.06L16.56 10l1.72-1.72a.75.75 0 1 0-1.06-1.06l-1.72 1.72-1.72-1.72Z" /></svg>`;
+                deafIcon.innerHTML = this._deafenSvg();
                 status.appendChild(deafIcon);
             }
         } else {

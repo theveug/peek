@@ -337,7 +337,8 @@ document.addEventListener('paste', (e) => {
             return;
         }
         const pollId = 'poll-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
-        ui.addPollMessage('Me', pollId, question, options, peerManager.peerId);
+        const nickname = (localStorage.getItem('nickname') || 'Anonymous').trim();
+        ui.addPollMessage(nickname, pollId, question, options, peerManager.peerId, true, peerManager.peerId);
         peerManager.broadcastPollCreate(pollId, question, options);
         closeModal();
     });
@@ -357,6 +358,16 @@ ui._onReaction = (messageId, emoji) => {
 
 // Chat UI interactions
 const input = document.getElementById('message');
+
+// Clicking anywhere in the composer bar (its padding, the gap between the
+// +/send buttons and the textarea, etc.) focuses the message input — not
+// just clicking the textarea's own rendered box, which can be much shorter
+// than the full bar height/width. Excludes the +/send buttons and the "+"
+// dropup menu's own options so their clicks aren't hijacked into a focus.
+document.getElementById('chat-input')?.addEventListener('click', (e) => {
+    if (e.target.closest('.composer-plus-wrap, #send-message-btn')) return;
+    input.focus();
+});
 
 function generateFunnyNickname() {
     const adjectives = ['Funky', 'Silly', 'Smart', 'Sneaky', 'Zesty', 'Wiggly', 'Cheesy', 'Invincible', 'Fluffy', 'Sassy', 'Bouncy', 'Wacky', 'Jumpy', 'Quirky', 'Spicy', 'Nerdy', 'Chill', 'Epic', 'Crazy', 'Dizzy'];
@@ -431,7 +442,7 @@ function sendMessage() {
         autoGrowMessageInput();
     } else if (text) {
         peerManager.broadcastChat(text, nickname, messageId, reply || null);
-        ui.addChatMessage('Me', text, messageId, reply, true);
+        ui.addChatMessage(nickname, text, messageId, reply, true, peerManager.peerId);
         ui.clearReply();
         input.value = '';
         autoGrowMessageInput();

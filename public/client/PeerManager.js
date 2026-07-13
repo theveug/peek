@@ -1131,7 +1131,7 @@ export class PeerManager {
                 // when this particular file gets bounced.
                 this.ui.ensureFileGroup(nickname, {
                     groupId: msg.groupId, caption: msg.caption, replyTo: msg.replyTo, messageId: msg.messageId,
-                }, false);
+                }, false, peerId);
 
                 if (!this._isFileAllowed(msg.fileName)) {
                     this.ui.addSystemMessage(`Blocked incoming file: ${msg.fileName}`, 'leave');
@@ -1178,12 +1178,12 @@ export class PeerManager {
                 const url = URL.createObjectURL(blob);
                 const nickname = this.ui._peerNickname(peerId);
                 this.ui.removeFileProgress(msg.fileId, t.groupId);
-                this.ui.addFileMessage(nickname, msg.fileId, t.fileName, t.fileSize, t.fileType, url, blob, t.groupId);
+                this.ui.addFileMessage(nickname, msg.fileId, t.fileName, t.fileSize, t.fileType, url, blob, t.groupId, false);
                 delete this.incomingTransfers[msg.fileId];
             } else if (msg.type === 'poll-create') {
                 if (this.ui.isBlocked(peerId)) return;
                 const nickname = this.ui._peerNickname(peerId);
-                this.ui.addPollMessage(nickname, msg.pollId, msg.question, msg.options, this.peerId);
+                this.ui.addPollMessage(nickname, msg.pollId, msg.question, msg.options, this.peerId, false, peerId);
             } else if (msg.type === 'poll-vote') {
                 if (this.ui.isBlocked(peerId)) return;
                 // Use the connection's real peerId, not the sender-supplied voterId —
@@ -1200,7 +1200,7 @@ export class PeerManager {
                         this._chatMessageOwners.delete(key);
                     }
                 }
-                this.ui.addChatMessage(this.ui._peerNickname(peerId), msg.text, msg.messageId, msg.replyTo || null);
+                this.ui.addChatMessage(this.ui._peerNickname(peerId), msg.text, msg.messageId, msg.replyTo || null, false, peerId);
                 this.ui.updateTypingIndicator(peerId, false);
             } else if (msg.type === 'chat-edit') {
                 if (this.ui.isBlocked(peerId)) return;
@@ -1411,8 +1411,9 @@ export class PeerManager {
         const safeType = this._safeMimeType(file.name);
         const blob = new Blob([file], { type: safeType });
         const url = URL.createObjectURL(blob);
-        this.ui.ensureFileGroup('Me', group, true);
-        this.ui.addFileMessage('Me', fileId, file.name, file.size, safeType, url, blob, group.groupId);
+        const nickname = (localStorage.getItem('nickname') || 'Anonymous').trim();
+        this.ui.ensureFileGroup(nickname, group, true, this.peerId);
+        this.ui.addFileMessage(nickname, fileId, file.name, file.size, safeType, url, blob, group.groupId, true);
 
         const offer = {
             type: 'file-offer', fileId, fileName: file.name, fileSize: file.size, fileType: file.type,

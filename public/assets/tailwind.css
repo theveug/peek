@@ -1069,6 +1069,67 @@ a.link-preview:hover {
   opacity: 0.9;
 }
 
+/* ===== Chat image lightbox =====
+   Clicking any chat image (attachment or inline link preview) opens this
+   full-viewport overlay before ever navigating to a new tab. `display` is
+   toggled directly via inline style in JS, not classList.toggle('hidden') —
+   this is an unlayered custom class, so the layered .hidden utility would
+   silently lose per the cascade-layers standing rule in CLAUDE.md. */
+.chat-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-lightbox-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.chat-lightbox-content {
+  position: relative;
+  max-width: min(92vw, 1400px);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.chat-lightbox-img {
+  max-width: 100%;
+  max-height: 84vh;
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.chat-lightbox-actions {
+  position: absolute;
+  top: -3rem;
+  right: 0;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.chat-lightbox-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  transition: background 0.15s;
+}
+
+.chat-lightbox-action:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
 /* ===== Chat system messages (join/leave/room events, inline in log) ===== */
 .chat-system-message {
   display: flex;

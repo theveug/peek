@@ -16,12 +16,17 @@ export class ChatUI {
      * @param {(name: string) => string} [deps.avatarInitials] - derives avatar initials from a display name; defaults to just the first letter.
      * @param {() => string[]} [deps.getAllNicknames] - every current participant's nickname, used for @mention detection.
      * @param {() => boolean} [deps.isModerator] - whether the local user currently holds creator/moderator status; gates the per-message Pin button.
+     * @param {(peerId: string) => string|null} [deps.getAvatar] - resolves a peerId to its validated
+     *   custom-avatar data URL (from `UIController.peerAvatars`), or null/undefined for the
+     *   initials fallback. Ends the chat-message-avatars scope cut noted in CLAUDE.md — callers
+     *   now thread a peerId alongside the resolved nickname string wherever a message is added.
      */
-    constructor({ getNickname, avatarInitials, getAllNicknames, isModerator }) {
+    constructor({ getNickname, avatarInitials, getAllNicknames, isModerator, getAvatar }) {
         this._getNickname = getNickname;
         this._avatarInitials = avatarInitials || ((name) => name.charAt(0).toUpperCase());
         this._getAllNicknames = getAllNicknames || (() => []);
         this._isModerator = isModerator || (() => false);
+        this._getAvatar = getAvatar || (() => null);
         this.maxMessages = 100;
         this._typingPeers = new Set();
         this._reactions = new Map();
@@ -507,14 +512,17 @@ export class ChatUI {
      * @param {string[]} options
      * @param {string} myPeerId - the local peer's ID, so this poll's future
      *   `updatePollVote` calls know which vote is "mine" for the checkmark/disabled state.
+     * @param {boolean} [isSelf=false] - passed explicitly by the caller (true only for the
+     *   local echo) — don't infer it from `sender`, or a remote peer who sets their
+     *   nickname to match the local user's own would render as self.
+     * @param {string|null} [senderPeerId=null] - the poll creator's peerId, for avatar lookup —
+     *   a separate concept from `myPeerId` above (which is always *our own* peerId, for vote
+     *   tracking, even on a poll someone else created).
      * @returns {void}
      */
-    addPollMessage(sender, pollId, question, options, myPeerId) {
+    addPollMessage(sender, pollId, question, options, myPeerId, isSelf = false, senderPeerId = null) {
         const chatLog = document.getElementById('chat-log');
-        const isSelf = sender === 'Me';
-        const initial = isSelf
-            ? (localStorage.getItem('nickname') || 'Me').charAt(0).toUpperCase()
-            : sender.charAt(0).toUpperCase();
+        const initial = sender.charAt(0).toUpperCase();
         const color = isSelf ? '#22c55e' : this._colorForName(sender);
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -525,7 +533,7 @@ export class ChatUI {
 
         const container = document.createElement('div');
         container.dataset.pollId = pollId;
-        container.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-2"><span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="poll-badge px-1.5 py-0.5 rounded-full font-medium leading-none">Poll</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="ml-7"><div class="font-medium mb-3">${escapeHtml(question)}</div><div class="poll-options flex flex-col gap-2"></div><div class="poll-footer text-[10px] text-muted mt-2">0 votes</div></div></div>`;
+        container.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-2">${this._avatarHtml(senderPeerId, initial, color)}<span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="poll-badge px-1.5 py-0.5 rounded-full font-medium leading-none">Poll</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="ml-7"><div class="font-medium mb-3">${escapeHtml(question)}</div><div class="poll-options flex flex-col gap-2"></div><div class="poll-footer text-[10px] text-muted mt-2">0 votes</div></div></div>`;
 
         this._renderPollOptions(container, pollId);
         chatLog.appendChild(container);
@@ -644,12 +652,13 @@ export class ChatUI {
      * @param {string} sender
      * @param {{groupId: string, caption: string|null, replyTo: object|null, messageId: string|null}} groupInfo
      * @param {boolean} [isSelf=false] - passed explicitly by the caller (true only for the
-     *     local echo) — don't infer it from `sender === 'Me'`, or a remote peer who sets
-     *     their nickname to "Me" would render with the local user's own self-styling and
-     *     suppress the unread notification. Same rule as addChatMessage.
+     *     local echo) — don't infer it from `sender`, or a remote peer who sets their
+     *     nickname to match the local user's own would render with the local user's own
+     *     self-styling and suppress the unread notification. Same rule as addChatMessage.
+     * @param {string|null} [senderPeerId=null] - for avatar lookup, see `addChatMessage`.
      * @returns {void}
      */
-    ensureFileGroup(sender, groupInfo, isSelf = false) {
+    ensureFileGroup(sender, groupInfo, isSelf = false, senderPeerId = null) {
         const { groupId, caption, replyTo, messageId } = groupInfo;
         if (this._fileGroups[groupId]) return;
 
@@ -657,7 +666,7 @@ export class ChatUI {
         const msgContainer = document.createElement('div');
         if (messageId) msgContainer.dataset.messageId = messageId;
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const initial = this._avatarInitials(isSelf ? (localStorage.getItem('nickname') || 'Me') : sender);
+        const initial = this._avatarInitials(sender);
         const color = isSelf ? '#22c55e' : this._colorForName(sender);
 
         const replyHtml = this._replyQuoteHtml(replyTo);
@@ -671,7 +680,7 @@ export class ChatUI {
         // existing lack of either, not a new gap.
         const reactionBarHtml = caption ? '<div class="reaction-bar ml-7"></div>' : '';
 
-        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}${captionHtml}<div class="chat-file-group ml-7"></div>${reactionBarHtml}</div>`;
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5">${this._avatarHtml(senderPeerId, initial, color)}<span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}${captionHtml}<div class="chat-file-group ml-7"></div>${reactionBarHtml}</div>`;
 
         this._wireReplyQuote(msgContainer);
         let mentionedMe = false;
@@ -838,9 +847,12 @@ export class ChatUI {
      * @param {string} fileType - derived from the file extension, not trusted from the peer (see the file-transfer trust-boundary note in CLAUDE.md).
      * @param {string} blobUrl
      * @param {string} groupId
+     * @param {boolean} [isSelf=false] - passed explicitly by the caller (true only for the
+     *     local echo) — don't infer it from `sender`, or a remote peer who sets their
+     *     nickname to match the local user's own would render as self.
      * @returns {void}
      */
-    addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, groupId) {
+    addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, groupId, isSelf = false) {
         const slot = this._fileSlot(groupId, fileId);
         if (!slot) return;
         const content = slot.querySelector('.chat-file-slot-content');
@@ -850,14 +862,17 @@ export class ChatUI {
         const safeFileName = escapeHtml(fileName);
 
         if (isImage) {
-            content.innerHTML = `<div class="chat-image-preview"><a href="${blobUrl}" target="_blank" rel="noopener"><img src="${blobUrl}" alt="${safeFileName}" /></a><a href="${blobUrl}" download="${safeFileName}" class="file-card-download chat-image-download" data-tip="Download">&#x2B73;</a></div>`;
+            content.innerHTML = `<div class="chat-image-preview"><img src="${blobUrl}" alt="${safeFileName}" /><a href="${blobUrl}" download="${safeFileName}" class="file-card-download chat-image-download" data-tip="Download">&#x2B73;</a></div>`;
+            content.querySelector('.chat-image-preview img').addEventListener('click', () => {
+                this.openImageLightbox(blobUrl, fileName);
+            });
         } else {
             content.innerHTML = `<div class="file-card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-muted"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" /></svg><div class="file-card-info"><span class="file-card-name">${safeFileName}</span><span class="file-card-size">${sizeStr}</span></div><a href="${blobUrl}" download="${safeFileName}" class="file-card-download" data-tip="Download">&#x2B73;</a></div>`;
         }
 
         this._scrollIfAtBottom(document.getElementById('chat-log'));
 
-        if (sender !== 'Me' && (!document.hasFocus() || this._isChatViewClosed())) {
+        if (!isSelf && (!document.hasFocus() || this._isChatViewClosed())) {
             document.getElementById('new-message-indicator')?.classList.remove('hidden');
             this._playMessageSound();
         }
@@ -894,6 +909,56 @@ export class ChatUI {
     _imageUrlPattern = /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?.*)?$/i;
 
     /**
+     * Lazily builds the singleton `#chat-lightbox` overlay (same one-popover-
+     * reused pattern as `Tooltip.js`/`EmojiPicker.js`), wiring backdrop-click,
+     * the close button, and Escape to dismiss. Not built until the first
+     * image is actually clicked, so a session that never opens one costs
+     * nothing extra.
+     * @returns {HTMLElement}
+     */
+    _ensureLightbox() {
+        let el = document.getElementById('chat-lightbox');
+        if (el) return el;
+
+        el = document.createElement('div');
+        el.id = 'chat-lightbox';
+        el.className = 'chat-lightbox';
+        el.innerHTML = `<div class="chat-lightbox-backdrop"></div><div class="chat-lightbox-content"><div class="chat-lightbox-actions"><a class="chat-lightbox-action" data-tip="Open in new tab" target="_blank" rel="noopener"><span class="material-symbols-rounded">open_in_new</span></a><a class="chat-lightbox-action" data-tip="Download"><span class="material-symbols-rounded">download</span></a><button type="button" class="chat-lightbox-action" data-tip="Close"><span class="material-symbols-rounded">close</span></button></div><img class="chat-lightbox-img" src="" alt="" /></div>`;
+        document.body.appendChild(el);
+
+        const close = () => { el.style.display = 'none'; };
+        el.querySelector('.chat-lightbox-backdrop').addEventListener('click', close);
+        el.querySelector('button.chat-lightbox-action').addEventListener('click', close);
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && el.style.display !== 'none') close();
+        });
+        return el;
+    }
+
+    /**
+     * Opens a chat image full-size in the lightbox overlay, in front of
+     * whatever "open in a new tab" would have done directly — the overlay's
+     * own action bar still offers a real "open in new tab" (and download)
+     * for anyone who wants that. Used for both file-attachment images and
+     * inline link-preview image thumbnails.
+     * @param {string} src - a `blob:` URL (attachment) or an arbitrary peer-supplied
+     *   image URL (link preview) — either is safe to use directly as an `<img src>`/
+     *   link `href`, same as the existing inline preview already did.
+     * @param {string} [downloadName] - suggested filename for the overlay's download
+     *   action; omitted for link-preview images (no known filename).
+     * @returns {void}
+     */
+    openImageLightbox(src, downloadName) {
+        const el = this._ensureLightbox();
+        el.querySelector('.chat-lightbox-img').src = src;
+        const [newTabLink, downloadLink] = el.querySelectorAll('a.chat-lightbox-action');
+        newTabLink.href = src;
+        downloadLink.href = src;
+        downloadLink.download = downloadName || '';
+        el.style.display = 'flex';
+    }
+
+    /**
      * Expands links in a rendered message body: image URLs get an inline
      * preview thumbnail (capped at 5 per message), other links get a
      * hostname badge. Also forces `target="_blank" rel="noopener noreferrer"`
@@ -919,7 +984,7 @@ export class ChatUI {
                 img.src = href;
                 img.loading = 'lazy';
                 img.alt = 'Image preview';
-                img.addEventListener('click', () => window.open(href, '_blank'));
+                img.addEventListener('click', () => this.openImageLightbox(href));
                 img.addEventListener('error', () => preview.remove());
                 preview.appendChild(img);
                 const body = container.querySelector('.chat-markdown');
@@ -953,18 +1018,43 @@ export class ChatUI {
     }
 
     /**
+     * Builds the `.chat-avatar` HTML for a message header — a custom avatar
+     * image when `getAvatar(peerId)` resolves one (already validated by
+     * `PeerManager._isValidAvatarDataUrl` before it ever reaches
+     * `UIController.peerAvatars`, same trust level as the participant-card/
+     * top-bar-pill avatars that already interpolate it this way), otherwise
+     * the existing initials-on-color-square fallback. `peerId` is optional —
+     * omitted for contexts that never had one plumbed through (e.g. a poll's
+     * own vote-tracking `myPeerId` is a different concept than the poll
+     * creator's peerId), in which case this is just the old initials look.
+     * @param {string|null|undefined} peerId
+     * @param {string} initial
+     * @param {string} color
+     * @returns {string}
+     */
+    _avatarHtml(peerId, initial, color) {
+        const avatarUrl = peerId ? this._getAvatar(peerId) : null;
+        return avatarUrl
+            ? `<span class="chat-avatar" style="background:${color}"><img class="avatar-img" src="${avatarUrl}" alt="" /></span>`
+            : `<span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span>`;
+    }
+
+    /**
      * Renders a plain chat message (markdown, sanitized) into the log.
      * isSelf is passed explicitly by the caller (true only for the local echo) —
-     * don't infer it from `sender === 'Me'`, or a remote peer who sets their
-     * nickname to "Me" would render with the local user's own self-styling.
+     * don't infer it from `sender`, or a remote peer who sets their nickname to
+     * match the local user's own would render with the local user's own self-styling.
      * @param {string} sender
      * @param {string} text - raw markdown; sanitized here via marked + DOMPurify before insertion.
      * @param {string} [messageId] - generated if omitted.
      * @param {{messageId: string, sender: string, text: string}|null} [replyData]
      * @param {boolean} [isSelf=false]
+     * @param {string|null} [senderPeerId=null] - for avatar lookup — the message author's
+     *   peerId (or the local user's own peerId for the self echo), separate from the resolved
+     *   nickname string in `sender`. See `ChatUI` constructor's `getAvatar` dep.
      * @returns {void}
      */
-    addChatMessage(sender, text, messageId, replyData, isSelf = false) {
+    addChatMessage(sender, text, messageId, replyData, isSelf = false, senderPeerId = null) {
         const chatLog = document.getElementById('chat-log');
         const msgContainer = document.createElement('div');
         if (!messageId) messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
@@ -972,11 +1062,11 @@ export class ChatUI {
 
         const raw = DOMPurify.sanitize(marked.parse(text));
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const initial = this._avatarInitials(isSelf ? (localStorage.getItem('nickname') || 'Me') : sender);
+        const initial = this._avatarInitials(sender);
         const color = isSelf ? '#22c55e' : this._colorForName(sender);
         const replyHtml = this._replyQuoteHtml(replyData);
 
-        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5"><span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span><span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}<div class="chat-markdown chat-body prose ml-7">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5">${this._avatarHtml(senderPeerId, initial, color)}<span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}<div class="chat-markdown chat-body prose ml-7">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
 
         this._wireReplyQuote(msgContainer);
 
@@ -1000,7 +1090,7 @@ export class ChatUI {
 
         const newMessageIndicator = document.getElementById('new-message-indicator');
         const tabFocused = document.hasFocus();
-        const isFromOther = sender !== 'Me';
+        const isFromOther = !isSelf;
 
         if (mentionedMe && isFromOther) {
             msg.classList.add('chat-message-mentioned');
@@ -1269,7 +1359,8 @@ export class ChatUI {
      */
     _replyQuoteHtml(replyData) {
         if (!replyData || !replyData.sender || !replyData.text) return '';
-        const rColor = replyData.sender === 'Me' ? '#22c55e' : this._colorForName(replyData.sender);
+        const myNickname = (localStorage.getItem('nickname') || 'Anonymous').trim();
+        const rColor = replyData.sender === myNickname ? '#22c55e' : this._colorForName(replyData.sender);
         const rText = escapeHtml(replyData.text.length > 80 ? replyData.text.substring(0, 80) + '...' : replyData.text);
         return `<div class="chat-reply-quote ml-7" data-reply-to="${escapeHtml(replyData.messageId || '')}"><span class="chat-reply-sender" style="color:${rColor}">${escapeHtml(replyData.sender)}</span> ${rText}</div>`;
     }
