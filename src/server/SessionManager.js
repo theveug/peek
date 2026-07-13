@@ -86,9 +86,29 @@ export class SessionManager {
      * @param {string} token - the creator token the client presents.
      * @returns {boolean} true if the token matched and creator status was (re)assigned.
      */
+    /**
+     * Constant-time equality for the creator token, mirroring
+     * validatePassword's use of crypto.timingSafeEqual — the tokens are
+     * full-entropy 128-bit randoms so a timing side-channel is not a realistic
+     * recovery vector, but keeping the compare uniform avoids the `===` being
+     * mistaken later for a deliberate exception. timingSafeEqual needs equal
+     * lengths, so a mismatch short-circuits (token length is fixed and public,
+     * nothing is leaked).
+     * @param {string|null|undefined} stored
+     * @param {string|null|undefined} presented
+     * @returns {boolean}
+     */
+    _tokenMatches(stored, presented) {
+        if (typeof stored !== 'string' || typeof presented !== 'string' || !stored) return false;
+        const a = Buffer.from(stored);
+        const b = Buffer.from(presented);
+        if (a.length !== b.length) return false;
+        return timingSafeEqual(a, b);
+    }
+
     claimModerator(sessionId, peerId, token) {
         const s = this.sessions.get(sessionId);
-        if (!s || !s.creatorToken || !token || s.creatorToken !== token) return false;
+        if (!s || !this._tokenMatches(s.creatorToken, token)) return false;
         if (s.creatorPeerId) s.moderatorPeerIds.delete(s.creatorPeerId);
         s.creatorPeerId = peerId;
         s.moderatorPeerIds.add(peerId);
@@ -161,7 +181,7 @@ export class SessionManager {
      */
     isCreatorTokenValid(sessionId, token) {
         const s = this.sessions.get(sessionId);
-        return !!(s && s.creatorToken && token && s.creatorToken === token);
+        return !!s && this._tokenMatches(s.creatorToken, token);
     }
 
     /**

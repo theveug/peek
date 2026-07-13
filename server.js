@@ -102,10 +102,14 @@ if (TRUST_PROXY) {
 // former inline scripts are external files now (lobby.js, markdown-setup.js),
 // so nothing needs 'unsafe-inline'. style-src keeps 'unsafe-inline' because
 // the redesign leans on inline style="" attributes (see CLAUDE.md). connect-src
-// lists ws:/wss: explicitly since not every browser lets 'self' cover the
-// scheme change to the signalling socket; img-src allows blob: for received
-// file-image previews. Any new external resource will be blocked until it's
-// self-hosted — that's the point. 'wasm-unsafe-eval' (added 2026-07-09 for
+// is 'self' only: per CSP3, 'self' already covers a same-origin ws:/wss: upgrade
+// (http↔ws, https↔wss on the same host+port), which is the only socket the app
+// ever opens. This once listed bare ws:/wss:, which ALSO allowed connections to
+// any host — a needless exfiltration lane behind the otherwise-strict script-src
+// (tightened 2026-07-14, verified by tests/offline-selfhost.mjs driving a real
+// in-browser room connection with zero CSP violations). img-src allows blob: for
+// received file-image previews. Any new external resource will be blocked until
+// it's self-hosted — that's the point. 'wasm-unsafe-eval' (added 2026-07-09 for
 // background blur's self-hosted MediaPipe WASM) is a distinct, narrower CSP
 // Level 3 keyword — it only permits compiling/instantiating WebAssembly
 // modules, not JS eval()/Function() — 'unsafe-eval' remains deliberately absent.
@@ -121,7 +125,7 @@ app.use((req, res, next) => {
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' blob: data:",
         "media-src 'self' blob:",
-        "connect-src 'self' ws: wss:",
+        "connect-src 'self'",
         "font-src 'self'",
         "object-src 'none'",
         "base-uri 'self'",
