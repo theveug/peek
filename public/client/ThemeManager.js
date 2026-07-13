@@ -1,5 +1,6 @@
 import { initAccent } from './AccentManager.js';
 import { getStoredBackgroundTint, applyBackgroundTint } from './BackgroundManager.js';
+import { initFontScale } from './FontScaleManager.js';
 
 function updateIcons(theme) {
     const sun = document.getElementById('theme-sun');
@@ -50,6 +51,11 @@ export function getEffectiveTheme() {
 
 export function initTheme() {
     initAccent();
+    // Font-scale doesn't depend on light/dark like accent/background-tint do —
+    // it's a flat multiplier applied once at load, not re-applied per theme
+    // change — but this is the one init entry point both App.js and lobby.js
+    // already call, so it lives here rather than needing a third call site.
+    initFontScale();
 
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
     apply(getEffectiveTheme());

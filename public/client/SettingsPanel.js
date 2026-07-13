@@ -5,6 +5,7 @@
 import { setTheme, getEffectiveTheme } from './ThemeManager.js';
 import { setAccent, getStoredAccent, accentPresetNames, presetColor } from './AccentManager.js';
 import { setBackgroundTint, getStoredBackgroundTint, bgTintPresetNames, presetBgColor } from './BackgroundManager.js';
+import { setFontScale, getStoredFontScale, fontScaleLabel } from './FontScaleManager.js';
 
 export class SettingsPanel {
     // ui/peerManager are optional — on the lobby (pre-room) there's neither, and
@@ -24,6 +25,7 @@ export class SettingsPanel {
         this._wireNav();
         this._wireProfile();
         this._wireAppearance();
+        this._wireFontScale();
         this._wireVideo();
         this._wireAudio();
         this._wirePrivacy();
@@ -294,6 +296,29 @@ export class SettingsPanel {
         const currentBgTint = getStoredBackgroundTint();
         this.modal.querySelectorAll('#settings-bg-picker button').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.bg === currentBgTint);
+        });
+    }
+
+    /**
+     * Wires the "Text size" slider — a flat multiplier on top of the fluid
+     * clamp() base font-size (`tailwind.css`'s "Fluid base font-size"
+     * section), applied live on every `input` event (not just `change`) so
+     * the whole UI visibly rescales while dragging, same immediate-feedback
+     * feel as every other Settings control.
+     * @returns {void}
+     */
+    _wireFontScale() {
+        const slider = document.getElementById('settings-font-scale');
+        const label = document.getElementById('settings-font-scale-value');
+        if (!slider) return;
+
+        const current = getStoredFontScale();
+        slider.value = String(current);
+        if (label) label.textContent = fontScaleLabel(current);
+
+        slider.addEventListener('input', () => {
+            const applied = setFontScale(parseFloat(slider.value));
+            if (label) label.textContent = fontScaleLabel(applied);
         });
     }
 

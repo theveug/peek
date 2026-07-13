@@ -8,10 +8,10 @@
 // tint before the browser has painted anything from body at all.
 //
 // Deliberately duplicates the preset tables from AccentManager.js/
-// BackgroundManager.js rather than importing them: `import`/`export` require
-// `type="module"`, and module scripts can't run synchronously ahead of
-// paint. If those preset tables change, update both here and in the real
-// modules.
+// BackgroundManager.js/FontScaleManager.js rather than importing them:
+// `import`/`export` require `type="module"`, and module scripts can't run
+// synchronously ahead of paint. If those preset tables (or FontScaleManager's
+// min/max clamp range) change, update both here and in the real modules.
 (function () {
     try {
         var theme = localStorage.getItem('theme');
@@ -45,6 +45,10 @@
             var lc = ladder[key];
             bodyStyle.setProperty('--' + key, 'oklch(' + lc[0] + ' ' + lc[1] + ' ' + bgHue + ')');
         }
+
+        var fontScale = parseFloat(localStorage.getItem('fontScale'));
+        if (!isFinite(fontScale) || fontScale < 0.85 || fontScale > 1.3) fontScale = 1;
+        htmlStyle.setProperty('--font-scale', String(fontScale));
     } catch (e) {
         // localStorage may be unavailable (privacy mode); fall back silently
         // to the hardcoded defaults already in the HTML/CSS.
