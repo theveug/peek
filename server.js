@@ -151,7 +151,7 @@ app.get('/', (req, res) => {
 
 // API: Create room
 app.post('/api/create-room', rateLimit(60_000, 10), (req, res) => {
-    const { name, password, maxPeers } = req.body || {};
+    const { name, password, maxPeers, micPolicy } = req.body || {};
     const code = generateUniqueShortCode();
     // JSON bodies can carry any type — a non-string password stored here used
     // to reach Buffer.from() in validatePassword and throw (a process-killing
@@ -159,7 +159,8 @@ app.post('/api/create-room', rateLimit(60_000, 10), (req, res) => {
     const cleanName = typeof name === 'string' ? name.replace(/[<>]/g, '').trim().substring(0, 50) : null;
     const cleanPassword = (typeof password === 'string' && password) ? password.slice(0, 200) : null;
     const creatorToken = randomBytes(16).toString('hex');
-    manager.createSession(code, { name: cleanName || null, password: cleanPassword, maxPeers, creatorToken });
+    // micPolicy is allowlisted inside createSession (anything not 'ptt' → 'open').
+    manager.createSession(code, { name: cleanName || null, password: cleanPassword, maxPeers, creatorToken, micPolicy });
     Debug.log(`Room created: ${code}${cleanName ? ` (${cleanName})` : ''}${password ? ' [password]' : ''}`);
     res.json({ code, creatorToken });
 });

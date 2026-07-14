@@ -33,6 +33,8 @@ export class PeerManager {
         this.moderatorPeerIds = new Set();
         this.onForceStopped = null; // set by App.js — keeps share/cam button icons in sync
         this.onBanList = null; // set by QuickRoomSettings — (bans[]) from listBans()/unbanPeer()
+        this.onMicPolicy = null; // set by App.js — (policy, isInitial) on 'init' and every 'mic-policy-update'
+        this.micPolicy = 'open'; // room mic rule ('open'|'ptt'), server-supplied via 'init'/'mic-policy-update'
         this.isSharing = false;
         // Placeholder until the server's 'init' supplies the real list (built
         // from the deployment's STUN_URL/TURN env config). Deliberately empty,
@@ -181,7 +183,7 @@ export class PeerManager {
      * @param {string[]} [msg.moderatorPeerIds]
      * @returns {Promise<void>}
      */
-    async handleSignal({ type, peerId, peers, from, payload, iceServers, creatorPeerId, moderatorPeerIds, bans }) {
+    async handleSignal({ type, peerId, peers, from, payload, iceServers, creatorPeerId, moderatorPeerIds, bans, micPolicy }) {
         // console.groupCollapsed(`PeerManager.handleSignal(${type})`);
         // console.log('[SIGNAL]', type, { peerId, peers, from, payload });
 
@@ -217,6 +219,10 @@ export class PeerManager {
                 this.creatorPeerId = creatorPeerId || null;
                 this.moderatorPeerIds = new Set(moderatorPeerIds || []);
                 this.ui.updateModeratorStatus(this.creatorPeerId, this.moderatorPeerIds);
+                // Room mic rule (open vs push-to-talk) — allowlisted here too,
+                // not just server-side, since this also runs on reconnects.
+                this.micPolicy = micPolicy === 'ptt' ? 'ptt' : 'open';
+                this.onMicPolicy?.(this.micPolicy, true);
                 setTimeout(() => {
                     this.broadcastMicStatus();
                     this.broadcastDeafenStatus();
@@ -238,6 +244,20 @@ export class PeerManager {
             case 'ban-list':
                 this.onBanList?.(bans || []);
                 break;
+
+            // Server-validated (creator-only) room mic-rule change. Sent to every
+            // peer INCLUDING the requesting creator, so this one handler is the
+            // single apply path for everyone — no separate local echo.
+            case 'mic-policy-update': {
+                const policy = payload.policy === 'ptt' ? 'ptt' : 'open';
+                if (policy === this.micPolicy) break;
+                this.micPolicy = policy;
+                this.ui.addSystemMessage(policy === 'ptt'
+                    ? 'The room creator turned on push-to-talk for this room — hold your mic keybind to talk'
+                    : 'The room creator switched this room back to open mic', 'info');
+                this.onMicPolicy?.(policy, false);
+                break;
+            }
 
             case 'force-stop-stream':
                 if (this.isSharing) this.stopSharing();
@@ -815,7 +835,7 @@ export class PeerManager {
      * @returns {void}
      */
     _reconcileMicGate(speakingLocally) {
-        const micMode = (typeof localStorage !== 'undefined' && localStorage.getItem('micMode')) || 'toggle';
+        const micMode = this._effectiveMicMode();
         const shouldTransmit = this.micEnabled && (micMode !== 'voice-activity' || speakingLocally);
         // Exposed for DebugPanel — lets a "ring says speaking but no audio
         // arrives" report be diagnosed from what this function actually
@@ -832,6 +852,21 @@ export class PeerManager {
             const sender = this.senders[peerId]?.['mic-audio'];
             if (sender) sender.replaceTrack(shouldTransmit ? liveTrack : null).catch(() => {});
         }
+    }
+
+    /**
+     * The mic mode actually in effect: the room's mic rule wins over the
+     * personal localStorage preference. A 'ptt' room forces push-to-talk for
+     * everyone (without touching the stored personal setting — leaving the
+     * room restores it untouched); otherwise it's the user's own choice.
+     * Every consumer of the mode (the transmit gate above, App.js's
+     * keydown/keyup handlers and mic-button click) must read through this,
+     * not localStorage directly, or the room rule silently stops applying there.
+     * @returns {string} one of 'toggle'|'push-to-talk'|'push-to-mute'|'voice-activity'
+     */
+    _effectiveMicMode() {
+        if (this.micPolicy === 'ptt') return 'push-to-talk';
+        return (typeof localStorage !== 'undefined' && localStorage.getItem('micMode')) || 'toggle';
     }
 
     /** Starts the 200ms active-speaker/mic-gate poll (idempotent). */
@@ -2183,6 +2218,18 @@ export class PeerManager {
      */
     isCreatorMe() {
         return !!this.peerId && this.creatorPeerId === this.peerId;
+    }
+
+    /**
+     * Asks the server to change the room's mic rule (creator-only —
+     * server-enforced; a non-creator's request is silently ignored). The
+     * change lands back via the 'mic-policy-update' broadcast, which is also
+     * how our own client applies it — no optimistic local flip here.
+     * @param {'open'|'ptt'} policy
+     * @returns {void}
+     */
+    setMicPolicy(policy) {
+        this.send('set-mic-policy', null, { policy });
     }
 
     // All four actions are enforced server-side (WebSocketServer.js checks

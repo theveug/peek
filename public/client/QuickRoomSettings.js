@@ -22,11 +22,13 @@ export class QuickRoomSettings {
         this._wireQuality();
         this._wireOutsideClick();
         this._wireBannedList();
+        this._wireMicPolicy();
     }
 
     open() {
         this._refresh();
         this._refreshBannedSection();
+        this._refreshMicPolicySection();
         this.popover.classList.remove('hidden');
     }
 
@@ -100,6 +102,40 @@ export class QuickRoomSettings {
 
         this._highlightSegmented('quick-screen-res-picker', 'screenShareRes', '1280x720');
         this._highlightSegmented('quick-cam-res-picker', 'camRes', '640x480');
+    }
+
+    /**
+     * Creator-only "Room rule — microphone" picker (open mic vs push-to-talk).
+     * NOT wired through _wireSegmented: the value is server-held room state,
+     * not a localStorage preference — clicking sends setMicPolicy() and the
+     * server's 'mic-policy-update' broadcast is the real apply path (including
+     * for our own client, via PeerManager's handler). The highlight here is
+     * optimistic for immediate feedback; open() resyncs it from
+     * peerManager.micPolicy, so a rejected request can't leave it lying.
+     * @returns {void}
+     */
+    _wireMicPolicy() {
+        document.getElementById('quick-mic-policy-picker')?.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.peerManager?.setMicPolicy(btn.dataset.value);
+                btn.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+            });
+        });
+    }
+
+    /** Shows the room-rule picker for the creator only, highlighting the server-known current policy. */
+    _refreshMicPolicySection() {
+        const section = document.getElementById('quick-mic-policy-section');
+        if (!section) return;
+        if (!this.peerManager?.isCreatorMe?.()) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = '';
+        const current = this.peerManager.micPolicy || 'open';
+        document.getElementById('quick-mic-policy-picker')?.querySelectorAll('button').forEach(b => {
+            b.classList.toggle('active', b.dataset.value === current);
+        });
     }
 
     /**

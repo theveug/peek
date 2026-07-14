@@ -38,10 +38,6 @@ Not yet scoped/estimated — captured here so they don't get lost; move into a p
 
 - [ ] **Broader ARIA/keyboard-nav pass (2026-07-14)** — the two "totally unreachable via keyboard" gaps (`#controls`, per-peer `.participant-actions`) and the Settings/lightbox focus traps are fixed (see `CHANGELOG.md`), but the audit that found them also found near-zero `role`/ARIA usage elsewhere in app code. Remaining, lower-urgency (things are reachable, just not well-described/navigable): custom popovers/menus (moderator kebab, quick-settings, invite, topbar identity, emoji picker, pinned/search panels) have no `role="menu"`/`aria-expanded`/arrow-key navigation — Escape-to-close already works consistently across all of them, this would just make them read/operate more like native menus for screen-reader and keyboard users. Drag-to-reposition self-view PiPs have no keyboard equivalent (mouse/touch only via Pointer Events). No concrete plan yet — flagging scope, not estimating.
 
-## Moderation
-
-- [ ] **Room rules: push-to-talk vs. open mic** — store a mode on the session (`SessionManager.js`), broadcast it to joining peers, client UI adapts (e.g. force push-to-talk binding, hide the open-mic toggle). Important caveat: because Peek is a P2P mesh with no media server in the middle, the server can't intercept or block audio packets — enforcement is "social"/UI-level (well-behaved clients respect the rule), not a hard security guarantee. A modified client could ignore it. Fine for well-intentioned rooms, just don't market it as airtight.
-
 ## Bigger features (post-Electron)
 
 - [ ] **Recording** — record the session locally.

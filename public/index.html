@@ -125,6 +125,14 @@
                             </div>
                         </div>
 
+                        <div class="settings-field" id="quick-mic-policy-section" style="display:none;">
+                            <div class="settings-label">Room rule — microphone</div>
+                            <div class="settings-segmented" id="quick-mic-policy-picker">
+                                <button type="button" data-value="open">Open mic</button>
+                                <button type="button" data-value="ptt">Push to talk</button>
+                            </div>
+                        </div>
+
                         <div class="settings-field" id="quick-banned-section" style="display:none;margin-bottom:0;">
                             <div class="settings-label">Banned users</div>
                             <div id="quick-banned-list" class="quick-banned-list">
@@ -482,6 +490,8 @@
                         </button>
                         <div id="mic-options-popover" class="dock-quick-popover hidden">
                             <div class="dock-quick-popover-label">Mic mode</div>
+                            <div id="mic-options-room-rule" class="dock-popover-note" style="display:none">Room rule:
+                                push-to-talk</div>
                             <div class="settings-segmented" id="mic-options-mode-picker">
                                 <button type="button" data-value="toggle">Toggle</button>
                                 <button type="button" data-value="push-to-talk">PTT</button>
@@ -906,6 +916,9 @@
                         </div>
                         <div class="settings-field">
                             <div class="settings-label">Mic mode</div>
+                            <div id="settings-mic-room-rule" class="dock-popover-note" style="display:none">This room
+                                enforces push-to-talk (set by the room creator) — your own preference below will apply
+                                again in other rooms.</div>
                             <div class="settings-segmented" id="settings-mic-mode-picker" style="width:100%;">
                                 <button type="button" data-mic-mode="toggle"
                                     style="flex:1;justify-content:center;">Toggle</button>

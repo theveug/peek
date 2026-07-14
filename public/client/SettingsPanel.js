@@ -582,10 +582,19 @@ export class SettingsPanel {
     }
 
     _refreshMicMode() {
-        const micMode = localStorage.getItem('micMode') || 'toggle';
+        // A 'ptt' room rule overrides the personal preference: the picker shows
+        // (and every mode-dependent row follows) the enforced push-to-talk mode,
+        // with the buttons disabled and a "Room rule" note explaining why. The
+        // stored localStorage preference is never modified. On the lobby (no
+        // peerManager) this is always unenforced.
+        const enforced = this.peerManager?.micPolicy === 'ptt';
+        const micMode = enforced ? 'push-to-talk' : (localStorage.getItem('micMode') || 'toggle');
         this.modal.querySelectorAll('#settings-mic-mode-picker button').forEach(b => {
             b.classList.toggle('active', b.dataset.micMode === micMode);
+            b.disabled = enforced;
         });
+        const ruleNote = document.getElementById('settings-mic-room-rule');
+        if (ruleNote) ruleNote.style.display = enforced ? '' : 'none';
         const keybindRow = document.getElementById('keybind-row');
         if (keybindRow) keybindRow.classList.toggle('hidden', micMode !== 'push-to-talk' && micMode !== 'push-to-mute');
         const keybindInput = document.getElementById('settings-keybind');

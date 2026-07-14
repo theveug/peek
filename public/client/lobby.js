@@ -58,10 +58,11 @@ document.getElementById('create-form').addEventListener('submit', async (e) => {
         const name = document.getElementById('create-name').value.trim();
         const password = document.getElementById('create-password').value;
         const maxPeers = maxPeersInput.value;
+        const micPolicy = document.getElementById('create-ptt')?.checked ? 'ptt' : 'open';
         const res = await fetch('/api/create-room', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: name || null, password: password || null, maxPeers }),
+            body: JSON.stringify({ name: name || null, password: password || null, maxPeers, micPolicy }),
         });
         const { code, creatorToken } = await res.json();
         // Always set-or-clear, never leave a previous room's password

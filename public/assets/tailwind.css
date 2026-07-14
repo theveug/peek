@@ -3138,6 +3138,23 @@ body,
   color: var(--t1);
 }
 
+/* Locked by a room rule (e.g. push-to-talk enforced) — visibly present but
+   inert, so the user can see what their preference WOULD be and why it isn't
+   in effect (paired with a .dock-popover-note explaining the rule). */
+.settings-segmented button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Small amber annotation inside a popover/settings field — used for the
+   "Room rule: push-to-talk" notes next to locked mic-mode pickers. */
+.dock-popover-note {
+  font-size: 0.6875rem;
+  color: var(--amber);
+  line-height: 1.4;
+  margin-bottom: 0.25rem;
+}
+
 .settings-accent-swatches {
   display: flex;
   gap: 1rem;

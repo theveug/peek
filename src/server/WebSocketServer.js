@@ -164,7 +164,7 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                     const meta = manager.getSessionMeta(sessionId);
 
                     const iceServers = generateIceServers(iceConfig);
-                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, creatorPeerId: meta?.creatorPeerId || null, moderatorPeerIds: meta?.moderatorPeerIds || [], creatorToken: mintedCreatorToken || undefined, buildId }));
+                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, creatorPeerId: meta?.creatorPeerId || null, moderatorPeerIds: meta?.moderatorPeerIds || [], micPolicy: meta?.micPolicy || 'open', creatorToken: mintedCreatorToken || undefined, buildId }));
 
                     peers.forEach(pid => {
                         const socket = manager.getPeerSocket(pid);
@@ -281,6 +281,23 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                     if (!manager.isCreator(sessionId, peerId)) break;
                     manager.unban(sessionId, payload?.banId);
                     ws.send(JSON.stringify({ type: 'ban-list', bans: manager.listBans(sessionId) }));
+                    break;
+                }
+
+                // Room mic rule (open mic vs push-to-talk) — creator-only, same tier as
+                // kick/ban. setMicPolicy() validates both the requester and the value;
+                // an unauthorized/invalid request is silently dropped with no broadcast.
+                // Broadcast goes to EVERY peer including the requester — the creator's
+                // own client applies the change from this same message, one code path.
+                case 'set-mic-policy': {
+                    const sessionId = manager.getSessionId(peerId);
+                    if (!manager.setMicPolicy(sessionId, peerId, payload?.policy)) break;
+                    manager.getPeersInSession(sessionId).forEach(pid => {
+                        const socket = manager.getPeerSocket(pid);
+                        if (socket) {
+                            socket.send(JSON.stringify({ type: 'mic-policy-update', payload: { policy: payload.policy } }));
+                        }
+                    });
                     break;
                 }
 

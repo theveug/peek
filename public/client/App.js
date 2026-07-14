@@ -536,6 +536,13 @@ document.getElementById('leave-room-button').addEventListener('click', () => {
 });
 
 document.getElementById('mic-toggle').addEventListener('click', async () => {
+    // In a push-to-talk room the button can only mute — opening the mic is
+    // exclusively hold-the-keybind, so a click can't sidestep the room rule.
+    // (Local-only toast, not a system message: nothing room-visible happened.)
+    if (peerManager.micPolicy === 'ptt' && !peerManager.micEnabled) {
+        ui.showToast('This room is push-to-talk — hold your mic keybind to talk');
+        return;
+    }
     const enabled = await peerManager.toggleMic();
     updateMicUI(enabled);
 });
@@ -680,7 +687,10 @@ wireQuickPopover('cam-quality-caret', 'cam-quality-popover', () => { refreshCamR
 // sensitivity slider — the same three controls as Settings' Audio & Mic
 // mic-mode section, duplicated here as a quick surface.
 function refreshMicOptionsRows() {
-    const micMode = localStorage.getItem('micMode') || 'toggle';
+    // Effective mode, not the stored preference — a 'ptt' room rule forces
+    // push-to-talk, so the keybind row must show even if the user's own
+    // setting is toggle/voice-activity.
+    const micMode = peerManager._effectiveMicMode();
     const keybindRow = document.getElementById('mic-options-keybind-row');
     if (keybindRow) keybindRow.classList.toggle('hidden', micMode !== 'push-to-talk' && micMode !== 'push-to-mute');
     const thresholdRow = document.getElementById('mic-options-threshold-row');
@@ -704,7 +714,45 @@ const refreshMicOptionsMode = wireSegmentedPicker('mic-options-mode-picker', 'mi
     ui.updateMicModeBadge(value);
     refreshMicOptionsRows();
 });
-wireQuickPopover('mic-options-caret', 'mic-options-popover', () => { refreshMicOptionsMode(); refreshMicOptionsRows(); });
+
+// Room mic rule: while the room enforces push-to-talk, the quick popover's
+// mode picker is locked (buttons disabled, PTT highlighted, a "Room rule"
+// note shown) rather than hidden — the user should see WHY their stored
+// preference isn't in effect. Their localStorage setting is never touched,
+// so leaving the room restores it untouched.
+function refreshMicPolicyLock() {
+    const enforced = peerManager.micPolicy === 'ptt';
+    const container = document.getElementById('mic-options-mode-picker');
+    container?.querySelectorAll('button[data-value]').forEach(b => {
+        b.disabled = enforced;
+        if (enforced) b.classList.toggle('active', b.dataset.value === 'push-to-talk');
+    });
+    const note = document.getElementById('mic-options-room-rule');
+    if (note) note.style.display = enforced ? '' : 'none';
+    if (!enforced) refreshMicOptionsMode();
+}
+
+wireQuickPopover('mic-options-caret', 'mic-options-popover', () => { refreshMicOptionsMode(); refreshMicOptionsRows(); refreshMicPolicyLock(); });
+
+// Fires on 'init' and every creator rule change (PeerManager also passes an
+// isInitial flag, unused here — the inline system message for changes comes
+// from its 'mic-policy-update' handler; this callback only owns the DOM
+// consequences, identical in both cases).
+peerManager.onMicPolicy = (policy) => {
+    ui.updateMicModeBadge(policy === 'ptt' ? 'push-to-talk' : (localStorage.getItem('micMode') || 'toggle'));
+    refreshMicPolicyLock();
+    refreshMicOptionsRows();
+    if (policy === 'ptt') {
+        // The rule takes effect immediately: an open mic gets muted rather than
+        // staying live until the next manual toggle.
+        if (peerManager.micEnabled) {
+            peerManager.toggleMic().then(enabled => updateMicUI(enabled));
+        }
+        if (!localStorage.getItem('micKeybind')) {
+            ui.addSystemMessage('This room uses push-to-talk — set a mic keybind via the mic button’s options (▾) or Settings → Audio & Mic', 'info');
+        }
+    }
+};
 
 document.getElementById('mic-options-threshold')?.addEventListener('input', (e) => {
     localStorage.setItem('micThreshold', e.target.value);
@@ -1031,7 +1079,8 @@ window.addEventListener('keydown', (e) => {
     const focused = document.activeElement;
     if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
 
-    const micMode = localStorage.getItem('micMode') || 'toggle';
+    // Effective mode — a 'ptt' room rule forces push-to-talk over the stored preference.
+    const micMode = peerManager._effectiveMicMode();
     if (micMode === 'push-to-talk') {
         if (!peerManager.micStream) {
             peerManager.toggleMic().then(enabled => updateMicUI(enabled));
@@ -1052,7 +1101,7 @@ window.addEventListener('keyup', (e) => {
     const focused = document.activeElement;
     if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
 
-    const micMode = localStorage.getItem('micMode') || 'toggle';
+    const micMode = peerManager._effectiveMicMode();
     if (micMode === 'push-to-talk') {
         if (peerManager.micEnabled) {
             peerManager.toggleMic().then(enabled => updateMicUI(enabled));
