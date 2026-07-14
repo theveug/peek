@@ -336,6 +336,9 @@ export class ChatUI {
      * Attaches the hover action bar (Copy + Reply + React, plus Edit + Delete
      * on the local user's own messages) to a rendered message element,
      * including the emoji picker popover's open/close/pick wiring.
+     * Copy and Edit only render when there's actual text (`rawText`) — a
+     * files-only group has nothing to copy or edit, but still gets Reply/
+     * React/Pin (and Delete when own).
      * @param {HTMLElement} msgEl
      * @param {string} messageId
      * @param {string} [rawText] - the original markdown source, for the Copy button.
@@ -343,29 +346,32 @@ export class ChatUI {
      * @returns {void}
      */
     _setupEmojiPicker(msgEl, messageId, rawText, isSelf = false) {
+        const hasText = !!(rawText && rawText.trim());
         const actionBar = document.createElement('div');
         actionBar.className = 'msg-action-bar';
 
-        const copyBtn = document.createElement('button');
-        copyBtn.className = 'msg-action-btn';
-        const copyIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M13.887 3.182c.396.037.79.08 1.183.128C16.194 3.45 17 4.414 17 5.517V16.75A2.25 2.25 0 0 1 14.75 19h-9.5A2.25 2.25 0 0 1 3 16.75V5.517c0-1.103.806-2.068 1.93-2.207.393-.048.787-.09 1.183-.128A3.001 3.001 0 0 1 9 1h2c1.373 0 2.531.923 2.887 2.182ZM7.5 4A1.5 1.5 0 0 1 9 2.5h2A1.5 1.5 0 0 1 12.5 4v.5h-5V4Z" clip-rule="evenodd" /></svg>';
-        copyBtn.innerHTML = copyIcon;
-        copyBtn.dataset.tip = 'Copy message';
-        copyBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            // Prefer the meta map over the captured rawText param — an edit
-            // updates the map, while the closure would copy the stale original.
-            let toCopy = (this._messageMeta.get(messageId)?.rawText ?? rawText ?? msgEl.querySelector('.chat-markdown')?.textContent ?? '').trim();
-            // A message that is entirely one inline-code span (`token`) is almost
-            // always a value meant for pasting into a field — unwrap the backticks.
-            const inlineCode = toCopy.match(/^`([^`]+)`$/);
-            if (inlineCode) toCopy = inlineCode[1].trim();
-            navigator.clipboard.writeText(toCopy).then(() => {
-                copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg>';
-                setTimeout(() => (copyBtn.innerHTML = copyIcon), 1500);
+        if (hasText) {
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'msg-action-btn';
+            const copyIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M13.887 3.182c.396.037.79.08 1.183.128C16.194 3.45 17 4.414 17 5.517V16.75A2.25 2.25 0 0 1 14.75 19h-9.5A2.25 2.25 0 0 1 3 16.75V5.517c0-1.103.806-2.068 1.93-2.207.393-.048.787-.09 1.183-.128A3.001 3.001 0 0 1 9 1h2c1.373 0 2.531.923 2.887 2.182ZM7.5 4A1.5 1.5 0 0 1 9 2.5h2A1.5 1.5 0 0 1 12.5 4v.5h-5V4Z" clip-rule="evenodd" /></svg>';
+            copyBtn.innerHTML = copyIcon;
+            copyBtn.dataset.tip = 'Copy message';
+            copyBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                // Prefer the meta map over the captured rawText param — an edit
+                // updates the map, while the closure would copy the stale original.
+                let toCopy = (this._messageMeta.get(messageId)?.rawText ?? rawText ?? msgEl.querySelector('.chat-markdown')?.textContent ?? '').trim();
+                // A message that is entirely one inline-code span (`token`) is almost
+                // always a value meant for pasting into a field — unwrap the backticks.
+                const inlineCode = toCopy.match(/^`([^`]+)`$/);
+                if (inlineCode) toCopy = inlineCode[1].trim();
+                navigator.clipboard.writeText(toCopy).then(() => {
+                    copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" /></svg>';
+                    setTimeout(() => (copyBtn.innerHTML = copyIcon), 1500);
+                });
             });
-        });
-        actionBar.appendChild(copyBtn);
+            actionBar.appendChild(copyBtn);
+        }
 
         const replyBtn = document.createElement('button');
         replyBtn.className = 'msg-action-btn';
@@ -376,7 +382,12 @@ export class ChatUI {
             const senderEl = msgEl.querySelector('.chat-sender');
             const bodyEl = msgEl.querySelector('.chat-markdown');
             const sender = senderEl ? senderEl.textContent : '?';
-            const text = bodyEl ? bodyEl.textContent : '';
+            // A files-only group has no text body — quote the first file's
+            // name so the reply snippet isn't blank.
+            const text = (bodyEl ? bodyEl.textContent : '')
+                || msgEl.querySelector('.chat-file-slot .file-offer-name, .chat-file-slot .file-card-name')?.textContent
+                || msgEl.querySelector('.chat-file-slot .chat-image-preview img')?.alt
+                || '(file attachment)';
             this.setReplyTo(messageId, sender, text);
         });
         actionBar.appendChild(replyBtn);
@@ -409,15 +420,17 @@ export class ChatUI {
         }
 
         if (isSelf) {
-            const editBtn = document.createElement('button');
-            editBtn.className = 'msg-action-btn';
-            editBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path d="m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" /><path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" /></svg>';
-            editBtn.dataset.tip = 'Edit';
-            editBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this._beginEdit(messageId);
-            });
-            actionBar.appendChild(editBtn);
+            if (hasText) {
+                const editBtn = document.createElement('button');
+                editBtn.className = 'msg-action-btn';
+                editBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path d="m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" /><path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" /></svg>';
+                editBtn.dataset.tip = 'Edit';
+                editBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this._beginEdit(messageId);
+                });
+                actionBar.appendChild(editBtn);
+            }
 
             // Two-step delete: first click arms the button for 3s (tooltip
             // live-updates via Tooltip.js), second click actually deletes —
@@ -680,18 +693,28 @@ export class ChatUI {
         const captionHtml = caption
             ? `<div class="chat-markdown chat-body prose ml-7">${DOMPurify.sanitize(marked.parse(caption))}</div>`
             : '';
-        // Reactions/reply-quoting only make sense when there's an actual caption to
-        // react to or quote — a files-only group matches plain file messages'
-        // existing lack of either, not a new gap.
-        const reactionBarHtml = caption ? '<div class="reaction-bar ml-7"></div>' : '';
+        // Files-only groups get the reaction bar and hover actions too
+        // (2026-07-15, owner-reported gap — reacting to / replying to / pinning
+        // a shared file is as legitimate as for a text message). Only gated on
+        // messageId, which every send mints regardless of caption.
+        const reactionBarHtml = messageId ? '<div class="reaction-bar ml-7"></div>' : '';
 
         msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5">${this._avatarHtml(senderPeerId, initial, color)}<span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}${captionHtml}<div class="chat-file-group ml-7"></div>${reactionBarHtml}</div>`;
 
         this._wireReplyQuote(msgContainer);
         let mentionedMe = false;
-        if (caption) {
-            mentionedMe = this._finalizeMarkdownBody(msgContainer);
-            if (messageId) this._setupEmojiPicker(msgContainer.querySelector('.chat-message'), messageId, caption);
+        if (caption) mentionedMe = this._finalizeMarkdownBody(msgContainer);
+        if (messageId) {
+            // Same meta record + cap as addChatMessage — powers pin snapshots,
+            // Copy/Edit (caption only; a files-only group stores rawText '',
+            // and _setupEmojiPicker gates those buttons on non-empty text),
+            // and delete of the whole bubble on both sides.
+            this._messageMeta.set(messageId, { isSelf, rawText: caption || '', sender, timestamp });
+            for (const key of this._messageMeta.keys()) {
+                if (this._messageMeta.size <= 300) break;
+                this._messageMeta.delete(key);
+            }
+            this._setupEmojiPicker(msgContainer.querySelector('.chat-message'), messageId, caption || '', isSelf);
         }
 
         chatLog.appendChild(msgContainer);
@@ -759,19 +782,53 @@ export class ChatUI {
      * @param {string} groupId
      * @returns {void}
      */
+    // The sender gives up waiting for an accept after 60s
+    // (PeerManager._awaitOfferResponse's timeout) — an accept clicked after
+    // that would silently go nowhere, leaving the receiver stuck on a card
+    // that never delivers. The visible countdown runs slightly shorter so the
+    // card expires (and sends a real decline) while the sender is still
+    // listening, instead of racing the sender's own timeout.
+    _offerTtlMs = 55_000;
+
     showFileOffer(sender, fileId, fileName, fileSize, onAccept, onDecline, groupId) {
         const slot = this._fileSlot(groupId, fileId);
         if (!slot) return;
         const content = slot.querySelector('.chat-file-slot-content');
         const sizeStr = this._formatFileSize(fileSize);
-        content.innerHTML = `<div class="file-offer"><div class="file-offer-info">Wants to send <span class="file-offer-name">${escapeHtml(fileName)}</span> <span class="file-offer-size">(${sizeStr})</span></div><div class="file-offer-actions"><button type="button" class="file-offer-accept">Accept</button><button type="button" class="file-offer-decline">Decline</button></div></div>`;
+        content.innerHTML = `<div class="file-offer"><div class="file-offer-info">Wants to send <span class="file-offer-name">${escapeHtml(fileName)}</span> <span class="file-offer-size">(${sizeStr})</span></div><div class="file-offer-actions"><button type="button" class="file-offer-accept">Accept</button><button type="button" class="file-offer-decline">Decline</button></div><div class="file-offer-ttl"><div class="file-offer-ttl-track"><div class="file-offer-ttl-fill"></div></div><span class="file-offer-ttl-label"></span></div></div>`;
         this._scrollIfAtBottom(document.getElementById('chat-log'));
 
+        // Countdown to expiry: shrinking bar + seconds label, ticked every
+        // second. The tick also self-cancels if the card's content got
+        // replaced by something else (accept/decline/auto-flows), so a stale
+        // timer can never overwrite a later state.
+        const expiresAt = Date.now() + this._offerTtlMs;
+        const fill = content.querySelector('.file-offer-ttl-fill');
+        const label = content.querySelector('.file-offer-ttl-label');
+        const renderTtl = () => {
+            const remaining = Math.max(0, expiresAt - Date.now());
+            fill.style.width = `${(remaining / this._offerTtlMs) * 100}%`;
+            label.textContent = `${Math.ceil(remaining / 1000)}s`;
+            fill.closest('.file-offer-ttl')?.classList.toggle('file-offer-ttl-urgent', remaining < 11_000);
+            return remaining;
+        };
+        renderTtl();
+        const timer = setInterval(() => {
+            if (!content.contains(fill)) { clearInterval(timer); return; }
+            if (renderTtl() <= 0) {
+                clearInterval(timer);
+                content.innerHTML = '<span class="file-offer-declined">Offer expired</span>';
+                onDecline();
+            }
+        }, 1000);
+
         content.querySelector('.file-offer-accept').addEventListener('click', () => {
+            clearInterval(timer);
             content.innerHTML = '';
             onAccept();
         });
         content.querySelector('.file-offer-decline').addEventListener('click', () => {
+            clearInterval(timer);
             content.innerHTML = '<span class="file-offer-declined">Declined</span>';
             onDecline();
         });
@@ -1312,7 +1369,12 @@ export class ChatUI {
             const meta = this._messageMeta.get(messageId);
             this._pinned.set(messageId, {
                 sender: meta?.sender ?? container?.querySelector('.chat-sender')?.textContent ?? '?',
-                rawText: meta?.rawText ?? container?.querySelector('.chat-markdown')?.textContent ?? '',
+                // || not ?? — a files-only group's meta stores rawText '', which
+                // should fall through to a filename/label, not pin an empty snippet.
+                rawText: (meta?.rawText || container?.querySelector('.chat-markdown')?.textContent
+                    || container?.querySelector('.file-card-name')?.textContent
+                    || container?.querySelector('.chat-image-preview img')?.alt
+                    || '(file attachment)'),
                 pinnedAt: Date.now(),
             });
             for (const key of this._pinned.keys()) {

@@ -1291,6 +1291,11 @@ export class PeerManager {
                 this.ui.ensureFileGroup(nickname, {
                     groupId: msg.groupId, caption: msg.caption, replyTo: msg.replyTo, messageId: msg.messageId,
                 }, false, peerId);
+                // File groups are edit/delete-able like plain chat messages
+                // (2026-07-15), so their messageId needs the same authorship
+                // record for the chat-edit/chat-delete authz checks below.
+                // Idempotent across the batch's repeated per-file offers.
+                this._recordMessageOwner(msg.messageId, peerId);
 
                 if (!this._isFileAllowed(fileName)) {
                     this.ui.addSystemMessage(`Blocked incoming file: ${fileName || '(unnamed)'}`, 'leave');
@@ -1370,13 +1375,7 @@ export class PeerManager {
                 if (typeof msg.text !== 'string' || !msg.text) return;
                 // Record which connection authored this messageId so chat-edit/
                 // chat-delete below can be restricted to the original author.
-                if (typeof msg.messageId === 'string') {
-                    this._chatMessageOwners.set(msg.messageId, peerId);
-                    for (const key of this._chatMessageOwners.keys()) {
-                        if (this._chatMessageOwners.size <= 600) break;
-                        this._chatMessageOwners.delete(key);
-                    }
-                }
+                this._recordMessageOwner(msg.messageId, peerId);
                 this.ui.addChatMessage(this.ui._peerNickname(peerId), msg.text, msg.messageId, msg.replyTo || null, false, peerId);
                 this.ui.updateTypingIndicator(peerId, false);
             } else if (msg.type === 'chat-edit') {
@@ -2218,6 +2217,26 @@ export class PeerManager {
      */
     isCreatorMe() {
         return !!this.peerId && this.creatorPeerId === this.peerId;
+    }
+
+    /**
+     * Records which connection authored a messageId (capped, FIFO-evicted) so
+     * the chat-edit/chat-delete receive gates can restrict those actions to
+     * the original author. Used for both plain chat messages and file-group
+     * bubbles (whose messageId arrives via file-offer). No-op for non-string
+     * ids; idempotent for repeats (a multi-file batch re-sends the same
+     * messageId in every per-file offer).
+     * @param {string} messageId
+     * @param {string} peerId
+     * @returns {void}
+     */
+    _recordMessageOwner(messageId, peerId) {
+        if (typeof messageId !== 'string') return;
+        this._chatMessageOwners.set(messageId, peerId);
+        for (const key of this._chatMessageOwners.keys()) {
+            if (this._chatMessageOwners.size <= 600) break;
+            this._chatMessageOwners.delete(key);
+        }
     }
 
     /**

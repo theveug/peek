@@ -456,6 +456,47 @@ body:focus-within #controls {
   color: var(--color-foreground);
 }
 
+/* Offer-expiry countdown (mirrors the sender's 60s accept timeout): a
+   shrinking bar + seconds label under the Accept/Decline buttons, turning
+   red in the final 10s via .file-offer-ttl-urgent. */
+.file-offer-ttl {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
+}
+
+.file-offer-ttl-track {
+  flex: 1;
+  height: 0.1875rem;
+  background: var(--bg4);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.file-offer-ttl-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 1s linear;
+}
+
+.file-offer-ttl-label {
+  font-size: 0.6875rem;
+  color: var(--t3);
+  font-variant-numeric: tabular-nums;
+  min-width: 2em;
+  text-align: right;
+}
+
+.file-offer-ttl-urgent .file-offer-ttl-fill {
+  background: var(--red);
+}
+
+.file-offer-ttl-urgent .file-offer-ttl-label {
+  color: var(--red);
+}
+
 .file-offer-declined {
   display: block;
   padding: 0.25rem 0;
@@ -2351,6 +2392,14 @@ body,
   top: auto;
   right: auto;
   transform: translateX(-50%);
+  /* Never wider than the stage it lives in: with both side panels dragged
+     wide, the dock used to overflow underneath them (partially hidden and
+     unclickable). Clamping + wrapping keeps every button visible inside the
+     stage instead of overlaying the panels (which would cover the composer
+     and the raised-hands section). */
+  max-width: calc(100% - 1rem);
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 /* ===== Stage + controls dock (redesign, Phase 2d) ===== */
@@ -4490,6 +4539,30 @@ body,
   height: 0.0625rem;
   background: var(--border);
   margin: 0.25rem 0.125rem;
+}
+
+/* Custom-status text field inside the identity dropdown — second surface for
+   Settings → Profile's status-text field (same localStorage key/PeerManager
+   call, not a second data model). */
+.quick-status-text-input {
+  width: calc(100% - 0.25rem);
+  margin: 0.125rem;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--t1);
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.quick-status-text-input:focus {
+  border-color: var(--accent);
+}
+
+.quick-status-text-input::placeholder {
+  color: var(--t3);
 }
 
 /* ===== Invite popover ===== */

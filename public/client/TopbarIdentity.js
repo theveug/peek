@@ -24,8 +24,11 @@ export class TopbarIdentity {
 
         trigger.addEventListener('click', (e) => {
             e.stopPropagation();
+            const opening = menu.classList.contains('hidden');
             menu.classList.toggle('hidden');
+            if (opening) this._refreshStatusText();
         });
+        this._wireStatusText();
         menu.querySelectorAll('.quick-status-option[data-status]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -45,6 +48,39 @@ export class TopbarIdentity {
         const status = this.peerManager?.status || 'online';
         const dot = document.getElementById('topbar-identity-status-dot');
         if (dot) dot.className = `topbar-identity-status-dot ${status === 'online' ? '' : status}`.trim();
+    }
+
+    /**
+     * Custom status text field in the dropdown (2026-07-15) — a second surface
+     * for the same value Settings → Profile's `#settings-status-text` edits,
+     * not a second data model: both read/write `localStorage['statusText']`
+     * via PeerManager.setStatusText(), which persists, broadcasts, and updates
+     * the local card in one call. Enter applies and closes the menu; blur
+     * applies quietly (matching the Settings field's apply-on-change feel).
+     */
+    _wireStatusText() {
+        const input = document.getElementById('topbar-status-text');
+        if (!input) return;
+        const apply = () => {
+            const value = input.value.trim();
+            if (value === (localStorage.getItem('statusText') || '').trim()) return;
+            if (this.peerManager) this.peerManager.setStatusText(value);
+            else localStorage.setItem('statusText', value.slice(0, 60));
+        };
+        input.addEventListener('keydown', (e) => {
+            e.stopPropagation(); // keep global keybinds (PTT/deafen) out of typing
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                apply();
+                document.getElementById('topbar-identity-menu')?.classList.add('hidden');
+            }
+        });
+        input.addEventListener('blur', apply);
+    }
+
+    _refreshStatusText() {
+        const input = document.getElementById('topbar-status-text');
+        if (input) input.value = localStorage.getItem('statusText') || '';
     }
 
     _wireOutsideClick() {
