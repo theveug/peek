@@ -44,6 +44,14 @@ export class PeerManager {
         this._noiseSuppressor = null;
         this.micEnabled = false;
         this.deafened = false;
+        // Whatever micEnabled was the instant deafening began, so undeafening
+        // restores it exactly (a mic already manually muted stays muted).
+        this._micEnabledBeforeDeafen = null;
+        // True only while the *current* deafened state was triggered by the
+        // auto-deafen-on-away feature (not a manual click/keybind) — lets the
+        // idle-return handler know it's safe to auto-undeafen, without ever
+        // undoing a deliberate manual deafen.
+        this._autoDeafened = false;
         this.status = 'online';
         this._manualStatus = null;
         // Two independent automatic-away signals, tracked separately so one
@@ -870,6 +878,51 @@ export class PeerManager {
     /** Sends the current deafen state to every peer. */
     broadcastDeafenStatus() {
         this.send('deafen-status', null, { deafened: this.deafened || false });
+    }
+
+    /**
+     * Toggles deafened state and, like Discord, hard-mutes the mic alongside
+     * it — a deafened peer shouldn't still be transmitting. Remembers
+     * whatever micEnabled state was in effect the instant deafening began so
+     * undeafening restores it exactly: a mic that was already manually muted
+     * before deafening stays muted afterward rather than being force-unmuted.
+     * Uses the same track.enabled flip toggleMic() uses (not replaceTrack),
+     * since _reconcileMicGate's 200ms poll reads micEnabled and gates the
+     * actual RTP sender on its own — this only needs to change the source of
+     * truth it reads.
+     *
+     * Incoming-audio muting (the `<audio>` elements themselves) is a DOM
+     * concern the caller (App.js) already owns and is untouched here.
+     *
+     * @param {boolean} deafened
+     * @param {{auto?: boolean}} [opts] - `auto: true` marks this as triggered
+     *   by the away-idle timer rather than a manual click/keybind, so the
+     *   idle-return handler knows it's safe to auto-undeafen later. Any
+     *   manual call (the default) clears that flag, so a deliberate manual
+     *   deafen/undeafen is never silently undone by the idle timer returning.
+     * @returns {void}
+     */
+    setDeafened(deafened, { auto = false } = {}) {
+        this.deafened = deafened;
+        this._autoDeafened = auto && deafened;
+
+        if (deafened) {
+            this._micEnabledBeforeDeafen = this.micEnabled;
+            if (this.micStream && this.micEnabled) {
+                this.micEnabled = false;
+                this.micStream.getAudioTracks().forEach(t => { t.enabled = false; });
+                this.broadcastMicStatus();
+            }
+        } else {
+            if (this.micStream && this._micEnabledBeforeDeafen && !this.micEnabled) {
+                this.micEnabled = true;
+                this.micStream.getAudioTracks().forEach(t => { t.enabled = true; });
+                this.broadcastMicStatus();
+            }
+            this._micEnabledBeforeDeafen = null;
+        }
+
+        this.broadcastDeafenStatus();
     }
 
     /** Sends the current (localStorage-persisted) nickname to every peer. */

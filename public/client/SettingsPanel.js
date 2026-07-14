@@ -108,6 +108,15 @@ export class SettingsPanel {
             this.peerManager?.setStatusText(value);
         });
 
+        // How long without mouse/keyboard/touch input before the idle timer
+        // in App.js marks you Away — read fresh from localStorage there on
+        // every timer reset, so this takes effect immediately, no reconnect
+        // needed. Also gates the opt-in "Auto-deafen when away" toggle,
+        // since that piggybacks on the same away transition.
+        document.getElementById('settings-away-timeout')?.addEventListener('change', (e) => {
+            localStorage.setItem('awayTimeoutMinutes', e.target.value);
+        });
+
         this._wireAvatar();
     }
 
@@ -116,6 +125,8 @@ export class SettingsPanel {
         if (nickname) nickname.value = localStorage.getItem('nickname') || '';
         const statusText = document.getElementById('settings-status-text');
         if (statusText) statusText.value = localStorage.getItem('statusText') || '';
+        const awayTimeout = document.getElementById('settings-away-timeout');
+        if (awayTimeout) awayTimeout.value = localStorage.getItem('awayTimeoutMinutes') || '15';
         this._highlightStatus();
         this._refreshAvatarPreview();
     }
@@ -467,6 +478,45 @@ export class SettingsPanel {
             localStorage.setItem('micKeybind', '');
             if (keybindInput) keybindInput.value = '';
         });
+
+        document.getElementById('settings-auto-deafen-away')?.addEventListener('change', (e) => {
+            localStorage.setItem('autoDeafenOnAway', e.target.checked ? '1' : '0');
+        });
+
+        // Deafen keybind — same click-then-press-a-key capture pattern as the
+        // mic keybind above, but its own localStorage key: deafen is a global
+        // toggle independent of mic mode, not tied to push-to-talk/push-to-mute.
+        const deafenKeybindInput = document.getElementById('settings-deafen-keybind');
+        if (deafenKeybindInput) {
+            deafenKeybindInput.addEventListener('click', () => {
+                this._keybindListening = true;
+                deafenKeybindInput.value = 'Press a key...';
+                deafenKeybindInput.classList.add('ring-1', 'ring-indigo-500');
+            });
+
+            deafenKeybindInput.addEventListener('keydown', (e) => {
+                if (!this._keybindListening) return;
+                e.preventDefault();
+                e.stopPropagation();
+                localStorage.setItem('deafenKeybind', e.code);
+                deafenKeybindInput.value = e.code;
+                deafenKeybindInput.classList.remove('ring-1', 'ring-indigo-500');
+                this._keybindListening = false;
+            });
+
+            deafenKeybindInput.addEventListener('blur', () => {
+                if (this._keybindListening) {
+                    deafenKeybindInput.value = localStorage.getItem('deafenKeybind') || '';
+                    deafenKeybindInput.classList.remove('ring-1', 'ring-indigo-500');
+                    this._keybindListening = false;
+                }
+            });
+        }
+
+        document.getElementById('deafen-keybind-clear')?.addEventListener('click', () => {
+            localStorage.setItem('deafenKeybind', '');
+            if (deafenKeybindInput) deafenKeybindInput.value = '';
+        });
     }
 
     _refreshMicMode() {
@@ -563,6 +613,12 @@ export class SettingsPanel {
 
         const noiseSuppression = document.getElementById('settings-noise-suppression');
         if (noiseSuppression) noiseSuppression.checked = localStorage.getItem('noiseSuppression') === '1';
+
+        const autoDeafenAway = document.getElementById('settings-auto-deafen-away');
+        if (autoDeafenAway) autoDeafenAway.checked = localStorage.getItem('autoDeafenOnAway') === '1';
+
+        const deafenKeybindInput = document.getElementById('settings-deafen-keybind');
+        if (deafenKeybindInput) deafenKeybindInput.value = localStorage.getItem('deafenKeybind') || '';
 
         const vol = localStorage.getItem('soundVolume') || '0.3';
         const volume = document.getElementById('settings-volume');

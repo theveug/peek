@@ -17,6 +17,7 @@
         <meta name="twitter:description" content="Private, peer-to-peer screen-share, voice, chat and files. No accounts, nothing stored." />
         <meta name="twitter:image" content="/assets/og-image.png" />
         <meta name="theme-color" content="#8c85f0" />
+        <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
         <link rel="stylesheet" href="/assets/fonts.css" />
         <link rel="stylesheet" href="/assets/style.css" />
     </head>
@@ -190,6 +191,15 @@
                                 <label for="settings-status-text" class="settings-label">Status message</label>
                                 <input type="text" id="settings-status-text" class="settings-text-input"
                                     placeholder="e.g. In a meeting" maxlength="60" />
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-away-timeout" class="settings-label">Away after</label>
+                                <select id="settings-away-timeout" class="settings-text-input">
+                                    <option value="5">5 minutes</option>
+                                    <option value="10">10 minutes</option>
+                                    <option value="15">15 minutes</option>
+                                    <option value="30">30 minutes</option>
+                                </select>
                             </div>
                         </div>
 

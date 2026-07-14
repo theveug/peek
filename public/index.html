@@ -22,6 +22,7 @@
         content="Private, peer-to-peer screen-share, voice, chat and files. No accounts, nothing stored." />
     <meta name="twitter:image" content="/assets/og-image.png" />
     <meta name="theme-color" content="#8c85f0" />
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <link rel="stylesheet" href="/assets/fonts.css" />
     <link rel="stylesheet" href="/assets/style.css" />
 </head>
@@ -609,6 +610,18 @@
                             <input type="text" id="settings-status-text" class="settings-text-input"
                                 placeholder="e.g. In a meeting" maxlength="60" />
                         </div>
+                        <div class="settings-field">
+                            <label for="settings-away-timeout" class="settings-label">Away after</label>
+                            <select id="settings-away-timeout" class="settings-text-input">
+                                <option value="5">5 minutes</option>
+                                <option value="10">10 minutes</option>
+                                <option value="15">15 minutes</option>
+                                <option value="30">30 minutes</option>
+                            </select>
+                            <p class="text-[10px] text-muted mt-1">How long without mouse/keyboard/touch input before
+                                you're marked Away — also drives Audio &amp; Mic's "Auto-deafen when away", if that's
+                                turned on.</p>
+                        </div>
                     </div>
 
                     <!-- Appearance -->
@@ -765,6 +778,28 @@
                             </div>
                             <label class="settings-switch"><input type="checkbox" id="settings-noise-suppression" /><span
                                     class="settings-switch-track"></span></label>
+                        </div>
+                        <div class="settings-toggle-row">
+                            <div>
+                                <div class="settings-toggle-row-title">Auto-deafen when away</div>
+                                <div class="settings-toggle-row-desc">Mutes your mic and incoming audio automatically
+                                    once you're marked Away (see Profile → "Away after" for the timeout), and undoes
+                                    it when you come back — unless you deafened yourself manually, which this leaves
+                                    alone.</div>
+                            </div>
+                            <label class="settings-switch"><input type="checkbox" id="settings-auto-deafen-away" /><span
+                                    class="settings-switch-track"></span></label>
+                        </div>
+                        <div class="settings-field">
+                            <label class="settings-label">Deafen keybind</label>
+                            <div class="settings-keybind-row">
+                                <input type="text" id="settings-deafen-keybind" readonly class="settings-keybind-input"
+                                    placeholder="Click then press a key..." />
+                                <button type="button" id="deafen-keybind-clear"
+                                    class="text-xs text-muted hover:text-foreground px-2 py-1">&times;</button>
+                            </div>
+                            <p class="text-[10px] text-muted mt-1">Instantly mutes your mic and incoming audio —
+                                press again to undo. Works anywhere on the page, not just this panel.</p>
                         </div>
                         <div class="settings-field">
                             <label for="settings-volume" class="settings-label">Notification volume — <span

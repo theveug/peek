@@ -540,15 +540,29 @@ document.getElementById('mic-toggle').addEventListener('click', async () => {
     updateMicUI(enabled);
 });
 
-document.getElementById('deafen-toggle').addEventListener('click', () => {
-    peerManager.deafened = !peerManager.deafened;
-    document.querySelectorAll('audio').forEach(a => { a.muted = peerManager.deafened; });
-    document.getElementById('deafen-off-icon').classList.toggle('hidden', peerManager.deafened);
-    document.getElementById('deafen-on-icon').classList.toggle('hidden', !peerManager.deafened);
-    document.getElementById('deafen-toggle').dataset.tip = peerManager.deafened ? 'Undeafen' : 'Deafen';
-    peerManager.broadcastDeafenStatus();
-    if (peerManager.peerId) ui.updateParticipantDeafen(peerManager.peerId, peerManager.deafened);
-});
+// Applies deafened state to the DOM: incoming-audio muting, the deafen
+// button's icon/tooltip, the participant-card badge, and the mic button
+// (peerManager.setDeafened may have hard-muted/restored the mic alongside
+// the deafen itself, so the mic icon needs to stay in sync too).
+function setDeafenUI(deafened) {
+    document.querySelectorAll('audio').forEach(a => { a.muted = deafened; });
+    document.getElementById('deafen-off-icon').classList.toggle('hidden', deafened);
+    document.getElementById('deafen-on-icon').classList.toggle('hidden', !deafened);
+    document.getElementById('deafen-toggle').dataset.tip = deafened ? 'Undeafen' : 'Deafen';
+    if (peerManager.peerId) ui.updateParticipantDeafen(peerManager.peerId, deafened);
+    updateMicUI(peerManager.micEnabled);
+}
+
+// Manual deafen toggle — the button click and the global keybind below both
+// call this. Never used for the auto-deafen-on-away path, which calls
+// peerManager.setDeafened directly with {auto: true} so a manual toggle here
+// always clears that flag (see setDeafened's opts doc).
+function toggleDeafen() {
+    peerManager.setDeafened(!peerManager.deafened);
+    setDeafenUI(peerManager.deafened);
+}
+
+document.getElementById('deafen-toggle').addEventListener('click', toggleDeafen);
 
 // Deafen-button volume popover — second surface for the same `masterCallVolume`
 // value the Settings panel controls, for in-call quick access. Not a second
@@ -590,24 +604,45 @@ document.addEventListener('visibilitychange', () => {
     peerManager.handleTabVisibility(document.hidden);
 });
 
-// Idle/away auto-detection: flips status to the real (yellow) Away after 15
-// minutes of no mouse/keyboard/touch input — distinct from tab-visibility's
-// green "Not in focus" (see PeerManager._reconcilePresenceStatus) — never
+// Idle/away auto-detection: flips status to the real (yellow) Away after a
+// configurable span (Settings → Profile's "Away after", default 15 minutes)
+// of no mouse/keyboard/touch input — distinct from tab-visibility's green
+// "Not in focus" (see PeerManager._reconcilePresenceStatus) — never
 // overrides a manually-chosen DND, and restores whatever status was manually
-// chosen before (not hardcoded 'online') once activity resumes.
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+// chosen before (not hardcoded 'online') once activity resumes. Same timer
+// also drives the opt-in "Auto-deafen when away" setting (Settings → Audio &
+// Mic) — deafening (and undeafening on return) piggybacks on this signal
+// rather than a separate timer, so it fires exactly when the away status
+// itself would.
+function getIdleTimeoutMs() {
+    const minutes = parseFloat(localStorage.getItem('awayTimeoutMinutes')) || 15;
+    return minutes * 60 * 1000;
+}
 let idleTimer = null;
 let isIdle = false;
 function resetIdleTimer() {
     if (isIdle) {
         isIdle = false;
         peerManager.handleIdleChange(false);
+        // Only auto-undeafen if this feature is what deafened us — never
+        // undoes a manual deafen the user set before stepping away.
+        if (peerManager._autoDeafened) {
+            peerManager.setDeafened(false, { auto: true });
+            setDeafenUI(false);
+        }
     }
     clearTimeout(idleTimer);
+    // Read fresh on every reset (not cached) since the Settings dropdown is
+    // the only writer and should take effect on the very next reset, not
+    // require a reload.
     idleTimer = setTimeout(() => {
         isIdle = true;
         peerManager.handleIdleChange(true);
-    }, IDLE_TIMEOUT_MS);
+        if (localStorage.getItem('autoDeafenOnAway') === '1' && !peerManager.deafened) {
+            peerManager.setDeafened(true, { auto: true });
+            setDeafenUI(true);
+        }
+    }, getIdleTimeoutMs());
 }
 ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach((evt) => {
     document.addEventListener(evt, resetIdleTimer, { passive: true });
@@ -856,6 +891,21 @@ window.addEventListener('keyup', (e) => {
             peerManager.toggleMic().then(enabled => updateMicUI(enabled));
         }
     }
+});
+
+// Global deafen keybind (Settings → Audio & Mic) — independent of mic mode,
+// always a plain toggle (no push-to-talk-style hold). Only fires while this
+// tab has focus — a true system-wide hotkey needs the planned Electron shell
+// (see project memory), since a background browser tab can't see keydown at all.
+window.addEventListener('keydown', (e) => {
+    if (settingsPanel.isKeybindListening()) return;
+    const deafenKeybind = localStorage.getItem('deafenKeybind') || '';
+    if (!deafenKeybind || e.code !== deafenKeybind) return;
+    if (e.repeat) return;
+    const focused = document.activeElement;
+    if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
+
+    toggleDeafen();
 });
 
 // --- Invite popover (top bar) ---
