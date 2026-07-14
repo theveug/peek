@@ -549,6 +549,8 @@ function setDeafenUI(deafened) {
     document.getElementById('deafen-off-icon').classList.toggle('hidden', deafened);
     document.getElementById('deafen-on-icon').classList.toggle('hidden', !deafened);
     document.getElementById('deafen-toggle').dataset.tip = deafened ? 'Undeafen' : 'Deafen';
+    // Same reused `.dock-btn-active-red` treatment as the mic button (see updateMicUI).
+    document.getElementById('deafen-toggle').classList.toggle('dock-btn-active-red', deafened);
     if (peerManager.peerId) ui.updateParticipantDeafen(peerManager.peerId, deafened);
     updateMicUI(peerManager.micEnabled);
 }
@@ -846,6 +848,10 @@ function updateMicUI(enabled) {
     document.getElementById('mic-off-icon').classList.toggle('hidden', enabled);
     document.getElementById('mic-on-icon').classList.toggle('hidden', !enabled);
     document.getElementById('mic-toggle').dataset.tip = enabled ? 'Mute Microphone' : 'Unmute Microphone';
+    // Same solid-red fill `#stop-share-button` uses while sharing (`.dock-btn-active-red`,
+    // tailwind.css) — reused here as a toggled state instead of a permanent one, so a
+    // muted mic reads as unmistakably "off" at a glance, Discord-style.
+    document.getElementById('mic-toggle').classList.toggle('dock-btn-active-red', !enabled);
     if (peerManager.peerId) ui.updateParticipantMic(peerManager.peerId, enabled);
 }
 
