@@ -384,58 +384,126 @@
                 </svg>
 
                 <div id="controls" class="controls-bar dock-bar flex z-50 shadow-2xl">
-                    <button id="share-toggle" data-tip="Share screen" class="dock-btn">
-                        <svg id="share-screen-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                            fill="currentColor" class="size-6">
-                            <path fill-rule="evenodd"
-                                d="M2.25 5.25a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3V15a3 3 0 0 1-3 3H15v.75c0 .414.336.75.75.75h.75a.75.75 0 0 1 0 1.5h-9a.75.75 0 0 1 0-1.5h.75a.75.75 0 0 0 .75-.75V18H5.25a3 3 0 0 1-3-3V5.25Zm1.5 0v9.75c0 .828.672 1.5 1.5 1.5h13.5c.828 0 1.5-.672 1.5-1.5V5.25a1.5 1.5 0 0 0-1.5-1.5H5.25a1.5 1.5 0 0 0-1.5 1.5Z"
-                                clip-rule="evenodd" />
-                        </svg>
-                    </button>
-                    <button id="stop-share-button" data-tip="Stop sharing" class="dock-btn dock-btn-active-red"
-                        style="display:none;">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
-                            <path fill-rule="evenodd"
-                                d="M4.5 7.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9Z"
-                                clip-rule="evenodd" />
-                        </svg>
-                    </button>
-                    <button id="cam-toggle" data-tip="Turn on Camera" class="dock-btn">
-                        <!-- Camera off (slashed) -->
-                        <svg id="cam-off-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                            fill="currentColor" class="size-6">
-                            <path
-                                d="M3.53 2.47a.75.75 0 0 0-1.06 1.06l18 18a.75.75 0 1 0 1.06-1.06l-18-18ZM22.5 17.69c0 .471-.202.86-.504 1.124l-4.746-4.746V7.939l2.69-2.689c.944-.945 2.56-.276 2.56 1.06v11.38ZM15.75 7.5v5.068L7.682 4.5h5.068A2.25 2.25 0 0 1 15 6.75v.75ZM1.5 7.5c0-1.241 1.006-2.25 2.25-2.25H12v1.5H3.75a.75.75 0 0 0-.75.75v9c0 .414.336.75.75.75h9v1.5H3.75A2.25 2.25 0 0 1 1.5 16.5V7.5Z" />
-                        </svg>
-                        <!-- Camera on -->
-                        <svg id="cam-on-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
-                            class="size-6 hidden">
-                            <path
-                                d="M4.5 4.5a3 3 0 0 0-3 3v9a3 3 0 0 0 3 3h8.25a3 3 0 0 0 3-3v-9a3 3 0 0 0-3-3H4.5ZM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06Z" />
-                        </svg>
-                    </button>
-                    <button id="switch-cam-button" data-tip="Switch camera" class="dock-btn" style="display:none;">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
-                            <path fill-rule="evenodd" clip-rule="evenodd"
-                                d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0V5.36l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z" />
-                        </svg>
-                    </button>
-                    <button id="mic-toggle" data-tip="Unmute Microphone" class="dock-btn">
-                        <!-- Mic off (slashed) -->
-                        <svg id="mic-off-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                            fill="currentColor" class="size-6">
-                            <path
-                                d="M1.5 1.5l21 21M10.34 3.66A3.75 3.75 0 0 1 15.75 6v3.09l-5.41-5.43ZM8.25 6.57V6a3.75 3.75 0 0 1 .19-1.18L4.6 1l-.85.85 3.48 3.48A5.96 5.96 0 0 0 6 9v3a6 6 0 0 0 9.35 4.97l1.42 1.42A7.48 7.48 0 0 1 12 20.25 7.5 7.5 0 0 1 4.5 12.75v-1.5a.75.75 0 0 1 1.5 0v1.5a6 6 0 0 0 2.25 4.68V6.57ZM12 17.25a3.75 3.75 0 0 1-3.75-3.75V9.82l7.13 7.13a3.73 3.73 0 0 1-3.38 2.3ZM18.75 11.25a.75.75 0 0 1 .75.75v.75a7.46 7.46 0 0 1-1.15 3.99l-1.1-1.1A5.96 5.96 0 0 0 18 12.75v-.75a.75.75 0 0 1 .75-.75ZM12 22.5a.75.75 0 0 1-.75-.75v-2.26a.75.75 0 0 1 1.5 0v2.26a.75.75 0 0 1-.75.75Z" />
-                        </svg>
-                        <!-- Mic on -->
-                        <svg id="mic-on-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
-                            class="size-6 hidden">
-                            <path d="M8.25 4.5a3.75 3.75 0 1 1 7.5 0v8.25a3.75 3.75 0 1 1-7.5 0V4.5Z" />
-                            <path
-                                d="M6 10.5a.75.75 0 0 1 .75.75v1.5a5.25 5.25 0 1 0 10.5 0v-1.5a.75.75 0 0 1 1.5 0v1.5a6.751 6.751 0 0 1-6 6.709v2.291a.75.75 0 0 1-1.5 0v-2.291a6.751 6.751 0 0 1-6-6.709v-1.5A.75.75 0 0 1 6 10.5Z" />
-                        </svg>
-                        <span id="mic-mode-badge" class="dock-mode-badge hidden"></span>
-                    </button>
+                    <div class="dock-btn-wrap relative">
+                        <button id="share-toggle" data-tip="Share screen" class="dock-btn">
+                            <svg id="share-screen-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                fill="currentColor" class="size-6">
+                                <path fill-rule="evenodd"
+                                    d="M2.25 5.25a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3V15a3 3 0 0 1-3 3H15v.75c0 .414.336.75.75.75h.75a.75.75 0 0 1 0 1.5h-9a.75.75 0 0 1 0-1.5h.75a.75.75 0 0 0 .75-.75V18H5.25a3 3 0 0 1-3-3V5.25Zm1.5 0v9.75c0 .828.672 1.5 1.5 1.5h13.5c.828 0 1.5-.672 1.5-1.5V5.25a1.5 1.5 0 0 0-1.5-1.5H5.25a1.5 1.5 0 0 0-1.5 1.5Z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <button id="stop-share-button" data-tip="Stop sharing" class="dock-btn dock-btn-active-red"
+                            style="display:none;">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                                <path fill-rule="evenodd"
+                                    d="M4.5 7.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9Z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <button type="button" id="share-quality-caret" data-tip="Screen share quality" class="dock-caret">
+                            <span class="material-symbols-rounded">expand_less</span>
+                        </button>
+                        <div id="share-quality-popover" class="dock-quick-popover hidden">
+                            <div class="dock-quick-popover-label">Resolution</div>
+                            <div class="settings-segmented" id="share-quality-res-picker">
+                                <button type="button" data-value="1280x720">720p</button>
+                                <button type="button" data-value="1920x1080">1080p</button>
+                                <button type="button" data-value="2560x1440">1440p</button>
+                            </div>
+                            <div class="dock-quick-popover-label">Frame rate</div>
+                            <div class="settings-segmented" id="share-quality-fps-picker">
+                                <button type="button" data-value="10">10</button>
+                                <button type="button" data-value="15">15</button>
+                                <button type="button" data-value="30">30</button>
+                                <button type="button" data-value="60">60</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dock-btn-wrap relative">
+                        <button id="cam-toggle" data-tip="Turn on Camera" class="dock-btn">
+                            <!-- Camera off (slashed) -->
+                            <svg id="cam-off-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                fill="currentColor" class="size-6">
+                                <path
+                                    d="M3.53 2.47a.75.75 0 0 0-1.06 1.06l18 18a.75.75 0 1 0 1.06-1.06l-18-18ZM22.5 17.69c0 .471-.202.86-.504 1.124l-4.746-4.746V7.939l2.69-2.689c.944-.945 2.56-.276 2.56 1.06v11.38ZM15.75 7.5v5.068L7.682 4.5h5.068A2.25 2.25 0 0 1 15 6.75v.75ZM1.5 7.5c0-1.241 1.006-2.25 2.25-2.25H12v1.5H3.75a.75.75 0 0 0-.75.75v9c0 .414.336.75.75.75h9v1.5H3.75A2.25 2.25 0 0 1 1.5 16.5V7.5Z" />
+                            </svg>
+                            <!-- Camera on -->
+                            <svg id="cam-on-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                                class="size-6 hidden">
+                                <path
+                                    d="M4.5 4.5a3 3 0 0 0-3 3v9a3 3 0 0 0 3 3h8.25a3 3 0 0 0 3-3v-9a3 3 0 0 0-3-3H4.5ZM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06Z" />
+                            </svg>
+                        </button>
+                        <button id="switch-cam-button" data-tip="Switch camera" class="dock-btn" style="display:none;">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                                <path fill-rule="evenodd" clip-rule="evenodd"
+                                    d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0V5.36l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z" />
+                            </svg>
+                        </button>
+                        <button type="button" id="cam-quality-caret" data-tip="Camera quality" class="dock-caret">
+                            <span class="material-symbols-rounded">expand_less</span>
+                        </button>
+                        <div id="cam-quality-popover" class="dock-quick-popover hidden">
+                            <div class="dock-quick-popover-label">Resolution</div>
+                            <div class="settings-segmented" id="cam-quality-res-picker">
+                                <button type="button" data-value="640x360">360p</button>
+                                <button type="button" data-value="640x480">480p</button>
+                                <button type="button" data-value="1280x720">720p</button>
+                            </div>
+                            <div class="dock-quick-popover-label">Frame rate</div>
+                            <div class="settings-segmented" id="cam-quality-fps-picker">
+                                <button type="button" data-value="10">10</button>
+                                <button type="button" data-value="15">15</button>
+                                <button type="button" data-value="24">24</button>
+                                <button type="button" data-value="30">30</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dock-btn-wrap relative">
+                        <button id="mic-toggle" data-tip="Unmute Microphone" class="dock-btn">
+                            <!-- Mic off (slashed) -->
+                            <svg id="mic-off-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                fill="currentColor" class="size-6">
+                                <path
+                                    d="M1.5 1.5l21 21M10.34 3.66A3.75 3.75 0 0 1 15.75 6v3.09l-5.41-5.43ZM8.25 6.57V6a3.75 3.75 0 0 1 .19-1.18L4.6 1l-.85.85 3.48 3.48A5.96 5.96 0 0 0 6 9v3a6 6 0 0 0 9.35 4.97l1.42 1.42A7.48 7.48 0 0 1 12 20.25 7.5 7.5 0 0 1 4.5 12.75v-1.5a.75.75 0 0 1 1.5 0v1.5a6 6 0 0 0 2.25 4.68V6.57ZM12 17.25a3.75 3.75 0 0 1-3.75-3.75V9.82l7.13 7.13a3.73 3.73 0 0 1-3.38 2.3ZM18.75 11.25a.75.75 0 0 1 .75.75v.75a7.46 7.46 0 0 1-1.15 3.99l-1.1-1.1A5.96 5.96 0 0 0 18 12.75v-.75a.75.75 0 0 1 .75-.75ZM12 22.5a.75.75 0 0 1-.75-.75v-2.26a.75.75 0 0 1 1.5 0v2.26a.75.75 0 0 1-.75.75Z" />
+                            </svg>
+                            <!-- Mic on -->
+                            <svg id="mic-on-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                                class="size-6 hidden">
+                                <path d="M8.25 4.5a3.75 3.75 0 1 1 7.5 0v8.25a3.75 3.75 0 1 1-7.5 0V4.5Z" />
+                                <path
+                                    d="M6 10.5a.75.75 0 0 1 .75.75v1.5a5.25 5.25 0 1 0 10.5 0v-1.5a.75.75 0 0 1 1.5 0v1.5a6.751 6.751 0 0 1-6 6.709v2.291a.75.75 0 0 1-1.5 0v-2.291a6.751 6.751 0 0 1-6-6.709v-1.5A.75.75 0 0 1 6 10.5Z" />
+                            </svg>
+                            <span id="mic-mode-badge" class="dock-mode-badge hidden"></span>
+                        </button>
+                        <button type="button" id="mic-options-caret" data-tip="Mic options" class="dock-caret">
+                            <span class="material-symbols-rounded">expand_less</span>
+                        </button>
+                        <div id="mic-options-popover" class="dock-quick-popover hidden">
+                            <div class="dock-quick-popover-label">Mic mode</div>
+                            <div class="settings-segmented" id="mic-options-mode-picker">
+                                <button type="button" data-value="toggle">Toggle</button>
+                                <button type="button" data-value="push-to-talk">PTT</button>
+                                <button type="button" data-value="push-to-mute">PTM</button>
+                                <button type="button" data-value="voice-activity">VA</button>
+                            </div>
+                            <div id="mic-options-keybind-row" class="hidden">
+                                <div class="settings-keybind-row">
+                                    <input type="text" id="mic-options-keybind" readonly class="settings-keybind-input"
+                                        placeholder="Click then press a key..." />
+                                    <button type="button" id="mic-options-keybind-clear"
+                                        class="text-xs text-muted hover:text-foreground px-2 py-1">&times;</button>
+                                </div>
+                            </div>
+                            <div id="mic-options-threshold-row" class="hidden">
+                                <div class="dock-quick-popover-label" style="display:flex;justify-content:space-between;text-transform:none;">
+                                    <span>Sensitivity</span><span id="mic-options-threshold-value">Medium</span>
+                                </div>
+                                <input id="mic-options-threshold" type="range" min="0.01" max="0.1" step="0.01" class="w-full" />
+                            </div>
+                        </div>
+                    </div>
                     <div class="dock-btn-wrap relative">
                         <button id="deafen-toggle" data-tip="Deafen" class="dock-btn">
                             <!-- Speaker on -->
@@ -798,8 +866,9 @@
                                 <button type="button" id="deafen-keybind-clear"
                                     class="text-xs text-muted hover:text-foreground px-2 py-1">&times;</button>
                             </div>
-                            <p class="text-[10px] text-muted mt-1">Instantly mutes your mic and incoming audio —
-                                press again to undo. Works anywhere on the page, not just this panel.</p>
+                            <p class="text-[10px] text-muted mt-1" id="deafen-keybind-hint">Instantly mutes your mic
+                                and incoming audio — press again to undo. Works anywhere on the page, not just this
+                                panel.</p>
                         </div>
                         <div class="settings-field">
                             <label for="settings-volume" class="settings-label">Notification volume — <span

@@ -2235,6 +2235,20 @@ body:has(#members-sidebar.collapsed) .members-tab {
   animation: pulse-ring-img 1.5s ease-out infinite;
 }
 
+/* Solid (non-pulsing) red ring for a deafened peer's avatar — same
+   box-shadow-vs-drop-shadow split as .status-talking above and for the same
+   reason (a transparent/non-square custom avatar image needs its ring to
+   hug the image's own silhouette, not the square container), but static
+   rather than animated: being deafened is a held state, not a momentary
+   event like speaking, so a pulse would be a misleading signal here. */
+.status-deafened:not(:has(.avatar-img)) {
+  box-shadow: 0 0 0 2px var(--red);
+}
+
+.status-deafened .avatar-img {
+  filter: drop-shadow(0 0 2px var(--red));
+}
+
 /* ===== Status dot DND minus bar ===== */
 .participant-status-dot {
   display: flex;
@@ -2674,6 +2688,56 @@ body,
 
 .dock-volume-popover.hidden {
   display: none;
+}
+
+/* Same positioning/background/shadow as .dock-volume-popover above, but a
+   vertical stack instead of a fixed-width horizontal row — used by the
+   screen/cam quality and mic-options quick popovers off their dock buttons,
+   which each hold one or more full-width segmented pickers rather than a
+   single icon+slider+value row. */
+.dock-quick-popover {
+  position: absolute;
+  bottom: calc(100% + 0.75rem);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  z-index: 70;
+  width: 14rem;
+  color: var(--t2);
+}
+
+.dock-quick-popover.hidden {
+  display: none;
+}
+
+.dock-quick-popover-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--t2);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* Same compact-button treatment as .quick-settings-popover's own segmented
+   pickers (QuickRoomSettings.js) — full-width, centered, smaller than the
+   Settings-modal default, to fit this narrower popover. */
+.dock-quick-popover .settings-segmented {
+  width: 100%;
+}
+
+.dock-quick-popover .settings-segmented button {
+  flex: 1;
+  padding: 0.5rem 0.375rem;
+  font-size: 0.7813rem;
+  text-align: center;
+  justify-content: center;
 }
 
 .dock-volume-popover input[type="range"] {

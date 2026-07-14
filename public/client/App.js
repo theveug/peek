@@ -591,6 +591,147 @@ document.addEventListener('click', (e) => {
     }
 });
 
+// --- Quick quality/options popovers off the screen-share/cam/mic dock
+// buttons — same caret+popover pattern as the deafen volume popover above,
+// generalized since there are now 4 of these instead of 1. Every picker
+// below reads/writes the exact same localStorage keys (and calls the exact
+// same PeerManager methods) as the full Settings panel and QuickRoomSettings'
+// own quick pickers — a third *surface* for convenience, not a new data
+// model, same pattern QuickRoomSettings.js already documents for itself.
+
+/**
+ * Wires a caret button to show/hide its popover, closing on any outside
+ * click. `onOpen` (if given) runs every time the popover is about to become
+ * visible, so callers can resync their controls from localStorage — values
+ * can have changed via another surface (full Settings, QuickRoomSettings)
+ * since this popover was last opened.
+ * @param {string} caretId
+ * @param {string} popoverId
+ * @param {() => void} [onOpen]
+ * @returns {void}
+ */
+function wireQuickPopover(caretId, popoverId, onOpen) {
+    const caret = document.getElementById(caretId);
+    const popover = document.getElementById(popoverId);
+    if (!caret || !popover) return;
+    caret.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (popover.classList.contains('hidden')) onOpen?.();
+        popover.classList.toggle('hidden');
+    });
+    popover.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', (e) => {
+        if (!popover.contains(e.target) && !caret.contains(e.target)) {
+            popover.classList.add('hidden');
+        }
+    });
+}
+
+/**
+ * Wires one segmented button-group (buttons with `data-value`) to a
+ * localStorage key: clicking a button selects it, persists it, and calls
+ * `onChange` with the new value.
+ * @param {string} containerId
+ * @param {string} storageKey
+ * @param {(value: string) => void} [onChange]
+ * @returns {() => void} a refresh function that resyncs `.active` state from
+ *   localStorage — call it whenever the popover containing this picker opens,
+ *   since the same key can change via another surface while it's closed.
+ */
+function wireSegmentedPicker(containerId, storageKey, onChange) {
+    const container = document.getElementById(containerId);
+    const buttons = container ? Array.from(container.querySelectorAll('button[data-value]')) : [];
+    const refresh = () => {
+        const current = localStorage.getItem(storageKey);
+        buttons.forEach(b => b.classList.toggle('active', b.dataset.value === current));
+    };
+    buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            localStorage.setItem(storageKey, btn.dataset.value);
+            refresh();
+            onChange?.(btn.dataset.value);
+        });
+    });
+    refresh();
+    return refresh;
+}
+
+const refreshShareRes = wireSegmentedPicker('share-quality-res-picker', 'screenShareRes', () => peerManager.applyQualitySettings());
+const refreshShareFps = wireSegmentedPicker('share-quality-fps-picker', 'screenShareFps', () => peerManager.applyQualitySettings());
+wireQuickPopover('share-quality-caret', 'share-quality-popover', () => { refreshShareRes(); refreshShareFps(); });
+
+const refreshCamRes = wireSegmentedPicker('cam-quality-res-picker', 'camRes', () => peerManager.applyCamQualitySettings());
+const refreshCamFps = wireSegmentedPicker('cam-quality-fps-picker', 'camFps', () => peerManager.applyCamQualitySettings());
+wireQuickPopover('cam-quality-caret', 'cam-quality-popover', () => { refreshCamRes(); refreshCamFps(); });
+
+// Mic options popover: mode picker + (mode-dependent) keybind capture and
+// sensitivity slider — the same three controls as Settings' Audio & Mic
+// mic-mode section, duplicated here as a quick surface.
+function refreshMicOptionsRows() {
+    const micMode = localStorage.getItem('micMode') || 'toggle';
+    const keybindRow = document.getElementById('mic-options-keybind-row');
+    if (keybindRow) keybindRow.classList.toggle('hidden', micMode !== 'push-to-talk' && micMode !== 'push-to-mute');
+    const thresholdRow = document.getElementById('mic-options-threshold-row');
+    if (thresholdRow) thresholdRow.classList.toggle('hidden', micMode !== 'voice-activity');
+
+    const keybindInput = document.getElementById('mic-options-keybind');
+    if (keybindInput) keybindInput.value = localStorage.getItem('micKeybind') || '';
+
+    const threshold = parseFloat(localStorage.getItem('micThreshold')) || 0.03;
+    const thresholdInput = document.getElementById('mic-options-threshold');
+    if (thresholdInput) thresholdInput.value = String(threshold);
+    updateMicOptionsThresholdLabel(threshold);
+}
+
+function updateMicOptionsThresholdLabel(threshold) {
+    const label = document.getElementById('mic-options-threshold-value');
+    if (label) label.textContent = threshold <= 0.02 ? 'High' : threshold <= 0.06 ? 'Medium' : 'Low';
+}
+
+const refreshMicOptionsMode = wireSegmentedPicker('mic-options-mode-picker', 'micMode', (value) => {
+    ui.updateMicModeBadge(value);
+    refreshMicOptionsRows();
+});
+wireQuickPopover('mic-options-caret', 'mic-options-popover', () => { refreshMicOptionsMode(); refreshMicOptionsRows(); });
+
+document.getElementById('mic-options-threshold')?.addEventListener('input', (e) => {
+    localStorage.setItem('micThreshold', e.target.value);
+    updateMicOptionsThresholdLabel(parseFloat(e.target.value));
+});
+
+// Keybind capture — same click-then-press-a-key pattern as Settings' own
+// mic keybind input, sharing settingsPanel's _keybindListening flag (via
+// setKeybindListening/isKeybindListening) so the global push-to-talk/
+// push-to-mute/deafen keydown listeners correctly pause while capturing here.
+const micOptionsKeybindInput = document.getElementById('mic-options-keybind');
+if (micOptionsKeybindInput) {
+    micOptionsKeybindInput.addEventListener('click', () => {
+        settingsPanel.setKeybindListening(true);
+        micOptionsKeybindInput.value = 'Press a key...';
+        micOptionsKeybindInput.classList.add('ring-1', 'ring-indigo-500');
+    });
+    micOptionsKeybindInput.addEventListener('keydown', (e) => {
+        if (!settingsPanel.isKeybindListening()) return;
+        e.preventDefault();
+        e.stopPropagation();
+        localStorage.setItem('micKeybind', e.code);
+        micOptionsKeybindInput.value = e.code;
+        micOptionsKeybindInput.classList.remove('ring-1', 'ring-indigo-500');
+        settingsPanel.setKeybindListening(false);
+    });
+    micOptionsKeybindInput.addEventListener('blur', () => {
+        if (settingsPanel.isKeybindListening()) {
+            micOptionsKeybindInput.value = localStorage.getItem('micKeybind') || '';
+            micOptionsKeybindInput.classList.remove('ring-1', 'ring-indigo-500');
+            settingsPanel.setKeybindListening(false);
+        }
+    });
+}
+document.getElementById('mic-options-keybind-clear')?.addEventListener('click', () => {
+    localStorage.setItem('micKeybind', '');
+    if (micOptionsKeybindInput) micOptionsKeybindInput.value = '';
+});
+
 // Self-view placeholder on any focus loss (window blur or tab hidden)
 const handleFocusChange = () => {
     const blurred = document.hidden || !document.hasFocus();
@@ -903,6 +1044,13 @@ window.addEventListener('keyup', (e) => {
 // always a plain toggle (no push-to-talk-style hold). Only fires while this
 // tab has focus — a true system-wide hotkey needs the planned Electron shell
 // (see project memory), since a background browser tab can't see keydown at all.
+// preventDefault() stops most keys' native browser behavior (e.g. Space
+// scrolling the page), but NOT a handful of browser/OS-reserved shortcuts —
+// F11 (fullscreen), F5/Ctrl+R (reload), Ctrl+W/Ctrl+T (close/new tab), and
+// similar are deliberately un-overridable by any webpage's JS, for every
+// browser, as a security/usability guarantee. Binding the keybind to one of
+// those will still fire our toggle *and* the browser's own action — pick a
+// different key in Settings to avoid the conflict.
 window.addEventListener('keydown', (e) => {
     if (settingsPanel.isKeybindListening()) return;
     const deafenKeybind = localStorage.getItem('deafenKeybind') || '';
@@ -910,6 +1058,7 @@ window.addEventListener('keydown', (e) => {
     if (e.repeat) return;
     const focused = document.activeElement;
     if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
+    e.preventDefault();
 
     toggleDeafen();
 });

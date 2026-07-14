@@ -1647,7 +1647,17 @@ export class UIController {
         }
     }
 
-    /** Shows/hides a peer's deafened-icon badge on their participant card. */
+    /**
+     * Shows/hides a peer's deafened-icon badge on their participant card,
+     * and applies a solid red ring to their avatar (same box-shadow/
+     * drop-shadow `.status-deafened` split as `.status-talking`'s speaking
+     * ring, but static rather than pulsing — see tailwind.css). For the
+     * local user, also mirrors the ring onto the top-bar identity avatar,
+     * same dual-write `setSpeaking()` already does for its own ring.
+     * @param {string} peerId
+     * @param {boolean} deafened
+     * @returns {void}
+     */
     updateParticipantDeafen(peerId, deafened) {
         let el = document.getElementById(`participant-${peerId}`);
         if (!el) return;
@@ -1663,6 +1673,12 @@ export class UIController {
             }
         } else {
             if (deafIcon) deafIcon.remove();
+        }
+
+        const avatar = el.querySelector('.flex-shrink-0 > div:first-child');
+        if (avatar) avatar.classList.toggle('status-deafened', deafened);
+        if (peerId === this.selfPeerId) {
+            document.getElementById('topbar-identity-avatar')?.classList.toggle('status-deafened', deafened);
         }
     }
 

@@ -36,6 +36,15 @@ export class SettingsPanel {
         return this._keybindListening;
     }
 
+    // Written by App.js's dock-button quick-options popovers, which capture
+    // keybinds through their own inputs (a second surface for the same
+    // localStorage keys, not a second data model) — must share this one flag
+    // with the Settings modal's own capture inputs so the global keydown
+    // listeners (mic keybind, deafen keybind) correctly pause during either.
+    setKeybindListening(listening) {
+        this._keybindListening = listening;
+    }
+
     open() {
         if (!this.modal) return;
         this._refreshAll();
@@ -502,6 +511,7 @@ export class SettingsPanel {
                 deafenKeybindInput.value = e.code;
                 deafenKeybindInput.classList.remove('ring-1', 'ring-indigo-500');
                 this._keybindListening = false;
+                this._updateDeafenKeybindWarning(e.code);
             });
 
             deafenKeybindInput.addEventListener('blur', () => {
@@ -516,7 +526,28 @@ export class SettingsPanel {
         document.getElementById('deafen-keybind-clear')?.addEventListener('click', () => {
             localStorage.setItem('deafenKeybind', '');
             if (deafenKeybindInput) deafenKeybindInput.value = '';
+            this._updateDeafenKeybindWarning('');
         });
+    }
+
+    // Keys every major browser reserves for its own use and deliberately
+    // never lets page JS override via preventDefault (a security/usability
+    // guarantee, not a bug) — F11 fullscreen is the one that actually got
+    // reported, F5/F12 are the same class of always-wins browser shortcut.
+    // Binding one still toggles deafen, it just *also* does the browser's
+    // own thing at the same time.
+    _RESERVED_KEYBIND_CODES = new Set(['F11', 'F5', 'F12']);
+
+    _updateDeafenKeybindWarning(code) {
+        const hint = document.getElementById('deafen-keybind-hint');
+        if (!hint) return;
+        if (this._RESERVED_KEYBIND_CODES.has(code)) {
+            hint.textContent = `${code} is reserved by your browser (fullscreen/reload/devtools) and can't be fully overridden — it'll still toggle deafen, but the browser's own shortcut will fire too. Pick a different key if that's a problem.`;
+            hint.classList.add('text-yellow-400');
+        } else {
+            hint.textContent = 'Instantly mutes your mic and incoming audio — press again to undo. Works anywhere on the page, not just this panel.';
+            hint.classList.remove('text-yellow-400');
+        }
     }
 
     _refreshMicMode() {
@@ -619,6 +650,7 @@ export class SettingsPanel {
 
         const deafenKeybindInput = document.getElementById('settings-deafen-keybind');
         if (deafenKeybindInput) deafenKeybindInput.value = localStorage.getItem('deafenKeybind') || '';
+        this._updateDeafenKeybindWarning(localStorage.getItem('deafenKeybind') || '');
 
         const vol = localStorage.getItem('soundVolume') || '0.3';
         const volume = document.getElementById('settings-volume');
