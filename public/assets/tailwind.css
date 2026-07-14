@@ -398,6 +398,31 @@ body:focus-within #controls {
   background: var(--card-hover);
 }
 
+.file-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.file-card-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.125rem;
+  color: var(--chat-sender);
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: background 0.15s;
+  line-height: 1;
+}
+
+.file-card-view:hover {
+  background: var(--card-hover);
+}
+
 .file-offer {
   display: flex;
   align-items: center;
@@ -1200,6 +1225,58 @@ a.link-preview:hover {
 
 .chat-lightbox-action:hover {
   background: rgba(255, 255, 255, 0.22);
+}
+
+/* Reuses .chat-lightbox's fixed-overlay/backdrop/centering and
+   .chat-lightbox-action's action-bar button styling (open in new tab,
+   download, close) — only the content pane differs: a bordered panel with a
+   filename header and a scrollable body, instead of a bare <img>. display is
+   toggled directly via inline style in JS, same cascade-layers reason as
+   .chat-lightbox above. */
+.chat-code-viewer-content {
+  position: relative;
+  width: min(90vw, 56rem);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.chat-code-viewer-header {
+  flex-shrink: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--t1);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-code-viewer-body {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+}
+
+.chat-code-viewer-loading {
+  color: var(--t3);
+  font-size: 0.8125rem;
+  padding: 1rem 0;
+}
+
+.chat-code-viewer-pre {
+  margin: 0;
+  white-space: pre;
+}
+
+.chat-code-viewer-markdown {
+  max-width: none;
 }
 
 /* ===== Chat system messages (join/leave/room events, inline in log) ===== */

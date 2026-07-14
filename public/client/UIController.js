@@ -368,7 +368,7 @@ export class UIController {
      * UIController concern, not ChatUI's.
      */
     addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, blob, groupId, isSelf = false) {
-        this.chat.addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, groupId, isSelf);
+        this.chat.addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, blob, groupId, isSelf);
         if (blob) this._addFileToTab({ fileId, fileName, fileSize, fileType, blob, sender });
     }
     ensureFileGroup(...a) { return this.chat.ensureFileGroup(...a); }

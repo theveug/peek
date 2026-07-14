@@ -908,13 +908,17 @@ export class ChatUI {
      * @param {number} fileSize
      * @param {string} fileType - derived from the file extension, not trusted from the peer (see the file-transfer trust-boundary note in CLAUDE.md).
      * @param {string} blobUrl
+     * @param {Blob} [blob] - the assembled file contents. Only needed for the
+     *     text/markdown/PDF "View" action (reading its bytes back out); the
+     *     Files tab's download-all/recap zip gets its own copy via UIController,
+     *     this one may be undefined if a caller has nothing to offer.
      * @param {string} groupId
      * @param {boolean} [isSelf=false] - passed explicitly by the caller (true only for the
      *     local echo) — don't infer it from `sender`, or a remote peer who sets their
      *     nickname to match the local user's own would render as self.
      * @returns {void}
      */
-    addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, groupId, isSelf = false) {
+    addFileMessage(sender, fileId, fileName, fileSize, fileType, blobUrl, blob, groupId, isSelf = false) {
         const slot = this._fileSlot(groupId, fileId);
         if (!slot) return;
         const content = slot.querySelector('.chat-file-slot-content');
@@ -929,7 +933,21 @@ export class ChatUI {
                 this.openImageLightbox(blobUrl, fileName);
             });
         } else {
-            content.innerHTML = `<div class="file-card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-muted"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" /></svg><div class="file-card-info"><span class="file-card-name">${safeFileName}</span><span class="file-card-size">${sizeStr}</span></div><a href="${blobUrl}" download="${safeFileName}" class="file-card-download" data-tip="Download">&#x2B73;</a></div>`;
+            const viewKind = this._viewableFileKind(fileName);
+            const viewBtnHtml = viewKind
+                ? `<button type="button" class="file-card-view" data-tip="${viewKind === 'pdf' ? 'Open PDF' : 'View'}"><span class="material-symbols-rounded">visibility</span></button>`
+                : '';
+            content.innerHTML = `<div class="file-card"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-muted"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" /></svg><div class="file-card-info"><span class="file-card-name">${safeFileName}</span><span class="file-card-size">${sizeStr}</span></div><div class="file-card-actions">${viewBtnHtml}<a href="${blobUrl}" download="${safeFileName}" class="file-card-download" data-tip="Download">&#x2B73;</a></div></div>`;
+
+            if (viewKind === 'pdf') {
+                content.querySelector('.file-card-view')?.addEventListener('click', () => {
+                    window.open(blobUrl, '_blank', 'noopener');
+                });
+            } else if (viewKind) {
+                content.querySelector('.file-card-view')?.addEventListener('click', () => {
+                    this.openCodeViewer(blob, blobUrl, fileName, viewKind);
+                });
+            }
         }
 
         this._scrollIfAtBottom(document.getElementById('chat-log'));
@@ -1063,6 +1081,124 @@ export class ChatUI {
         // open doesn't stack a second trap.
         if (!this._lightboxFocusRelease) {
             this._lightboxFocusRelease = trapFocus(el, el.querySelector('button.chat-lightbox-action'));
+        }
+    }
+
+    /**
+     * Extensions the file card's "View" button offers besides images
+     * (already handled separately above). Deliberately a subset of
+     * `PeerManager._allowedExtensions`' "Text & code" group — a file has to
+     * pass that allowlist to arrive at all, this just decides which of the
+     * ones that do get an in-app viewer instead of only a download link.
+     * 'markdown' renders through the same marked → DOMPurify pipeline as
+     * chat messages (a real rendered document, not raw source); 'pdf' opens
+     * natively in a new tab instead of the code viewer, since browsers
+     * already render PDFs safely on their own; everything else in the set
+     * shows as syntax-highlighted plain text.
+     * @param {string} fileName
+     * @returns {'markdown'|'pdf'|'code'|null}
+     */
+    _viewableFileKind(fileName) {
+        const ext = (fileName || '').split('.').pop().toLowerCase();
+        if (ext === 'md') return 'markdown';
+        if (ext === 'pdf') return 'pdf';
+        return this._viewableCodeExtensions.has(ext) ? 'code' : null;
+    }
+
+    _viewableCodeExtensions = new Set([
+        'txt', 'csv', 'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'log',
+        'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'less', 'py', 'rb', 'go', 'rs',
+        'java', 'kt', 'c', 'cpp', 'h', 'hpp', 'cs', 'php', 'swift', 'lua', 'sh', 'sql',
+    ]);
+
+    // highlight.js names its bundled languages, not extensions — only listing
+    // the ones that actually differ; anything absent here still highlights
+    // fine via hljs's own auto-detect (same fallback fenced code blocks use
+    // when a chat message's ``` fence has no declared language).
+    _codeExtToHljsLang = {
+        js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript',
+        py: 'python', rb: 'ruby', rs: 'rust', kt: 'kotlin', cs: 'csharp',
+        sh: 'bash', yml: 'yaml', h: 'cpp', hpp: 'cpp',
+    };
+
+    /**
+     * Lazily builds the singleton `#chat-code-viewer` overlay — same reused-
+     * popover pattern as `_ensureLightbox`, sharing its `.chat-lightbox`/
+     * `.chat-lightbox-action` action-bar styling (open in new tab, download,
+     * close) but with a header + scrollable body instead of an `<img>`.
+     * @returns {HTMLElement}
+     */
+    _ensureCodeViewer() {
+        let el = document.getElementById('chat-code-viewer');
+        if (el) return el;
+
+        el = document.createElement('div');
+        el.id = 'chat-code-viewer';
+        el.className = 'chat-lightbox chat-code-viewer';
+        el.innerHTML = `<div class="chat-lightbox-backdrop"></div><div class="chat-code-viewer-content"><div class="chat-lightbox-actions"><a class="chat-lightbox-action" data-tip="Open in new tab" target="_blank" rel="noopener"><span class="material-symbols-rounded">open_in_new</span></a><a class="chat-lightbox-action" data-tip="Download"><span class="material-symbols-rounded">download</span></a><button type="button" class="chat-lightbox-action" data-tip="Close"><span class="material-symbols-rounded">close</span></button></div><div class="chat-code-viewer-header"></div><div class="chat-code-viewer-body"></div></div>`;
+        document.body.appendChild(el);
+
+        const close = () => {
+            el.style.display = 'none';
+            this._codeViewerFocusRelease?.();
+            this._codeViewerFocusRelease = null;
+        };
+        el.querySelector('.chat-lightbox-backdrop').addEventListener('click', close);
+        el.querySelector('button.chat-lightbox-action').addEventListener('click', close);
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && el.style.display !== 'none') close();
+        });
+        return el;
+    }
+
+    /**
+     * Opens a received markdown/code/text file's contents in the in-app
+     * viewer overlay. Markdown renders through the exact same marked →
+     * DOMPurify pipeline chat messages already use (a real rendered
+     * document); anything else is inserted via `textContent` (never
+     * `innerHTML`) and left to highlight.js to tokenize into `<span>`s for
+     * coloring only — so file contents can never execute regardless of what
+     * a peer actually sent, same trust boundary as every other peer-supplied
+     * string (see CLAUDE.md's file-transfer trust-boundary note).
+     * @param {Blob} blob - the assembled file contents.
+     * @param {string} blobUrl - the same object URL already backing the file
+     *   card's download link — reused here for the overlay's own "open in
+     *   new tab"/"download" actions rather than minting a second one.
+     * @param {string} fileName
+     * @param {'markdown'|'code'} kind
+     * @returns {Promise<void>}
+     */
+    async openCodeViewer(blob, blobUrl, fileName, kind) {
+        if (!blob) return;
+        const el = this._ensureCodeViewer();
+        const header = el.querySelector('.chat-code-viewer-header');
+        const body = el.querySelector('.chat-code-viewer-body');
+        header.textContent = fileName;
+        body.innerHTML = '<div class="chat-code-viewer-loading">Loading…</div>';
+
+        const [newTabLink, downloadLink] = el.querySelectorAll('a.chat-lightbox-action');
+        newTabLink.href = blobUrl;
+        downloadLink.href = blobUrl;
+        downloadLink.download = fileName;
+
+        el.style.display = 'flex';
+        if (!this._codeViewerFocusRelease) {
+            this._codeViewerFocusRelease = trapFocus(el, el.querySelector('button.chat-lightbox-action'));
+        }
+
+        const text = await blob.text();
+        if (el.style.display === 'none') return; // closed while reading
+
+        if (kind === 'markdown') {
+            body.innerHTML = `<div class="chat-markdown chat-code-viewer-markdown prose">${DOMPurify.sanitize(marked.parse(text))}</div>`;
+            body.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block));
+        } else {
+            body.innerHTML = '<pre class="chat-code-viewer-pre"><code></code></pre>';
+            const code = body.querySelector('code');
+            const lang = this._codeExtToHljsLang[(fileName.split('.').pop() || '').toLowerCase()];
+            if (lang) code.className = `language-${lang}`;
+            code.textContent = text;
+            hljs.highlightElement(code);
         }
     }
 
