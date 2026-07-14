@@ -303,6 +303,8 @@ body:focus-within #controls {
   --tw-prose-headings: var(--color-foreground);
   --tw-prose-bold: var(--color-foreground);
   --tw-prose-links: var(--chat-sender);
+  --tw-prose-quotes: var(--chat-body);
+  --tw-prose-quote-borders: var(--border);
 }
 
 /* ===== File sharing ===== */
@@ -2120,6 +2122,14 @@ body:has(#members-sidebar.collapsed) .members-tab {
 
 .participant-card.is-blocked {
   opacity: 0.55;
+}
+
+.participant-card:has(.status-deafened) {
+  background: color-mix(in oklch, var(--red) 10%, transparent);
+}
+
+.participant-card:has(.status-deafened):hover {
+  background: color-mix(in oklch, var(--red) 16%, var(--card-hover));
 }
 
 .participant-volume-popover {
