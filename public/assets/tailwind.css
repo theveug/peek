@@ -1865,11 +1865,23 @@ body:has(#members-sidebar.collapsed) .members-tab {
   background: transparent;
 }
 
-/* Self stays in the DOM (so the existing peerId-keyed update methods keep
-   working) but is not shown in the list — their identity lives in the
-   footer strip instead. */
+/* Self card (2026-07-14): shown pinned at the top of the list — always
+   prepended in _createParticipantCard(), never appended, so no ordering
+   logic is needed here beyond a visual divider. Was hidden entirely until
+   now (identity lived only in the top-bar pill), but the card already
+   carries per-peer state the pill doesn't surface (deafen tint, speaking
+   ring, mic icon, custom status text) — worth seeing on your own row too,
+   and it also matches the member count, which already included self even
+   while the row itself was hidden. Volume/block/mod-kebab controls and the
+   signal-strength icon are already conditionally skipped for isSelf cards
+   in _createParticipantCard(), so nothing peer-targeting leaks onto it. */
 .members-panel .participant-card[data-self="1"] {
-  display: none;
+  background: var(--card-hover);
+  border-bottom: 1px solid var(--border);
+}
+
+.members-panel .participant-card[data-self="1"]:hover {
+  background: var(--card-hover);
 }
 
 .participant-avatar {
