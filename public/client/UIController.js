@@ -990,17 +990,19 @@ export class UIController {
     }
 
     _statusColors = {
-        online:  '#22c55e',
-        away:    '#eab308',
-        dnd:     '#ef4444',
-        offline: '#6b7280',
+        online:    '#22c55e',
+        unfocused: '#22c55e',
+        away:      '#eab308',
+        dnd:       '#ef4444',
+        offline:   '#6b7280',
     };
 
     _statusLabels = {
-        online:  'Online',
-        away:    'Away',
-        dnd:     'Do Not Disturb',
-        offline: 'Offline',
+        online:    'Online',
+        unfocused: 'Not in focus',
+        away:      'Away',
+        dnd:       'Do Not Disturb',
+        offline:   'Offline',
     };
 
     /** @param {string} displayName @returns {string} up to 2 initials, one per word. */
@@ -1379,7 +1381,7 @@ export class UIController {
     /**
      * Updates one participant card's status dot color/icon and text label.
      * @param {string} peerId
-     * @param {'online'|'away'|'dnd'|'offline'} status
+     * @param {'online'|'unfocused'|'away'|'dnd'|'offline'} status
      * @param {string} [statusText] - free-text caption (e.g. "In a meeting");
      *   shown instead of the plain enum label when set, same as Discord's
      *   custom status message. The dot's color still always follows `status`.
@@ -1405,7 +1407,7 @@ export class UIController {
         if (label) {
             label.textContent = displayText;
             label.className = `participant-status-label text-[10px]`;
-            if (status === 'online') label.classList.add('text-emerald-400');
+            if (status === 'online' || status === 'unfocused') label.classList.add('text-emerald-400');
             else if (status === 'away') label.classList.add('text-yellow-400');
             else if (status === 'dnd') label.classList.add('text-red-400');
             else label.classList.add('text-muted');

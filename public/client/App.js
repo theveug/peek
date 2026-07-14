@@ -590,11 +590,11 @@ document.addEventListener('visibilitychange', () => {
     peerManager.handleTabVisibility(document.hidden);
 });
 
-// Idle/away auto-detection: flips status to Away after 15 minutes of no
-// mouse/keyboard/touch input, same manual-status-respecting logic as tab
-// visibility (see PeerManager._reconcileAwayStatus) — never overrides a
-// manually-chosen DND, and restores whatever status was manually chosen
-// before (not hardcoded 'online') once activity resumes.
+// Idle/away auto-detection: flips status to the real (yellow) Away after 15
+// minutes of no mouse/keyboard/touch input — distinct from tab-visibility's
+// green "Not in focus" (see PeerManager._reconcilePresenceStatus) — never
+// overrides a manually-chosen DND, and restores whatever status was manually
+// chosen before (not hardcoded 'online') once activity resumes.
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 let idleTimer = null;
 let isIdle = false;

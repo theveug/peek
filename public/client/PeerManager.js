@@ -46,6 +46,10 @@ export class PeerManager {
         this.deafened = false;
         this.status = 'online';
         this._manualStatus = null;
+        // Two independent automatic-away signals, tracked separately so one
+        // clearing doesn't wipe out the other — see _reconcilePresenceStatus.
+        this._tabHidden = false;
+        this._isIdle = false;
         // Free-text caption alongside the online/away/dnd enum (e.g. "In a meeting"),
         // persisted like nickname and broadcast bundled into the same status-update
         // message — untouched by _reconcileAwayStatus's automatic enum flips.
@@ -890,7 +894,7 @@ export class PeerManager {
      * Sets and broadcasts the local presence status, and updates the local
      * UI to match. Does not touch `_manualStatus` — callers that represent a
      * deliberate user choice should use `setManualStatus` instead.
-     * @param {'online'|'away'|'dnd'} status
+     * @param {'online'|'away'|'dnd'|'unfocused'} status
      * @returns {void}
      */
     setStatus(status) {
@@ -934,8 +938,11 @@ export class PeerManager {
 
     /**
      * Called on every `visibilitychange` — pauses/resumes incoming video
-     * (bandwidth-saving while the tab is backgrounded) and reconciles the
-     * away status.
+     * (bandwidth-saving while the tab is backgrounded) and reconciles
+     * presence status. Tab-hidden alone is treated as "still here, just not
+     * looking at this tab" (green 'unfocused'), not real AFK — only the idle
+     * timer (mouse/keyboard/touch inactivity, see handleIdleChange) means
+     * "actually away" (yellow).
      * @param {boolean} hidden - `document.hidden` at call time.
      * @returns {void}
      */
@@ -945,32 +952,44 @@ export class PeerManager {
         } else {
             this._resumeIncomingVideo();
         }
-        this._reconcileAwayStatus(hidden);
+        this._tabHidden = hidden;
+        this._reconcilePresenceStatus();
     }
 
     /**
-     * Shared by handleTabVisibility and handleIdleChange — both are just
-     * different signals for "the user isn't really here right now." Never
-     * overrides a manually-chosen DND, and reverts to whatever status was
-     * manually chosen before (not hardcoded 'online') once the away
-     * condition clears, so a manually-chosen 'away' stays put too.
-     * @param {boolean} away
+     * Combines the two independent automatic-away signals (idle-timeout and
+     * tab-visibility) plus any manually-chosen status into one effective
+     * status, and applies it. Precedence: a manual DND always wins and is
+     * never overridden by either automatic signal; real idle (or a manually
+     * chosen 'away') always outranks a merely-unfocused tab, since actually
+     * stepping away is a stronger signal than just alt-tabbing; otherwise
+     * falls back to whatever status was manually chosen before (not
+     * hardcoded 'online'), so a manually-chosen 'away' stays put once both
+     * automatic conditions clear.
      * @returns {void}
      */
-    _reconcileAwayStatus(away) {
+    _reconcilePresenceStatus() {
         if (this._manualStatus === 'dnd') return;
-        this.setStatus(away ? 'away' : (this._manualStatus || 'online'));
+        if (this._isIdle || this._manualStatus === 'away') {
+            this.setStatus('away');
+        } else if (this._tabHidden) {
+            this.setStatus('unfocused');
+        } else {
+            this.setStatus(this._manualStatus || 'online');
+        }
     }
 
     /**
      * Idle-timeout auto-away (mouse/keyboard/touch inactivity), distinct from
      * handleTabVisibility's tab-switch trigger — no video pause/resume here,
      * since an idle-but-visible tab should keep rendering incoming streams.
+     * This is the only signal that produces the real (yellow) 'away' status.
      * @param {boolean} idle
      * @returns {void}
      */
     handleIdleChange(idle) {
-        this._reconcileAwayStatus(idle);
+        this._isIdle = idle;
+        this._reconcilePresenceStatus();
     }
 
     /**
