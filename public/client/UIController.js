@@ -1119,7 +1119,7 @@ export class UIController {
 
         const card = document.createElement('div');
         card.id = `participant-${peerId}`;
-        card.className = 'participant-card';
+        card.className = 'participant-card px-2 py-2';
         if (isSelf) card.dataset.self = '1';
 
         const avatarWrap = document.createElement('div');
