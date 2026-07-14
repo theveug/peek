@@ -790,6 +790,18 @@ function resetIdleTimer() {
 ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach((evt) => {
     document.addEventListener(evt, resetIdleTimer, { passive: true });
 });
+// Talking counts as presence too — alt-tabbing to work in another window
+// while still mid-conversation produces zero mouse/keyboard events on this
+// document, so without this someone actively speaking still got flipped to
+// Away (and, with auto-deafen on, deafened mid-sentence). Reuses
+// pollSelfMicActivity() — the same production speaking-detection algorithm
+// the active-speaker ring runs — rather than a separate heuristic. Web Audio
+// analysers keep running in a backgrounded tab (unlike rAF), so this still
+// fires even while unfocused; a muted mic still can't prove presence this
+// way, but that's an inherent limit of an audio-based signal, not a bug.
+setInterval(() => {
+    if (peerManager.pollSelfMicActivity().speaking) resetIdleTimer();
+}, 2000);
 resetIdleTimer();
 
 
