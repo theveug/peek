@@ -566,45 +566,21 @@ function toggleDeafen() {
 
 document.getElementById('deafen-toggle').addEventListener('click', toggleDeafen);
 
-// Deafen-button volume popover — second surface for the same `masterCallVolume`
-// value the Settings panel controls, for in-call quick access. Not a second
-// data model: same ui.setMasterCallVolume()/localStorage key.
-const deafenVolumePopover = document.getElementById('deafen-volume-popover');
-const deafenVolumeSlider = document.getElementById('deafen-volume-slider');
-const deafenVolumeValue = document.getElementById('deafen-volume-value');
-document.getElementById('deafen-volume-caret').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (deafenVolumeSlider) deafenVolumeSlider.value = String(ui.masterCallVolume);
-    if (deafenVolumeValue) deafenVolumeValue.textContent = `${Math.round(ui.masterCallVolume * 100)}%`;
-    deafenVolumePopover.classList.toggle('hidden');
-});
-deafenVolumeSlider?.addEventListener('input', (e) => {
-    e.stopPropagation();
-    const value = parseFloat(e.target.value);
-    if (deafenVolumeValue) deafenVolumeValue.textContent = `${Math.round(value * 100)}%`;
-    ui.setMasterCallVolume(value);
-});
-deafenVolumeSlider?.addEventListener('click', (e) => e.stopPropagation());
-document.addEventListener('click', (e) => {
-    if (!deafenVolumePopover.contains(e.target) && e.target.id !== 'deafen-volume-caret') {
-        deafenVolumePopover.classList.add('hidden');
-    }
-});
+// --- Quick popovers off the dock buttons (deafen volume, screen/cam
+// quality+fps, mic options) — all share one caret+popover pattern, and all
+// close each other when one opens, so the controls bar never shows two of
+// these stacked on top of each other ("clicked cam quality, screen quality
+// was still open" was reported and is exactly what _quickPopovers fixes).
 
-// --- Quick quality/options popovers off the screen-share/cam/mic dock
-// buttons — same caret+popover pattern as the deafen volume popover above,
-// generalized since there are now 4 of these instead of 1. Every picker
-// below reads/writes the exact same localStorage keys (and calls the exact
-// same PeerManager methods) as the full Settings panel and QuickRoomSettings'
-// own quick pickers — a third *surface* for convenience, not a new data
-// model, same pattern QuickRoomSettings.js already documents for itself.
+const _quickPopovers = [];
 
 /**
- * Wires a caret button to show/hide its popover, closing on any outside
- * click. `onOpen` (if given) runs every time the popover is about to become
- * visible, so callers can resync their controls from localStorage — values
- * can have changed via another surface (full Settings, QuickRoomSettings)
- * since this popover was last opened.
+ * Wires a caret button to show/hide its popover, closing every other
+ * registered quick popover first (see _quickPopovers above), and closing on
+ * any outside click. `onOpen` (if given) runs every time the popover is
+ * about to become visible, so callers can resync their controls from
+ * localStorage — values can have changed via another surface (full
+ * Settings, QuickRoomSettings) since this popover was last opened.
  * @param {string} caretId
  * @param {string} popoverId
  * @param {() => void} [onOpen]
@@ -614,10 +590,17 @@ function wireQuickPopover(caretId, popoverId, onOpen) {
     const caret = document.getElementById(caretId);
     const popover = document.getElementById(popoverId);
     if (!caret || !popover) return;
+    _quickPopovers.push(popover);
     caret.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (popover.classList.contains('hidden')) onOpen?.();
-        popover.classList.toggle('hidden');
+        const opening = popover.classList.contains('hidden');
+        _quickPopovers.forEach(p => { if (p !== popover) p.classList.add('hidden'); });
+        if (opening) {
+            onOpen?.();
+            popover.classList.remove('hidden');
+        } else {
+            popover.classList.add('hidden');
+        }
     });
     popover.addEventListener('click', (e) => e.stopPropagation());
     document.addEventListener('click', (e) => {
@@ -626,6 +609,23 @@ function wireQuickPopover(caretId, popoverId, onOpen) {
         }
     });
 }
+
+// Deafen-button volume popover — second surface for the same `masterCallVolume`
+// value the Settings panel controls, for in-call quick access. Not a second
+// data model: same ui.setMasterCallVolume()/localStorage key.
+const deafenVolumeSlider = document.getElementById('deafen-volume-slider');
+const deafenVolumeValue = document.getElementById('deafen-volume-value');
+wireQuickPopover('deafen-volume-caret', 'deafen-volume-popover', () => {
+    if (deafenVolumeSlider) deafenVolumeSlider.value = String(ui.masterCallVolume);
+    if (deafenVolumeValue) deafenVolumeValue.textContent = `${Math.round(ui.masterCallVolume * 100)}%`;
+});
+deafenVolumeSlider?.addEventListener('input', (e) => {
+    e.stopPropagation();
+    const value = parseFloat(e.target.value);
+    if (deafenVolumeValue) deafenVolumeValue.textContent = `${Math.round(value * 100)}%`;
+    ui.setMasterCallVolume(value);
+});
+deafenVolumeSlider?.addEventListener('click', (e) => e.stopPropagation());
 
 /**
  * Wires one segmented button-group (buttons with `data-value`) to a
