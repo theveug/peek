@@ -566,6 +566,18 @@ function toggleDeafen() {
 
 document.getElementById('deafen-toggle').addEventListener('click', toggleDeafen);
 
+// Raise hand — a pure presence signal (no media side effects): broadcasts over
+// the same WS relay path as mic/deafen status, lights the dock button amber
+// while up, and PeerManager mirrors it onto our own participant card + the
+// sidebar's raised-hands queue via ui.updateParticipantHand.
+document.getElementById('raise-hand-toggle').addEventListener('click', () => {
+    const raised = !peerManager.handRaised;
+    peerManager.setHandRaised(raised);
+    const btn = document.getElementById('raise-hand-toggle');
+    btn.classList.toggle('dock-btn-active-amber', raised);
+    btn.dataset.tip = raised ? 'Lower hand' : 'Raise hand';
+});
+
 // --- Quick popovers off the dock buttons (deafen volume, screen/cam
 // quality+fps, mic options) — all share one caret+popover pattern, and all
 // close each other when one opens, so the controls bar never shows two of

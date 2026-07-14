@@ -530,6 +530,9 @@
                             <span id="deafen-volume-value" class="dock-volume-value">100%</span>
                         </div>
                     </div>
+                    <button id="raise-hand-toggle" data-tip="Raise hand" class="dock-btn">
+                        <span class="material-symbols-rounded">front_hand</span>
+                    </button>
                     <div class="dock-divider"></div>
                     <button id="leave-room-button" data-tip="Leave Room" class="dock-leave-btn">
                         <span class="material-symbols-rounded">call_end</span>Leave
@@ -561,6 +564,15 @@
                     </div>
                 </div>
                 <div class="flex-1 overflow-auto" id="participants"></div>
+
+                <!-- Raised-hands queue: pinned below the participant list, hidden (inline
+                     style, not .hidden — unlayered custom class would win) until someone's
+                     hand is actually up. Rows are rebuilt by UIController._renderRaisedHands(). -->
+                <div id="raised-hands-section" class="raised-hands-section" style="display:none">
+                    <div class="raised-hands-title"><span class="material-symbols-rounded">front_hand</span>Raised
+                        hands</div>
+                    <ol id="raised-hands-list" class="raised-hands-list"></ol>
+                </div>
 
                 <!-- <div class="sidebar-trust-card">
                     <div class="sidebar-trust-title">
@@ -835,6 +847,17 @@
                                 <div class="settings-toggle-row-title">Mute notification sounds</div>
                             </div>
                             <label class="settings-switch"><input type="checkbox" id="settings-mute" /><span
+                                    class="settings-switch-track"></span></label>
+                        </div>
+                        <div class="settings-toggle-row">
+                            <div>
+                                <div class="settings-toggle-row-title">Desktop notifications for @mentions</div>
+                                <div class="settings-toggle-row-desc">Shows an OS notification when someone @mentions
+                                    you while this window isn't focused. Handled entirely by your browser — nothing
+                                    leaves your device.</div>
+                            </div>
+                            <label class="settings-switch"><input type="checkbox"
+                                    id="settings-desktop-notifications" /><span
                                     class="settings-switch-track"></span></label>
                         </div>
                         <div class="settings-toggle-row">

@@ -74,6 +74,10 @@ export class UIController {
         // via PeerManager's 'avatar-update' (already allowlist-validated there before
         // this map ever sees it). Same non-persistence rationale as peerVolumes above.
         this.peerAvatars = new Map();
+        // peerId → Date.now() when their hand went up; Map insertion order is
+        // the sidebar queue's order. Same non-persistence rationale as
+        // peerVolumes above — cleared in clearAllParticipants().
+        this.raisedHands = new Map();
         // Overall call volume, multiplied with each peer's own volume. This one
         // *is* persisted — it's a personal preference, not tied to any peer/session.
         this.masterCallVolume = parseFloat(localStorage.getItem('masterCallVolume'));
@@ -1445,6 +1449,7 @@ export class UIController {
     removeParticipant(peerId) {
         const el = document.getElementById(`participant-${peerId}`);
         if (el) el.remove();
+        if (this.raisedHands.delete(peerId)) this._renderRaisedHands();
         this._updateMemberCount();
     }
 
@@ -1462,6 +1467,8 @@ export class UIController {
         this.peerVolumes.clear();
         this.blockedPeerIds.clear();
         this.peerAvatars.clear();
+        this.raisedHands.clear();
+        this._renderRaisedHands();
         this._updateMemberCount();
     }
 
@@ -1679,6 +1686,84 @@ export class UIController {
         if (avatar) avatar.classList.toggle('status-deafened', deafened);
         if (peerId === this.selfPeerId) {
             document.getElementById('topbar-identity-avatar')?.classList.toggle('status-deafened', deafened);
+        }
+    }
+
+    /**
+     * Shows/hides a peer's raised-hand badge on their participant card and
+     * keeps the sidebar's raised-hands queue in sync. `raisedHands` is a
+     * Map<peerId, raisedAt-ms> — Map insertion order IS the queue order, so
+     * rendering just iterates it; a re-raise re-enters at the back. Session-
+     * scoped like peerVolumes/blockedPeerIds (peerIds don't survive a
+     * reconnect): cleared in clearAllParticipants(), pruned per-peer in
+     * removeParticipant().
+     * @param {string} peerId
+     * @param {boolean} raised
+     * @returns {void}
+     */
+    updateParticipantHand(peerId, raised) {
+        if (raised && !this.raisedHands.has(peerId)) {
+            this.raisedHands.set(peerId, Date.now());
+        } else if (!raised) {
+            this.raisedHands.delete(peerId);
+        }
+
+        const el = document.getElementById(`participant-${peerId}`);
+        if (el) {
+            const status = el.querySelector('.participant-status-icons');
+            let handIcon = el.querySelector('.participant-hand-icon');
+            if (raised) {
+                if (!handIcon && status) {
+                    handIcon = document.createElement('span');
+                    handIcon.className = 'participant-hand-icon material-symbols-rounded';
+                    handIcon.dataset.tip = 'Hand raised';
+                    handIcon.textContent = 'front_hand';
+                    status.appendChild(handIcon);
+                }
+            } else {
+                if (handIcon) handIcon.remove();
+            }
+        }
+
+        this._renderRaisedHands();
+    }
+
+    /**
+     * Rebuilds the `#raised-hands-section` queue at the bottom of the members
+     * sidebar from `raisedHands` — hidden entirely while nobody's hand is up,
+     * so it costs no sidebar space in the common case. Built with
+     * createElement/textContent (nicknames are peer-controlled). Visibility is
+     * toggled via inline style.display, not the `.hidden` utility — the
+     * unlayered custom `.raised-hands-section` class would beat it in the
+     * cascade (standing rule).
+     * @returns {void}
+     */
+    _renderRaisedHands() {
+        const section = document.getElementById('raised-hands-section');
+        const list = document.getElementById('raised-hands-list');
+        if (!section || !list) return;
+
+        if (this.raisedHands.size === 0) {
+            section.style.display = 'none';
+            list.innerHTML = '';
+            return;
+        }
+
+        section.style.display = '';
+        list.innerHTML = '';
+        let i = 1;
+        for (const peerId of this.raisedHands.keys()) {
+            const row = document.createElement('li');
+            row.className = 'raised-hands-row';
+            const num = document.createElement('span');
+            num.className = 'raised-hands-num';
+            num.textContent = `${i++}.`;
+            const name = document.createElement('span');
+            name.className = 'raised-hands-name';
+            name.textContent = this._peerNickname(peerId) + (peerId === this.selfPeerId ? ' (you)' : '');
+            row.appendChild(num);
+            row.appendChild(name);
+            list.appendChild(row);
         }
     }
 

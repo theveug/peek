@@ -2639,6 +2639,78 @@ body,
   opacity: 0.9;
 }
 
+/* Raise-hand button while the hand is up — same solid-fill treatment as
+   .dock-btn-active-red, in the amber the raised-hand icon uses elsewhere. */
+.dock-btn-active-amber {
+  background: var(--amber);
+  color: #fff;
+}
+
+.dock-btn-active-amber:hover {
+  background: var(--amber);
+  opacity: 0.9;
+}
+
+/* ===== Raised hands (members sidebar queue + card badge) ===== */
+
+.participant-hand-icon {
+  color: var(--amber);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.raised-hands-section {
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+  flex-shrink: 0;
+}
+
+.raised-hands-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--amber);
+  margin-bottom: 6px;
+}
+
+.raised-hands-title .material-symbols-rounded {
+  font-size: 14px;
+}
+
+.raised-hands-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.raised-hands-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--t2);
+  min-width: 0;
+}
+
+.raised-hands-num {
+  color: var(--t3);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.raised-hands-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dock-mode-badge {
   position: absolute;
   bottom: 0.125rem;

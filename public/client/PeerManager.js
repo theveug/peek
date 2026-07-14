@@ -220,6 +220,7 @@ export class PeerManager {
                 setTimeout(() => {
                     this.broadcastMicStatus();
                     this.broadcastDeafenStatus();
+                    this.broadcastHandStatus();
                     this.broadcastNickname();
                     this.broadcastStatus();
                     this.broadcastAvatar();
@@ -269,6 +270,7 @@ export class PeerManager {
                 this.ui.addPeer(peerId);
                 this.broadcastMicStatus();
                 this.broadcastDeafenStatus();
+                this.broadcastHandStatus();
                 this.broadcastNickname();
                 this.broadcastStatus();
                 this.broadcastAvatar();
@@ -332,6 +334,21 @@ export class PeerManager {
             case 'deafen-status':
                 this.ui.updateParticipantDeafen(from, payload.deafened);
                 break;
+
+            case 'hand-status': {
+                const raised = !!payload.raised;
+                const wasRaised = this.ui.raisedHands?.has(from);
+                this.ui.updateParticipantHand(from, raised);
+                // The chat pill is attention-demanding like a chat message, so a
+                // blocked peer's raise stays silent (their card icon/queue entry
+                // still shows — it's room state, same as their mic/deafen icons).
+                // Only announce a real false→true transition, not the re-broadcast
+                // sync every 'peer-joined' triggers for late joiners.
+                if (raised && !wasRaised && !this.ui.isBlocked(from)) {
+                    this.ui.addSystemMessage(`${this.ui._peerNickname(from)} raised their hand`, 'info');
+                }
+                break;
+            }
 
             case 'nickname-update':
                 // Same defensive receive-side cap as statusText below — rendered
@@ -878,6 +895,26 @@ export class PeerManager {
     /** Sends the current deafen state to every peer. */
     broadcastDeafenStatus() {
         this.send('deafen-status', null, { deafened: this.deafened || false });
+    }
+
+    /** Sends the current raised-hand state to every peer. */
+    broadcastHandStatus() {
+        this.send('hand-status', null, { raised: this.handRaised || false });
+    }
+
+    /**
+     * Toggles the local raised-hand state and broadcasts it — same
+     * broadcast-and-mirror-locally shape as setDeafened(), but pure signal:
+     * no media side effects. Session-scoped like every other presence state
+     * (a reconnect's fresh peerId simply re-broadcasts whatever this still
+     * holds via the 'init'/'peer-joined' sync below).
+     * @param {boolean} raised
+     * @returns {void}
+     */
+    setHandRaised(raised) {
+        this.handRaised = raised;
+        this.broadcastHandStatus();
+        this.ui.updateParticipantHand(this.peerId, raised);
     }
 
     /**

@@ -1,6 +1,7 @@
 import { playSound } from './SoundPlayer.js';
 import { escapeHtml } from './escapeHtml.js';
 import { openEmojiPicker } from './EmojiPicker.js';
+import { trapFocus } from './focusTrap.js';
 
 /**
  * Chat panel behavior: messages, typing indicators, reactions, polls,
@@ -710,7 +711,7 @@ export class ChatUI {
         // file-offer behavior of staying silent until a transfer actually completes.
         if (caption) {
             if (!isSelf && (!document.hasFocus() || this._isChatViewClosed())) {
-                if (mentionedMe) this._notifyMention();
+                if (mentionedMe) this._notifyMention(sender, caption);
                 else {
                     document.getElementById('new-message-indicator')?.classList.remove('hidden');
                     this._playMessageSound();
@@ -903,11 +904,44 @@ export class ChatUI {
      * applied unconditionally by the caller whenever mentioned — like
      * Discord, that stays visible even if you already saw it — only this
      * badge+sound part is gated on "not already seen".
+     * @param {string} sender - peer-controlled nickname (plain text in the
+     *     Notification API, no HTML context — no escaping needed).
+     * @param {string} rawText - the raw markdown message/caption text.
      * @returns {void}
      */
-    _notifyMention() {
+    _notifyMention(sender, rawText) {
         document.getElementById('mention-indicator')?.classList.remove('hidden');
         this._playMessageSound();
+        this._desktopNotify(sender, rawText);
+    }
+
+    /**
+     * Fires an OS-level desktop notification for a mention — the in-tab badge
+     * and sound are invisible/ignorable while the user is alt-tabbed into
+     * another window, which is exactly when a ping matters most in an all-day
+     * persistent room. Opt-in (`localStorage['desktopNotifications']`, Settings
+     * → Audio & Mic, permission requested when the toggle is enabled) and only
+     * while the window is actually unfocused — a visible-but-chat-closed tab
+     * already has the badge. Entirely local (Notification API), no server or
+     * third party involved. `silent: true` because `_playMessageSound()`
+     * already pinged — Web Audio keeps playing in a backgrounded tab, so the
+     * OS notification sound would double up.
+     * @param {string} sender
+     * @param {string} rawText
+     * @returns {void}
+     */
+    _desktopNotify(sender, rawText) {
+        if (document.hasFocus()) return;
+        if (localStorage.getItem('desktopNotifications') !== '1') return;
+        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+        try {
+            const body = String(rawText || '').slice(0, 140);
+            const n = new Notification(`${sender} mentioned you`, { body, silent: true });
+            n.onclick = () => { window.focus(); n.close(); };
+        } catch {
+            // Some platforms (e.g. Android Chrome) require ServiceWorker-based
+            // notifications and throw on the constructor — degrade to badge+sound.
+        }
     }
 
     _imageUrlPattern = /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?.*)?$/i;
@@ -930,7 +964,13 @@ export class ChatUI {
         el.innerHTML = `<div class="chat-lightbox-backdrop"></div><div class="chat-lightbox-content"><div class="chat-lightbox-actions"><a class="chat-lightbox-action" data-tip="Open in new tab" target="_blank" rel="noopener"><span class="material-symbols-rounded">open_in_new</span></a><a class="chat-lightbox-action" data-tip="Download"><span class="material-symbols-rounded">download</span></a><button type="button" class="chat-lightbox-action" data-tip="Close"><span class="material-symbols-rounded">close</span></button></div><img class="chat-lightbox-img" src="" alt="" /></div>`;
         document.body.appendChild(el);
 
-        const close = () => { el.style.display = 'none'; };
+        const close = () => {
+            el.style.display = 'none';
+            // Release the focus trap installed by openImageLightbox — restores
+            // focus to whatever had it before the lightbox opened.
+            this._lightboxFocusRelease?.();
+            this._lightboxFocusRelease = null;
+        };
         el.querySelector('.chat-lightbox-backdrop').addEventListener('click', close);
         el.querySelector('button.chat-lightbox-action').addEventListener('click', close);
         document.addEventListener('keydown', (e) => {
@@ -960,6 +1000,13 @@ export class ChatUI {
         downloadLink.href = src;
         downloadLink.download = downloadName || '';
         el.style.display = 'flex';
+        // Confine Tab to the overlay's own action bar while open; initial
+        // focus goes to the close button (the most likely next action),
+        // not the first link. Guarded so a second image click while already
+        // open doesn't stack a second trap.
+        if (!this._lightboxFocusRelease) {
+            this._lightboxFocusRelease = trapFocus(el, el.querySelector('button.chat-lightbox-action'));
+        }
     }
 
     /**
@@ -1107,7 +1154,7 @@ export class ChatUI {
         }
 
         if (isFromOther && (!tabFocused || this._isChatViewClosed())) {
-            if (mentionedMe) this._notifyMention();
+            if (mentionedMe) this._notifyMention(sender, text);
             else {
                 newMessageIndicator.classList.remove('hidden');
                 this._playMessageSound();

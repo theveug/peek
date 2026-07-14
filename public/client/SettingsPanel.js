@@ -6,6 +6,7 @@ import { setTheme, getEffectiveTheme } from './ThemeManager.js';
 import { setAccent, getStoredAccent, accentPresetNames, presetColor } from './AccentManager.js';
 import { setBackgroundTint, getStoredBackgroundTint, bgTintPresetNames, presetBgColor } from './BackgroundManager.js';
 import { setFontScale, getStoredFontScale, fontScaleLabel } from './FontScaleManager.js';
+import { trapFocus } from './focusTrap.js';
 
 export class SettingsPanel {
     // ui/peerManager are optional — on the lobby (pre-room) there's neither, and
@@ -50,12 +51,18 @@ export class SettingsPanel {
         this._refreshAll();
         this.modal.classList.remove('hidden');
         this._startMicMeter();
+        // Keep Tab inside the overlay while it's open; released (and prior
+        // focus restored) in close(). Idempotence guard in case open() is
+        // ever called while already open — don't stack a second trap.
+        if (!this._releaseFocusTrap) this._releaseFocusTrap = trapFocus(this.modal);
     }
 
     close() {
         if (!this.modal) return;
         this.modal.classList.add('hidden');
         this._stopMicMeter();
+        this._releaseFocusTrap?.();
+        this._releaseFocusTrap = null;
     }
 
     // --- Nav ---
@@ -418,6 +425,30 @@ export class SettingsPanel {
             localStorage.setItem('muteSounds', e.target.checked ? '1' : '0');
         });
 
+        // Enabling desktop notifications is the natural moment to ask the
+        // browser for permission (a permission prompt out of nowhere at page
+        // load would be hostile). If the user denies it — or the browser has
+        // it hard-blocked from before — the toggle snaps back off rather than
+        // sitting checked-but-inert.
+        document.getElementById('settings-desktop-notifications')?.addEventListener('change', async (e) => {
+            if (e.target.checked) {
+                if (typeof Notification === 'undefined') {
+                    e.target.checked = false;
+                    this.ui?.showToast?.('This browser doesn\'t support desktop notifications');
+                    return;
+                }
+                let perm = Notification.permission;
+                if (perm === 'default') perm = await Notification.requestPermission();
+                if (perm !== 'granted') {
+                    e.target.checked = false;
+                    localStorage.setItem('desktopNotifications', '0');
+                    this.ui?.showToast?.('Notifications are blocked — allow them in your browser\'s site settings first');
+                    return;
+                }
+            }
+            localStorage.setItem('desktopNotifications', e.target.checked ? '1' : '0');
+        });
+
         document.getElementById('settings-noise-suppression')?.addEventListener('change', (e) => {
             this.peerManager?.setNoiseSuppression(e.target.checked);
         });
@@ -641,6 +672,15 @@ export class SettingsPanel {
     _refreshAudio() {
         const mute = document.getElementById('settings-mute');
         if (mute) mute.checked = localStorage.getItem('muteSounds') === '1';
+
+        // Reflects the stored preference AND current browser permission — a
+        // permission revoked in site settings since the toggle was enabled
+        // shows as off (matching what will actually happen), not checked-but-dead.
+        const desktopNotifs = document.getElementById('settings-desktop-notifications');
+        if (desktopNotifs) {
+            desktopNotifs.checked = localStorage.getItem('desktopNotifications') === '1'
+                && typeof Notification !== 'undefined' && Notification.permission === 'granted';
+        }
 
         const noiseSuppression = document.getElementById('settings-noise-suppression');
         if (noiseSuppression) noiseSuppression.checked = localStorage.getItem('noiseSuppression') === '1';
