@@ -2219,9 +2219,9 @@ export class PeerManager {
      * @returns {Promise<void>}
      */
     async switchCamera(deviceId = null) {
+        if (deviceId) localStorage.setItem('camDeviceId', deviceId);
         if (!this.camStream) return;
         const nextFacingMode = this._camFacingMode === 'environment' ? 'user' : 'environment';
-        if (deviceId) localStorage.setItem('camDeviceId', deviceId);
 
         try {
             const newRawStream = await navigator.mediaDevices.getUserMedia({
