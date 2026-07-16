@@ -112,4 +112,46 @@ function makeFakeSender() {
     assert(senderA._calls.at(-1) === liveTrack, 'switching back to toggle mode reopens a sender left gated closed');
 })();
 
+(function testPtmHeldClosesGateInToggleMode() {
+    const pm = new PeerManager(null, {});
+    const liveTrack = { id: 'live' };
+    pm.micStream = { getAudioTracks: () => [liveTrack] };
+    pm.micEnabled = true;
+    const senderA = makeFakeSender();
+    pm.senders = { A: { 'mic-audio': senderA } };
+
+    localStorage.setItem('micMode', 'toggle');
+    pm._reconcileMicGate(false);
+    assert(senderA._calls.at(-1) === liveTrack, 'toggle mode open before PTM is held');
+
+    pm.ptmHeld = true;
+    pm._reconcileMicGate(false);
+    assert(senderA._calls.at(-1) === null, 'holding PTM closes the sender in toggle mode, regardless of speaking state');
+
+    pm.ptmHeld = false;
+    pm._reconcileMicGate(false);
+    assert(senderA._calls.at(-1) === liveTrack, 'releasing PTM reopens the sender in toggle mode');
+})();
+
+(function testPtmHeldOverridesVoiceActivityEvenWhileSpeaking() {
+    const pm = new PeerManager(null, {});
+    const liveTrack = { id: 'live' };
+    pm.micStream = { getAudioTracks: () => [liveTrack] };
+    pm.micEnabled = true;
+    const senderA = makeFakeSender();
+    pm.senders = { A: { 'mic-audio': senderA } };
+
+    localStorage.setItem('micMode', 'voice-activity');
+    pm._reconcileMicGate(true); // speaking, gate normally open
+    assert(senderA._calls.at(-1) === liveTrack, 'voice-activity mode open while speaking, before PTM is held');
+
+    pm.ptmHeld = true;
+    pm._reconcileMicGate(true); // still speaking, but PTM should force-mute anyway
+    assert(senderA._calls.at(-1) === null, 'holding PTM closes the sender in voice-activity mode even while actively speaking');
+
+    pm.ptmHeld = false;
+    pm._reconcileMicGate(true);
+    assert(senderA._calls.at(-1) === liveTrack, 'releasing PTM reopens the sender per the normal voice-activity rule (still speaking)');
+})();
+
 console.log('All mic-gate logic checks passed.');

@@ -8,6 +8,16 @@ import { setBackgroundTint, getStoredBackgroundTint, bgTintPresetNames, presetBg
 import { setFontScale, getStoredFontScale, fontScaleLabel } from './FontScaleManager.js';
 import { trapFocus } from './focusTrap.js';
 
+// One-time cleanup for the old 4-way mic-mode picker: 'push-to-mute' used to be
+// its own mutually-exclusive mode, now it's a hold-to-force-mute modifier on
+// top of 'toggle'/'voice-activity' (see PeerManager's ptmHeld). A user who had
+// it selected keeps their existing micKeybind (still meaningful under the new
+// design) — this just re-normalizes the stored mode so a picker button shows
+// as selected again.
+if (typeof localStorage !== 'undefined' && localStorage.getItem('micMode') === 'push-to-mute') {
+    localStorage.setItem('micMode', 'toggle');
+}
+
 export class SettingsPanel {
     // ui/peerManager are optional — on the lobby (pre-room) there's neither, and
     // every field still needs to load/persist to localStorage for whatever room
@@ -18,8 +28,12 @@ export class SettingsPanel {
         this.peerManager = peerManager;
         this._keybindListening = false;
 
-        this.modal = document.getElementById('settings-modal');
-        if (!this.modal) return;
+        // Single source of truth for the modal's markup — previously this was
+        // hand-duplicated as static HTML in both index.html and lobby.html,
+        // which is exactly how they drifted out of sync (13 ids ended up
+        // present in one copy and missing from the other). Built here once
+        // and reused by both pages instead.
+        this.modal = document.getElementById('settings-modal') || this._buildModal();
 
         this._buildAccentSwatches();
         this._buildBackgroundSwatches();
@@ -29,8 +43,439 @@ export class SettingsPanel {
         this._wireFontScale();
         this._wireVideo();
         this._wireAudio();
+        this._wireDevices();
         this._wirePrivacy();
         this._wireCloseHandlers();
+    }
+
+    // Builds the modal's DOM and appends it to <body> — the full superset of
+    // controls (in-room's old copy was the superset; lobby's was a strict
+    // subset by id, confirmed during the consolidation). Controls that only
+    // make sense with a live connection are marked `settings-live-only` and
+    // hidden by `_refreshAll()` when there's no peerManager (lobby) — see
+    // that method. `focusTrap.js` and every `_wire*`/`_refresh*` method below
+    // are agnostic to whether this node was parsed from static HTML or built
+    // here; only the constructor cared, which is why this was safe to extract.
+    _buildModal() {
+        const modal = document.createElement('div');
+        modal.id = 'settings-modal';
+        modal.className = 'fixed inset-0 z-100 hidden';
+        modal.innerHTML = `
+            <div class="settings-overlay">
+                <div class="settings-nav">
+                    <div class="settings-nav-title">SETTINGS</div>
+                    <button type="button" class="settings-nav-item active" data-settings-section="profile">
+                        <span class="material-symbols-rounded">person</span>Profile
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="appearance">
+                        <span class="material-symbols-rounded">palette</span>Appearance
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="video">
+                        <span class="material-symbols-rounded">screen_share</span>Screen &amp; Video
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="audio">
+                        <span class="material-symbols-rounded">mic</span>Audio &amp; Mic
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="privacy">
+                        <span class="material-symbols-rounded">shield</span>Privacy &amp; P2P
+                    </button>
+                    <div class="settings-nav-spacer"></div>
+                    <div class="settings-nav-footer"><b>Peek</b><br>No account. No database. Settings stay on this device.
+                    </div>
+                </div>
+
+                <div class="settings-content">
+                    <button type="button" id="close-settings" class="settings-close-btn" data-tip="Close">
+                        <span class="settings-close-btn-icon"><span class="material-symbols-rounded">close</span></span>
+                        <span class="settings-close-btn-esc">ESC</span>
+                    </button>
+
+                    <div class="settings-section-body">
+
+                        <!-- Profile -->
+                        <div class="settings-section active" data-settings-panel="profile">
+                            <h1>Profile</h1>
+                            <p class="settings-section-subcopy">Your name and status, visible to everyone in the room.</p>
+                            <div class="settings-field">
+                                <div class="settings-label">Avatar</div>
+                                <div class="settings-avatar-row">
+                                    <div id="settings-avatar-preview" class="settings-avatar-preview">?</div>
+                                    <button type="button" id="settings-avatar-pick" class="settings-avatar-btn">Change photo</button>
+                                    <button type="button" id="settings-avatar-remove" class="settings-avatar-btn" style="display:none">Remove</button>
+                                    <input type="file" id="settings-avatar-input" accept="image/*" class="hidden" />
+                                </div>
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-nickname" class="settings-label">Nickname</label>
+                                <input type="text" id="settings-nickname" class="settings-text-input" maxlength="60" />
+                            </div>
+                            <div class="settings-field">
+                                <div class="settings-label">Status</div>
+                                <div id="status-picker" class="flex gap-2">
+                                    <button type="button" data-status="online"
+                                        class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all"
+                                        data-tip="Online">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> Online
+                                    </button>
+                                    <button type="button" data-status="away"
+                                        class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all"
+                                        data-tip="Away">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block"></span> Away
+                                    </button>
+                                    <button type="button" data-status="dnd"
+                                        class="status-pick flex items-center gap-1.5 px-3 py-1.5 rounded-lg surface-input text-xs font-medium transition-all"
+                                        data-tip="Do Not Disturb">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> DND
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-status-text" class="settings-label">Status message</label>
+                                <input type="text" id="settings-status-text" class="settings-text-input"
+                                    placeholder="e.g. In a meeting" maxlength="60" />
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-away-timeout" class="settings-label">Away after</label>
+                                <select id="settings-away-timeout" class="settings-text-input">
+                                    <option value="5">5 minutes</option>
+                                    <option value="10">10 minutes</option>
+                                    <option value="15">15 minutes</option>
+                                    <option value="30">30 minutes</option>
+                                </select>
+                                <p class="text-[10px] text-muted mt-1">How long without mouse/keyboard/touch input before
+                                    you're marked Away — also drives Audio &amp; Mic's "Auto-deafen when away", if that's
+                                    turned on.</p>
+                            </div>
+                        </div>
+
+                        <!-- Appearance -->
+                        <div class="settings-section" data-settings-panel="appearance">
+                            <h1>Appearance</h1>
+                            <p class="settings-section-subcopy">Make Peek yours. Changes apply instantly and save to this
+                                device.</p>
+                            <div class="settings-label">Theme</div>
+                            <div class="settings-segmented" id="settings-theme-picker" style="margin-bottom:1.875rem;">
+                                <button type="button" data-theme="system"><span
+                                        class="material-symbols-rounded">brightness_auto</span>System</button>
+                                <button type="button" data-theme="dark"><span
+                                        class="material-symbols-rounded">dark_mode</span>Dark</button>
+                                <button type="button" data-theme="light"><span
+                                        class="material-symbols-rounded">light_mode</span>Light</button>
+                            </div>
+                            <div class="settings-label">Accent color</div>
+                            <div class="settings-accent-swatches" id="settings-accent-picker"></div>
+                            <div class="settings-label">Background tint</div>
+                            <div class="settings-accent-swatches" id="settings-bg-picker"></div>
+                            <div class="settings-field">
+                                <label for="settings-font-scale" class="settings-label">Text size — <span
+                                        id="settings-font-scale-value">Default</span></label>
+                                <input id="settings-font-scale" type="range" min="0.85" max="1.3" step="0.05"
+                                    class="w-full" />
+                                <p class="text-[10px] text-muted mt-1">Scales the whole interface up or down from the
+                                    default size.</p>
+                            </div>
+                            <div class="settings-label">Preview</div>
+                            <div class="settings-preview-card">
+                                <div class="settings-preview-header">
+                                    <span
+                                        style="width:1.75rem;height:1.75rem;border-radius:0.5rem;background:var(--accent);color:var(--accentText);display:flex;align-items:center;justify-content:center;"><span
+                                            class="material-symbols-rounded"
+                                            style="font-size:1.0625rem;">screen_share</span></span>Peek
+                                </div>
+                                <div class="settings-preview-body">
+                                    <div style="display:flex;gap:0.75rem;">
+                                        <span
+                                            style="width:2.375rem;height:2.375rem;border-radius:0.6875rem;background:var(--accent);color:var(--accentText);font-weight:800;font-size:0.8125rem;display:flex;align-items:center;justify-content:center;flex:none;">YO</span>
+                                        <div>
+                                            <div style="font-weight:700;color:var(--t1);font-size:0.875rem;">you</div>
+                                            <div style="color:var(--t1);font-size:0.875rem;margin-top:0.125rem;">looks good with this
+                                                accent</div>
+                                        </div>
+                                    </div>
+                                    <div style="display:flex;gap:0.625rem;">
+                                        <button type="button"
+                                            style="border:none;border-radius:0.5625rem;background:var(--accent);color:var(--accentText);font-weight:700;font-size:0.8125rem;padding:0.5rem 1rem;">Share
+                                            screen</button>
+                                        <button type="button"
+                                            style="border:1px solid var(--border);border-radius:0.5625rem;background:var(--bg4);color:var(--t1);font-weight:600;font-size:0.8125rem;padding:0.5rem 1rem;">Invite</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Screen & Video -->
+                        <div class="settings-section" data-settings-panel="video">
+                            <h1>Screen &amp; Video</h1>
+                            <p class="settings-section-subcopy">Quality auto-caps as the room grows, and restores when peers
+                                leave.</p>
+                            <div class="settings-field">
+                                <label for="settings-cam-device" class="settings-label">Camera</label>
+                                <select id="settings-cam-device" class="settings-text-input">
+                                    <option value="">System default</option>
+                                </select>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Voice-only mode</div>
+                                    <div class="settings-toggle-row-desc">Don't automatically watch anyone's video —
+                                        saves bandwidth if you're just here for the call. You can still click any tile to
+                                        watch it.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox"
+                                        id="settings-audio-only-mode" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-field">
+                                <div class="settings-label">Screen share resolution</div>
+                                <div class="settings-segmented" id="settings-res-picker">
+                                    <button type="button" data-value="1280x720">720p</button>
+                                    <button type="button" data-value="1920x1080">1080p</button>
+                                    <button type="button" data-value="2560x1440">1440p</button>
+                                    <button type="button" data-value="source">Source</button>
+                                </div>
+                            </div>
+                            <div class="settings-field">
+                                <div class="settings-label">Screen share frame rate</div>
+                                <div class="settings-segmented" id="settings-fps-picker">
+                                    <button type="button" data-value="10">10 fps</button>
+                                    <button type="button" data-value="15">15 fps</button>
+                                    <button type="button" data-value="30">30 fps</button>
+                                    <button type="button" data-value="60">60 fps</button>
+                                </div>
+                            </div>
+                            <div class="settings-field">
+                                <div class="settings-label">Webcam resolution</div>
+                                <div class="settings-segmented" id="settings-cam-res-picker">
+                                    <button type="button" data-value="640x360">360p</button>
+                                    <button type="button" data-value="640x480">480p</button>
+                                    <button type="button" data-value="1280x720">720p</button>
+                                    <button type="button" data-value="source">Source</button>
+                                </div>
+                            </div>
+                            <div class="settings-field">
+                                <div class="settings-label">Webcam frame rate</div>
+                                <div class="settings-segmented" id="settings-cam-fps-picker">
+                                    <button type="button" data-value="10">10 fps</button>
+                                    <button type="button" data-value="15">15 fps</button>
+                                    <button type="button" data-value="24">24 fps</button>
+                                    <button type="button" data-value="30">30 fps</button>
+                                </div>
+                            </div>
+                            <div class="settings-toggle-row settings-live-only">
+                                <div>
+                                    <div class="settings-toggle-row-title">Background blur</div>
+                                    <div class="settings-toggle-row-desc">Blurs what's behind you on your webcam. Runs
+                                        entirely in your browser before your video is ever sent — nothing leaves your
+                                        device.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-background-blur" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Automatically focus on whoever's speaking</div>
+                                    <div class="settings-toggle-row-desc">Switches the focused view to the active speaker
+                                        while you're already in focus view.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-follow-speaker" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-max-messages" class="settings-label">Max chat messages kept</label>
+                                <input type="number" id="settings-max-messages" class="settings-text-input"
+                                    style="max-width:7.5rem;" min="10" max="500" />
+                            </div>
+                        </div>
+
+                        <!-- Audio & Mic -->
+                        <div class="settings-section" data-settings-panel="audio">
+                            <h1>Audio &amp; Mic</h1>
+                            <p class="settings-section-subcopy">Audio keeps flowing when the tab is backgrounded — only
+                                video pauses.</p>
+                            <div class="settings-field">
+                                <label for="settings-mic-device" class="settings-label">Microphone</label>
+                                <select id="settings-mic-device" class="settings-text-input">
+                                    <option value="">System default</option>
+                                </select>
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-speaker-device" class="settings-label">Speaker</label>
+                                <select id="settings-speaker-device" class="settings-text-input">
+                                    <option value="">System default</option>
+                                </select>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Mute notification sounds</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-mute" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Desktop notifications for @mentions</div>
+                                    <div class="settings-toggle-row-desc">Shows an OS notification when someone @mentions
+                                        you while this window isn't focused. Handled entirely by your browser — nothing
+                                        leaves your device.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox"
+                                        id="settings-desktop-notifications" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row settings-live-only">
+                                <div>
+                                    <div class="settings-toggle-row-title">Noise suppression</div>
+                                    <div class="settings-toggle-row-desc">Filters background noise out of your mic (RNNoise).
+                                        Runs entirely in your browser before your audio is ever sent — nothing leaves your
+                                        device.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-noise-suppression" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row settings-live-only">
+                                <div>
+                                    <div class="settings-toggle-row-title">Auto-deafen when away</div>
+                                    <div class="settings-toggle-row-desc">Mutes your mic and incoming audio automatically
+                                        once you're marked Away (see Profile → "Away after" for the timeout), and undoes
+                                        it when you come back — unless you deafened yourself manually, which this leaves
+                                        alone.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-auto-deafen-away" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-field settings-live-only">
+                                <label class="settings-label">Deafen keybind</label>
+                                <div class="settings-keybind-row">
+                                    <input type="text" id="settings-deafen-keybind" readonly class="settings-keybind-input"
+                                        placeholder="Click then press a key..." />
+                                    <button type="button" id="deafen-keybind-clear"
+                                        class="text-xs text-muted hover:text-foreground px-2 py-1">&times;</button>
+                                </div>
+                                <p class="text-[10px] text-muted mt-1" id="deafen-keybind-hint">Instantly mutes your mic
+                                    and incoming audio — press again to undo. Works anywhere on the page, not just this
+                                    panel.</p>
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-volume" class="settings-label">Notification volume — <span
+                                        id="settings-volume-value">30%</span></label>
+                                <input id="settings-volume" type="range" min="0" max="1" step="0.01" class="w-full" />
+                            </div>
+                            <div class="settings-field settings-live-only">
+                                <label for="settings-master-volume" class="settings-label">Call volume — <span
+                                        id="settings-master-volume-value">100%</span></label>
+                                <input id="settings-master-volume" type="range" min="0" max="1" step="0.01"
+                                    class="w-full" />
+                            </div>
+                            <div class="settings-field">
+                                <div class="settings-label">Mic mode</div>
+                                <div id="settings-mic-room-rule" class="dock-popover-note" style="display:none">This room
+                                    enforces push-to-talk (set by the room creator) — your own preference below will apply
+                                    again in other rooms.</div>
+                                <div class="settings-segmented" id="settings-mic-mode-picker" style="width:100%;">
+                                    <button type="button" data-mic-mode="toggle"
+                                        style="flex:1;justify-content:center;">Toggle</button>
+                                    <button type="button" data-mic-mode="push-to-talk"
+                                        style="flex:1;justify-content:center;">Push to Talk</button>
+                                    <button type="button" data-mic-mode="voice-activity"
+                                        style="flex:1;justify-content:center;">Voice Activity</button>
+                                </div>
+                            </div>
+                            <div id="keybind-row" class="settings-field">
+                                <label class="settings-label" id="settings-keybind-label">Keybind</label>
+                                <div class="settings-keybind-row">
+                                    <input type="text" id="settings-keybind" readonly class="settings-keybind-input"
+                                        placeholder="Click then press a key..." />
+                                    <button type="button" id="keybind-clear"
+                                        class="text-xs text-muted hover:text-foreground px-2 py-1">&times;</button>
+                                </div>
+                                <p class="text-[10px] text-muted mt-1" id="settings-keybind-hint">Click the field, then press the key you want to bind.
+                                </p>
+                            </div>
+                            <div id="mic-threshold-row" class="settings-field hidden">
+                                <label for="settings-mic-threshold" class="settings-label">Mic sensitivity — <span
+                                        id="settings-mic-threshold-value">Medium</span></label>
+                                <input id="settings-mic-threshold" type="range" min="0.01" max="0.1" step="0.01"
+                                    class="w-full" />
+                                <p class="text-[10px] text-muted mt-1">Only transmits while you're speaking above this level
+                                    — lower is more sensitive.</p>
+                            </div>
+                            <div id="mic-hold-time-row" class="settings-field hidden">
+                                <label for="settings-mic-hold-time" class="settings-label">Mic hold time — <span
+                                        id="settings-mic-hold-time-value">0.4s</span></label>
+                                <input id="settings-mic-hold-time" type="range" min="150" max="1500" step="50"
+                                    class="w-full" />
+                                <p class="text-[10px] text-muted mt-1">How long transmission stays open after you stop
+                                    speaking — raise this if pauses between words or sentences get cut off.</p>
+                            </div>
+                            <div id="mic-meter-row" class="settings-field hidden">
+                                <label class="settings-label">Mic level</label>
+                                <div class="mic-meter">
+                                    <div class="mic-meter-fill" id="mic-meter-fill"></div>
+                                    <div class="mic-meter-threshold-line" id="mic-meter-threshold-line"></div>
+                                </div>
+                                <p class="text-[10px] text-muted mt-1" id="mic-meter-hint">Speak normally — the bar should
+                                    clear the vertical line while talking and settle below it at rest.</p>
+                            </div>
+                        </div>
+
+                        <!-- Privacy & P2P -->
+                        <div class="settings-section" data-settings-panel="privacy">
+                            <h1>Privacy &amp; P2P</h1>
+                            <p class="settings-section-subcopy">Peek never stores anything on a server — most of this is how
+                                it always works, not a setting to turn on.</p>
+                            <div class="settings-info-card">
+                                <span class="material-symbols-rounded">lan</span>
+                                <div>
+                                    <div class="settings-info-card-title">Peer-to-peer mesh</div>
+                                    <div class="settings-info-card-desc">Media and messages travel directly between
+                                        participants wherever possible.</div>
+                                </div>
+                            </div>
+                            <div class="settings-info-card">
+                                <span class="material-symbols-rounded">memory</span>
+                                <div>
+                                    <div class="settings-info-card-title">In-memory only</div>
+                                    <div class="settings-info-card-desc">Nothing is written to a database. The room
+                                        disappears when the last person leaves.</div>
+                                </div>
+                            </div>
+                            <div class="settings-info-card">
+                                <span class="material-symbols-rounded">visibility_off</span>
+                                <div>
+                                    <div class="settings-info-card-title">The signalling server never sees your content
+                                    </div>
+                                    <div class="settings-info-card-desc">It only helps peers find each other — chat, files,
+                                        and media never pass through it.</div>
+                                </div>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Auto-accept files in this room</div>
+                                    <div class="settings-toggle-row-desc">Only enable for people you trust — skips the
+                                        per-file accept prompt.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox"
+                                        id="settings-auto-accept-files" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Clear all local data</div>
+                                    <div class="settings-toggle-row-desc">Wipes everything Peek has saved in this browser —
+                                        nickname, theme &amp; appearance, mic/video preferences, and saved rooms (including
+                                        their passwords). Doesn't affect anyone else or end your current call.</div>
+                                </div>
+                                <button type="button" id="settings-clear-data" class="settings-danger-btn">Clear
+                                    data</button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        return modal;
     }
 
     isKeybindListening() {
@@ -87,7 +532,95 @@ export class SettingsPanel {
         });
     }
 
+    // --- Devices (mic/speaker/camera) ---
+
+    // Change handlers persist regardless of context, but only *live-apply* a
+    // switch when there's an active connection to apply it to — switchMicrophone/
+    // switchCamera/setAudioOutputDevice each persist their own localStorage key
+    // internally when called, so the lobby (no peerManager/ui) branch has to
+    // persist explicitly instead, since `?.` there would skip the call (and
+    // therefore the persist) entirely rather than just skipping the live part.
+    _wireDevices() {
+        document.getElementById('settings-mic-device')?.addEventListener('change', (e) => {
+            const id = e.target.value || null;
+            if (this.peerManager) this.peerManager.switchMicrophone(id);
+            else localStorage.setItem('micDeviceId', id || '');
+        });
+        document.getElementById('settings-speaker-device')?.addEventListener('change', (e) => {
+            const id = e.target.value || '';
+            if (this.ui) this.ui.setAudioOutputDevice(id);
+            else localStorage.setItem('speakerDeviceId', id);
+        });
+        document.getElementById('settings-cam-device')?.addEventListener('change', (e) => {
+            const id = e.target.value || null;
+            if (this.peerManager) this.peerManager.switchCamera(id);
+            else localStorage.setItem('camDeviceId', id || '');
+        });
+
+        // Devices can change while Settings happens to be open (a USB headset
+        // plugged in, a laptop lid opened) — refresh the option lists live
+        // rather than only on the next open().
+        navigator.mediaDevices?.addEventListener?.('devicechange', () => {
+            if (!this.modal.classList.contains('hidden')) this._refreshDevices();
+        });
+    }
+
+    /**
+     * Populates all three device <select>s from enumerateDevices(). Device
+     * labels are only populated by the browser once mic/cam permission has
+     * been granted at least once (the same limitation already noted in
+     * App.js for camera-count detection) — before that, options just show a
+     * generic "Microphone 1"-style fallback.
+     * @returns {Promise<void>}
+     */
+    async _refreshDevices() {
+        if (!navigator.mediaDevices?.enumerateDevices) return;
+        let devices;
+        try {
+            devices = await navigator.mediaDevices.enumerateDevices();
+        } catch {
+            return;
+        }
+        this._populateDeviceSelect('settings-mic-device', devices.filter(d => d.kind === 'audioinput'), 'micDeviceId', 'Microphone');
+        this._populateDeviceSelect('settings-speaker-device', devices.filter(d => d.kind === 'audiooutput'), 'speakerDeviceId', 'Speaker');
+        this._populateDeviceSelect('settings-cam-device', devices.filter(d => d.kind === 'videoinput'), 'camDeviceId', 'Camera');
+    }
+
+    _populateDeviceSelect(selectId, devices, storageKey, kindLabel) {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+        const current = localStorage.getItem(storageKey) || '';
+        select.innerHTML = '';
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'System default';
+        select.appendChild(defaultOption);
+        devices.forEach((d, i) => {
+            const opt = document.createElement('option');
+            opt.value = d.deviceId;
+            opt.textContent = d.label || `${kindLabel} ${i + 1}`;
+            select.appendChild(opt);
+        });
+        // Only select the stored preference if that device is still actually
+        // present — otherwise leave it on "System default" rather than
+        // showing a value with no matching <option>.
+        select.value = devices.some(d => d.deviceId === current) ? current : '';
+    }
+
     _refreshAll() {
+        // Controls that only make sense with a live connection (noise
+        // suppression, background blur, call volume, deafen keybind,
+        // auto-deafen) — hidden on the lobby (no peerManager), where
+        // toggling them either couldn't apply anything live or, worse,
+        // wouldn't even persist (several of their handlers are themselves
+        // `this.peerManager?.`/`this.ui?.`-gated with no fallback
+        // localStorage write). peerManager is fixed for this instance's
+        // whole lifetime (set once at construction, on either page), so this
+        // only needs recomputing here, not on every keystroke.
+        this.modal.querySelectorAll('.settings-live-only').forEach(el => {
+            el.classList.toggle('hidden', !this.peerManager);
+        });
+        this._refreshDevices(); // async, not awaited — selects populate a beat after the modal opens
         this._refreshProfile();
         this._refreshAppearance();
         this._refreshVideo();
@@ -595,8 +1128,15 @@ export class SettingsPanel {
         });
         const ruleNote = document.getElementById('settings-mic-room-rule');
         if (ruleNote) ruleNote.style.display = enforced ? '' : 'none';
-        const keybindRow = document.getElementById('keybind-row');
-        if (keybindRow) keybindRow.classList.toggle('hidden', micMode !== 'push-to-talk' && micMode !== 'push-to-mute');
+        // Always shown: push-to-talk's hold-to-open key in PTT mode, or an
+        // optional push-to-mute (hold to force-mute) key in Toggle/VA mode —
+        // see App.js's keydown/keyup handlers.
+        const keybindLabel = document.getElementById('settings-keybind-label');
+        if (keybindLabel) keybindLabel.textContent = micMode === 'push-to-talk' ? 'Push-to-talk keybind' : 'Push-to-mute keybind (optional)';
+        const keybindHint = document.getElementById('settings-keybind-hint');
+        if (keybindHint) keybindHint.textContent = micMode === 'push-to-talk'
+            ? 'Click the field, then press the key you want to bind. Hold it to talk.'
+            : 'Click the field, then press the key you want to bind. Hold it to force-mute, even mid-speech in Voice Activity mode.';
         const keybindInput = document.getElementById('settings-keybind');
         if (keybindInput) keybindInput.value = localStorage.getItem('micKeybind') || '';
 
@@ -615,7 +1155,10 @@ export class SettingsPanel {
         this._updateMicHoldTimeLabel(holdTime);
 
         const meterRow = document.getElementById('mic-meter-row');
-        if (meterRow) meterRow.classList.toggle('hidden', micMode !== 'voice-activity');
+        // Also hidden without peerManager (lobby) — there's no live mic
+        // stream to meter there, and `_startMicMeter()` already no-ops in
+        // that case, so an unhidden-but-static meter would just look broken.
+        if (meterRow) meterRow.classList.toggle('hidden', micMode !== 'voice-activity' || !this.peerManager);
 
         this.ui?.updateMicModeBadge?.(micMode);
     }

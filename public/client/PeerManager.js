@@ -45,6 +45,11 @@ export class PeerManager {
         this._rawMicStream = null;
         this._noiseSuppressor = null;
         this.micEnabled = false;
+        // Momentary hold-to-force-mute override (PTM) — independent of
+        // micEnabled/the toggle preference, so releasing the key restores
+        // exactly whatever micEnabled already was. See App.js's keydown/keyup
+        // handlers and _reconcileMicGate below.
+        this.ptmHeld = false;
         this.deafened = false;
         // Whatever micEnabled was the instant deafening began, so undeafening
         // restores it exactly (a mic already manually muted stays muted).
@@ -836,11 +841,11 @@ export class PeerManager {
      */
     _reconcileMicGate(speakingLocally) {
         const micMode = this._effectiveMicMode();
-        const shouldTransmit = this.micEnabled && (micMode !== 'voice-activity' || speakingLocally);
+        const shouldTransmit = this.micEnabled && !this.ptmHeld && (micMode !== 'voice-activity' || speakingLocally);
         // Exposed for DebugPanel — lets a "ring says speaking but no audio
         // arrives" report be diagnosed from what this function actually
         // computed, rather than only what the ring displayed.
-        this._micGateState = { micMode, micEnabled: this.micEnabled, speakingLocally, shouldTransmit };
+        this._micGateState = { micMode, micEnabled: this.micEnabled, ptmHeld: this.ptmHeld, speakingLocally, shouldTransmit };
 
         // Reconciled unconditionally (not just on a state change) so a sender
         // added mid-gate — e.g. a new peer joining while voice-activity has the
@@ -862,7 +867,10 @@ export class PeerManager {
      * Every consumer of the mode (the transmit gate above, App.js's
      * keydown/keyup handlers and mic-button click) must read through this,
      * not localStorage directly, or the room rule silently stops applying there.
-     * @returns {string} one of 'toggle'|'push-to-talk'|'push-to-mute'|'voice-activity'
+     * @returns {string} one of 'toggle'|'push-to-talk'|'voice-activity'. Push-to-mute
+     *   is not a mode here — it's a hold-to-force-mute modifier (see `ptmHeld`)
+     *   that layers on top of 'toggle'/'voice-activity', so it never appears
+     *   as a return value from this function.
      */
     _effectiveMicMode() {
         if (this.micPolicy === 'ptt') return 'push-to-talk';
@@ -899,7 +907,10 @@ export class PeerManager {
     async toggleMic() {
         if (!this.micStream) {
             try {
-                this._rawMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const micDeviceId = localStorage.getItem('micDeviceId');
+                this._rawMicStream = await navigator.mediaDevices.getUserMedia({
+                    audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true,
+                });
                 this.micStream = await this._applyNoiseSuppression(this._rawMicStream);
                 this.micEnabled = true;
 
@@ -922,9 +933,9 @@ export class PeerManager {
         return this.micEnabled;
     }
 
-    /** Sends the current `micEnabled` state to every peer. */
+    /** Sends the current effective mic state (micEnabled, minus any active PTM hold) to every peer. */
     broadcastMicStatus() {
-        this.send('mic-status', null, { enabled: this.micEnabled });
+        this.send('mic-status', null, { enabled: this.micEnabled && !this.ptmHeld });
     }
 
     /** Sends the current deafen state to every peer. */
@@ -1973,8 +1984,11 @@ export class PeerManager {
 
         try {
             this._camFacingMode = 'user';
+            const camDeviceId = localStorage.getItem('camDeviceId');
             this._rawCamStream = await navigator.mediaDevices.getUserMedia({
-                video: { ...this._resolveQuality('cam'), facingMode: { ideal: this._camFacingMode } },
+                video: camDeviceId
+                    ? { ...this._resolveQuality('cam'), deviceId: { exact: camDeviceId } }
+                    : { ...this._resolveQuality('cam'), facingMode: { ideal: this._camFacingMode } },
                 audio: false,
             });
             this._rawCamStream.getVideoTracks()[0].onended = () => {
@@ -2123,6 +2137,52 @@ export class PeerManager {
         }
     }
 
+    /**
+     * Switches to a specific microphone by deviceId (or back to the system
+     * default if `deviceId` is falsy), without renegotiating. Modeled
+     * directly on setNoiseSuppression() above: noise suppression is wired
+     * around a specific stream object, so a device swap can't just replace
+     * the raw track underneath it, the whole pipeline has to be rebuilt on
+     * top of the newly-acquired stream — same as a live noise-suppression
+     * toggle. Preserves the mute (`enabled`) state across the swap.
+     * @param {string|null} deviceId
+     * @returns {Promise<void>}
+     */
+    async switchMicrophone(deviceId) {
+        localStorage.setItem('micDeviceId', deviceId || '');
+        if (!this.micEnabled || !this._rawMicStream) return;
+
+        try {
+            const newRawStream = await navigator.mediaDevices.getUserMedia({
+                audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+            });
+
+            const oldRawStream = this._rawMicStream;
+            const oldProcessedStream = this.micStream;
+            const wasTrackEnabled = oldProcessedStream?.getAudioTracks()[0]?.enabled ?? true;
+            this._noiseSuppressor?.stop();
+            this._noiseSuppressor = null;
+
+            this._rawMicStream = newRawStream;
+            this.micStream = await this._applyNoiseSuppression(newRawStream);
+            const newTrack = this.micStream.getAudioTracks()[0];
+            newTrack.enabled = wasTrackEnabled;
+
+            for (const peerId of Object.keys(this.peers)) {
+                const sender = this.senders[peerId]?.['mic-audio'];
+                if (sender) await sender.replaceTrack(newTrack).catch(() => {});
+            }
+
+            oldRawStream?.getTracks().forEach(t => t.stop());
+            if (oldProcessedStream && oldProcessedStream !== oldRawStream) {
+                oldProcessedStream.getTracks().forEach(t => t.stop());
+            }
+        } catch (err) {
+            console.warn('Switch microphone failed:', err);
+            this.ui.showToast('Could not switch microphone');
+        }
+    }
+
     /** Stops the outgoing webcam stream (and its background-blur pipeline, if active) and notifies peers. */
     stopCam() {
         if (this.camStream) {
@@ -2151,15 +2211,23 @@ export class PeerManager {
      * Flips between front/back camera without renegotiating — swaps the outbound
      * track via replaceTrack() on each existing sender, same mechanism the
      * watch/unwatch pause system and mic-gate use for track swaps without SDP churn.
+     * Also doubles as an explicit device-picker switch: pass a specific
+     * `deviceId` (from Settings' camera dropdown) instead of relying on the
+     * facingMode toggle — the mobile front/back button's existing no-arg
+     * calls are unaffected.
+     * @param {string|null} [deviceId]
      * @returns {Promise<void>}
      */
-    async switchCamera() {
+    async switchCamera(deviceId = null) {
         if (!this.camStream) return;
         const nextFacingMode = this._camFacingMode === 'environment' ? 'user' : 'environment';
+        if (deviceId) localStorage.setItem('camDeviceId', deviceId);
 
         try {
             const newRawStream = await navigator.mediaDevices.getUserMedia({
-                video: { ...this._resolveQuality('cam'), facingMode: { ideal: nextFacingMode } },
+                video: deviceId
+                    ? { ...this._resolveQuality('cam'), deviceId: { exact: deviceId } }
+                    : { ...this._resolveQuality('cam'), facingMode: { ideal: nextFacingMode } },
                 audio: false,
             });
             newRawStream.getVideoTracks()[0].onended = () => {
@@ -2174,7 +2242,7 @@ export class PeerManager {
             this._virtualBackground = null;
 
             this._rawCamStream = newRawStream;
-            this._camFacingMode = nextFacingMode;
+            if (!deviceId) this._camFacingMode = nextFacingMode;
             this.camStream = await this._applyBackgroundProcessing(newRawStream);
             const newTrack = this.camStream.getVideoTracks()[0];
 

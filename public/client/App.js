@@ -688,11 +688,12 @@ wireQuickPopover('cam-quality-caret', 'cam-quality-popover', () => { refreshCamR
 // mic-mode section, duplicated here as a quick surface.
 function refreshMicOptionsRows() {
     // Effective mode, not the stored preference — a 'ptt' room rule forces
-    // push-to-talk, so the keybind row must show even if the user's own
-    // setting is toggle/voice-activity.
+    // push-to-talk. The keybind row is always shown now: it's push-to-talk's
+    // hold-to-open key in PTT mode, or an optional push-to-mute (hold to
+    // force-mute) key in Toggle/VA mode — see App.js's keydown/keyup handlers.
     const micMode = peerManager._effectiveMicMode();
-    const keybindRow = document.getElementById('mic-options-keybind-row');
-    if (keybindRow) keybindRow.classList.toggle('hidden', micMode !== 'push-to-talk' && micMode !== 'push-to-mute');
+    const keybindLabel = document.getElementById('mic-options-keybind-label');
+    if (keybindLabel) keybindLabel.textContent = micMode === 'push-to-talk' ? 'Push-to-talk keybind' : 'Push-to-mute keybind (optional)';
     const thresholdRow = document.getElementById('mic-options-threshold-row');
     if (thresholdRow) thresholdRow.classList.toggle('hidden', micMode !== 'voice-activity');
 
@@ -762,7 +763,8 @@ document.getElementById('mic-options-threshold')?.addEventListener('input', (e) 
 // Keybind capture — same click-then-press-a-key pattern as Settings' own
 // mic keybind input, sharing settingsPanel's _keybindListening flag (via
 // setKeybindListening/isKeybindListening) so the global push-to-talk/
-// push-to-mute/deafen keydown listeners correctly pause while capturing here.
+// push-to-mute (see App.js's keydown/keyup handlers) and deafen keydown
+// listeners correctly pause while capturing here.
 const micOptionsKeybindInput = document.getElementById('mic-options-keybind');
 if (micOptionsKeybindInput) {
     micOptionsKeybindInput.addEventListener('click', () => {
@@ -1070,7 +1072,11 @@ function updateMicUI(enabled) {
 
 // Push-to-talk / push-to-mute keydown/keyup — mic mode/keybind live in
 // localStorage (set by SettingsPanel), read fresh here rather than cached in a
-// module variable, since the settings UI is the only writer.
+// module variable, since the settings UI is the only writer. The same
+// keybind serves both: in push-to-talk mode it's hold-to-open, in
+// toggle/voice-activity mode it's hold-to-force-mute (PTM) — a modifier on
+// top of whichever base mode is active, not a mode of its own, so it works
+// regardless of whether the base mic behavior is Toggle or Voice Activity.
 window.addEventListener('keydown', (e) => {
     if (settingsPanel.isKeybindListening()) return;
     const micKeybind = localStorage.getItem('micKeybind') || '';
@@ -1087,10 +1093,16 @@ window.addEventListener('keydown', (e) => {
         } else if (!peerManager.micEnabled) {
             peerManager.toggleMic().then(enabled => updateMicUI(enabled));
         }
-    } else if (micMode === 'push-to-mute') {
-        if (peerManager.micEnabled) {
-            peerManager.toggleMic().then(enabled => updateMicUI(enabled));
-        }
+    } else {
+        // Toggle or voice-activity: hold to force-mute. Doesn't touch
+        // micEnabled/toggleMic — _reconcileMicGate gates transmission on
+        // ptmHeld independently, so the user's toggle preference is
+        // untouched and instantly restored on keyup. broadcastMicStatus()
+        // is called explicitly (not left to the 200ms gate-reconcile poll)
+        // so peers see the mute the same frame as the local UI does.
+        peerManager.ptmHeld = true;
+        peerManager.broadcastMicStatus();
+        updateMicUI(false);
     }
 });
 
@@ -1106,10 +1118,10 @@ window.addEventListener('keyup', (e) => {
         if (peerManager.micEnabled) {
             peerManager.toggleMic().then(enabled => updateMicUI(enabled));
         }
-    } else if (micMode === 'push-to-mute') {
-        if (!peerManager.micEnabled && peerManager.micStream) {
-            peerManager.toggleMic().then(enabled => updateMicUI(enabled));
-        }
+    } else {
+        peerManager.ptmHeld = false;
+        peerManager.broadcastMicStatus();
+        updateMicUI(peerManager.micEnabled);
     }
 });
 

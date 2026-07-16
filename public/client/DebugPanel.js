@@ -75,6 +75,7 @@ export class DebugPanel {
                 <span style="color:#fff;">Mic Gate:</span><br>
                 <span style="color:#888;">mode:</span> ${g.micMode}
                 <span style="color:#888;">enabled:</span> ${g.micEnabled ? '<span style="color:#0f0;">yes</span>' : '<span style="color:#f44;">no</span>'}
+                <span style="color:#888;">ptmHeld:</span> ${g.ptmHeld ? '<span style="color:#f44;">yes</span>' : '<span style="color:#888;">no</span>'}
                 <span style="color:#888;">speaking:</span> ${g.speakingLocally ? '<span style="color:#0f0;">yes</span>' : '<span style="color:#888;">no</span>'}<br>
                 <span style="color:#888;">should transmit:</span> <span style="color:${gateColor};">${g.shouldTransmit}</span>
             </div>`;

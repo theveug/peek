@@ -82,6 +82,10 @@ export class UIController {
         // *is* persisted — it's a personal preference, not tied to any peer/session.
         this.masterCallVolume = parseFloat(localStorage.getItem('masterCallVolume'));
         if (Number.isNaN(this.masterCallVolume)) this.masterCallVolume = 1;
+        // Empty string means "system default" — applied to every remote
+        // peer's <audio> element in addAudio() below, and to all of them at
+        // once via setAudioOutputDevice() when the user changes it in Settings.
+        this._audioOutputDeviceId = localStorage.getItem('speakerDeviceId') || '';
         this.setupZoom();
         this.setupPictureInPicture();
         this.setupFocusControls();
@@ -1829,6 +1833,28 @@ export class UIController {
         audio.srcObject = new MediaStream([track]);
         audio.muted = !document.getElementById('deafen-off-icon') || document.getElementById('deafen-off-icon').classList.contains('hidden');
         this._applyAudioVolume(peerId);
+        // New joiners (and reconnects) get whatever output device was already
+        // chosen — setSinkId can reject if the browser doesn't support it or
+        // the device has since disappeared, neither of which should break
+        // playback on the default device.
+        if (this._audioOutputDeviceId && audio.setSinkId) {
+            audio.setSinkId(this._audioOutputDeviceId).catch(() => {});
+        }
+    }
+
+    /**
+     * Routes every current (and future — see addAudio above) remote peer's
+     * audio through a specific output device. `deviceId` empty/falsy means
+     * "system default", which setSinkId('') also means natively.
+     * @param {string} deviceId
+     * @returns {Promise<void>}
+     */
+    async setAudioOutputDevice(deviceId) {
+        this._audioOutputDeviceId = deviceId || '';
+        localStorage.setItem('speakerDeviceId', this._audioOutputDeviceId);
+        if (typeof HTMLMediaElement === 'undefined' || !HTMLMediaElement.prototype.setSinkId) return; // unsupported browser — silently a no-op
+        const audios = document.querySelectorAll('audio[id^="audio-"]');
+        await Promise.all(Array.from(audios).map(a => a.setSinkId(this._audioOutputDeviceId).catch(() => {})));
     }
 
     /** Removes and stops one audio element (see the `audioKey` note on `addAudio`). */
@@ -2208,11 +2234,11 @@ export class UIController {
         if (labelEl) labelEl.textContent = label || '';
     }
 
-    /** @param {'push-to-talk'|'push-to-mute'|'voice-activity'|string} micMode shows the dock's PTT/PTM/VA badge, hidden for any other mode. */
+    /** @param {'push-to-talk'|'voice-activity'|string} micMode shows the dock's PTT/VA badge, hidden for any other mode (including 'toggle'). */
     updateMicModeBadge(micMode) {
         const badge = document.getElementById('mic-mode-badge');
         if (!badge) return;
-        const labels = { 'push-to-talk': 'PTT', 'push-to-mute': 'PTM', 'voice-activity': 'VA' };
+        const labels = { 'push-to-talk': 'PTT', 'voice-activity': 'VA' };
         const text = labels[micMode];
         badge.textContent = text || '';
         badge.classList.toggle('hidden', !text);
