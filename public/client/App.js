@@ -535,17 +535,21 @@ document.getElementById('leave-room-button').addEventListener('click', () => {
     window.location.href = '/';
 });
 
-document.getElementById('mic-toggle').addEventListener('click', async () => {
-    // In a push-to-talk room the button can only mute — opening the mic is
-    // exclusively hold-the-keybind, so a click can't sidestep the room rule.
+// Manual mic toggle — the mic button's click and the Toggle Mute keybind
+// (below) both call this. Mirrors toggleDeafen()'s click+keybind sharing.
+async function toggleMicManual() {
+    // In a push-to-talk room the button/key can only mute — opening the mic
+    // is exclusively hold-the-keybind, so this can't sidestep the room rule.
     // (Local-only toast, not a system message: nothing room-visible happened.)
     if (peerManager.micPolicy === 'ptt' && !peerManager.micEnabled) {
-        ui.showToast('This room is push-to-talk — hold your mic keybind to talk');
+        ui.showToast('This room is push-to-talk — hold your Push to Talk keybind to talk');
         return;
     }
     const enabled = await peerManager.toggleMic();
     updateMicUI(enabled);
-});
+}
+
+document.getElementById('mic-toggle').addEventListener('click', toggleMicManual);
 
 // Applies deafened state to the DOM: incoming-audio muting, the deafen
 // button's icon/tooltip, the participant-card badge, and the mic button
@@ -683,22 +687,16 @@ const refreshCamRes = wireSegmentedPicker('cam-quality-res-picker', 'camRes', ()
 const refreshCamFps = wireSegmentedPicker('cam-quality-fps-picker', 'camFps', () => peerManager.applyCamQualitySettings());
 wireQuickPopover('cam-quality-caret', 'cam-quality-popover', () => { refreshCamRes(); refreshCamFps(); });
 
-// Mic options popover: mode picker + (mode-dependent) keybind capture and
-// sensitivity slider — the same three controls as Settings' Audio & Mic
-// mic-mode section, duplicated here as a quick surface.
+// Mic options popover: mode picker + sensitivity slider, the same two
+// controls as Settings' Audio & Mic mic-mode section, duplicated here as a
+// quick surface. Keybind capture used to be a third duplicated control here
+// too — now it's a link straight into Settings' consolidated Keybinds tab
+// (see the click handler below), rather than a fourth copy of the capture UI.
 function refreshMicOptionsRows() {
-    // Effective mode, not the stored preference — a 'ptt' room rule forces
-    // push-to-talk. The keybind row is always shown now: it's push-to-talk's
-    // hold-to-open key in PTT mode, or an optional push-to-mute (hold to
-    // force-mute) key in Toggle/VA mode — see App.js's keydown/keyup handlers.
+    // Effective mode, not the stored preference — a 'ptt' room rule forces push-to-talk.
     const micMode = peerManager._effectiveMicMode();
-    const keybindLabel = document.getElementById('mic-options-keybind-label');
-    if (keybindLabel) keybindLabel.textContent = micMode === 'push-to-talk' ? 'Push-to-talk keybind' : 'Push-to-mute keybind (optional)';
     const thresholdRow = document.getElementById('mic-options-threshold-row');
     if (thresholdRow) thresholdRow.classList.toggle('hidden', micMode !== 'voice-activity');
-
-    const keybindInput = document.getElementById('mic-options-keybind');
-    if (keybindInput) keybindInput.value = localStorage.getItem('micKeybind') || '';
 
     const threshold = parseFloat(localStorage.getItem('micThreshold')) || 0.03;
     const thresholdInput = document.getElementById('mic-options-threshold');
@@ -749,8 +747,8 @@ peerManager.onMicPolicy = (policy) => {
         if (peerManager.micEnabled) {
             peerManager.toggleMic().then(enabled => updateMicUI(enabled));
         }
-        if (!localStorage.getItem('micKeybind')) {
-            ui.addSystemMessage('This room uses push-to-talk — set a mic keybind via the mic button’s options (▾) or Settings → Audio & Mic', 'info');
+        if (!localStorage.getItem('keybindPushToTalk')) {
+            ui.addSystemMessage('This room uses push-to-talk — set a Push to Talk keybind via Settings → Keybinds', 'info');
         }
     }
 };
@@ -760,38 +758,11 @@ document.getElementById('mic-options-threshold')?.addEventListener('input', (e) 
     updateMicOptionsThresholdLabel(parseFloat(e.target.value));
 });
 
-// Keybind capture — same click-then-press-a-key pattern as Settings' own
-// mic keybind input, sharing settingsPanel's _keybindListening flag (via
-// setKeybindListening/isKeybindListening) so the global push-to-talk/
-// push-to-mute (see App.js's keydown/keyup handlers) and deafen keydown
-// listeners correctly pause while capturing here.
-const micOptionsKeybindInput = document.getElementById('mic-options-keybind');
-if (micOptionsKeybindInput) {
-    micOptionsKeybindInput.addEventListener('click', () => {
-        settingsPanel.setKeybindListening(true);
-        micOptionsKeybindInput.value = 'Press a key...';
-        micOptionsKeybindInput.classList.add('ring-1', 'ring-indigo-500');
-    });
-    micOptionsKeybindInput.addEventListener('keydown', (e) => {
-        if (!settingsPanel.isKeybindListening()) return;
-        e.preventDefault();
-        e.stopPropagation();
-        localStorage.setItem('micKeybind', e.code);
-        micOptionsKeybindInput.value = e.code;
-        micOptionsKeybindInput.classList.remove('ring-1', 'ring-indigo-500');
-        settingsPanel.setKeybindListening(false);
-    });
-    micOptionsKeybindInput.addEventListener('blur', () => {
-        if (settingsPanel.isKeybindListening()) {
-            micOptionsKeybindInput.value = localStorage.getItem('micKeybind') || '';
-            micOptionsKeybindInput.classList.remove('ring-1', 'ring-indigo-500');
-            settingsPanel.setKeybindListening(false);
-        }
-    });
-}
-document.getElementById('mic-options-keybind-clear')?.addEventListener('click', () => {
-    localStorage.setItem('micKeybind', '');
-    if (micOptionsKeybindInput) micOptionsKeybindInput.value = '';
+// Jumps straight to Settings' consolidated Keybinds tab rather than opening
+// yet another copy of the capture UI here.
+document.getElementById('mic-options-keybinds-link')?.addEventListener('click', () => {
+    document.getElementById('mic-options-popover')?.classList.add('hidden');
+    settingsPanel.open('keybinds');
 });
 
 // Self-view placeholder on any focus loss (window blur or tab hidden)
@@ -1070,23 +1041,22 @@ function updateMicUI(enabled) {
     if (peerManager.peerId) ui.updateParticipantMic(peerManager.peerId, enabled);
 }
 
-// Push-to-talk / push-to-mute keydown/keyup — mic mode/keybind live in
-// localStorage (set by SettingsPanel), read fresh here rather than cached in a
-// module variable, since the settings UI is the only writer. The same
-// keybind serves both: in push-to-talk mode it's hold-to-open, in
-// toggle/voice-activity mode it's hold-to-force-mute (PTM) — a modifier on
-// top of whichever base mode is active, not a mode of its own, so it works
-// regardless of whether the base mic behavior is Toggle or Voice Activity.
+// Push-to-talk / push-to-mute keydown/keyup — each has its own independent
+// keybind now (Settings → Keybinds), read fresh from localStorage rather than
+// cached in a module variable, since the settings UI is the only writer.
+// Only one of the two is "active" at a time, picked by effective mic mode:
+// Push to Talk is hold-to-open, Push to Mute is hold-to-force-mute — a
+// modifier on top of Toggle/Voice-Activity mode, not a mode of its own.
 window.addEventListener('keydown', (e) => {
     if (settingsPanel.isKeybindListening()) return;
-    const micKeybind = localStorage.getItem('micKeybind') || '';
-    if (!micKeybind || e.code !== micKeybind) return;
+    // Effective mode — a 'ptt' room rule forces push-to-talk over the stored preference.
+    const micMode = peerManager._effectiveMicMode();
+    const boundKey = localStorage.getItem(micMode === 'push-to-talk' ? 'keybindPushToTalk' : 'keybindPushToMute') || '';
+    if (!boundKey || e.code !== boundKey) return;
     if (e.repeat) return;
     const focused = document.activeElement;
     if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
 
-    // Effective mode — a 'ptt' room rule forces push-to-talk over the stored preference.
-    const micMode = peerManager._effectiveMicMode();
     if (micMode === 'push-to-talk') {
         if (!peerManager.micStream) {
             peerManager.toggleMic().then(enabled => updateMicUI(enabled));
@@ -1108,12 +1078,12 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('keyup', (e) => {
     if (settingsPanel.isKeybindListening()) return;
-    const micKeybind = localStorage.getItem('micKeybind') || '';
-    if (!micKeybind || e.code !== micKeybind) return;
+    const micMode = peerManager._effectiveMicMode();
+    const boundKey = localStorage.getItem(micMode === 'push-to-talk' ? 'keybindPushToTalk' : 'keybindPushToMute') || '';
+    if (!boundKey || e.code !== boundKey) return;
     const focused = document.activeElement;
     if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
 
-    const micMode = peerManager._effectiveMicMode();
     if (micMode === 'push-to-talk') {
         if (peerManager.micEnabled) {
             peerManager.toggleMic().then(enabled => updateMicUI(enabled));
@@ -1123,6 +1093,21 @@ window.addEventListener('keyup', (e) => {
         peerManager.broadcastMicStatus();
         updateMicUI(peerManager.micEnabled);
     }
+});
+
+// Toggle Mute keybind (Settings → Keybinds) — a plain tap, same as clicking
+// the mic button, regardless of mic mode. Independent of the hold-based PTT/
+// PTM keys above: previously the only way to do this was a mouse click.
+window.addEventListener('keydown', (e) => {
+    if (settingsPanel.isKeybindListening()) return;
+    const boundKey = localStorage.getItem('keybindToggleMute') || '';
+    if (!boundKey || e.code !== boundKey) return;
+    if (e.repeat) return;
+    const focused = document.activeElement;
+    if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
+    e.preventDefault();
+
+    toggleMicManual();
 });
 
 // Global deafen keybind (Settings → Audio & Mic) — independent of mic mode,

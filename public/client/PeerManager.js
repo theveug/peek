@@ -258,7 +258,7 @@ export class PeerManager {
                 if (policy === this.micPolicy) break;
                 this.micPolicy = policy;
                 this.ui.addSystemMessage(policy === 'ptt'
-                    ? 'The room creator turned on push-to-talk for this room — hold your mic keybind to talk'
+                    ? 'The room creator turned on push-to-talk for this room — hold your Push to Talk keybind to talk'
                     : 'The room creator switched this room back to open mic', 'info');
                 this.onMicPolicy?.(policy, false);
                 break;

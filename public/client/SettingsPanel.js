@@ -18,6 +18,22 @@ if (typeof localStorage !== 'undefined' && localStorage.getItem('micMode') === '
     localStorage.setItem('micMode', 'toggle');
 }
 
+// One-time migration off the old shared 'micKeybind': it used to serve both
+// push-to-talk (hold-to-open) and push-to-mute (hold-to-force-mute), picked
+// at keydown time by whichever mic mode was active — meaning the two could
+// never have different keys, and there was no way to bind a plain
+// tap-to-toggle-mute at all. Seeds both new independent slots from the old
+// value (only if they haven't been set yet) so an existing user's configured
+// key keeps working under whichever mode they're in; from here on each is
+// independently editable via Settings → Keybinds.
+if (typeof localStorage !== 'undefined') {
+    const legacyMicKeybind = localStorage.getItem('micKeybind');
+    if (legacyMicKeybind) {
+        if (localStorage.getItem('keybindPushToTalk') === null) localStorage.setItem('keybindPushToTalk', legacyMicKeybind);
+        if (localStorage.getItem('keybindPushToMute') === null) localStorage.setItem('keybindPushToMute', legacyMicKeybind);
+    }
+}
+
 export class SettingsPanel {
     // ui/peerManager are optional — on the lobby (pre-room) there's neither, and
     // every field still needs to load/persist to localStorage for whatever room
@@ -43,6 +59,7 @@ export class SettingsPanel {
         this._wireFontScale();
         this._wireVideo();
         this._wireAudio();
+        this._wireKeybinds();
         this._wireDevices();
         this._wirePrivacy();
         this._wireCloseHandlers();
@@ -75,6 +92,9 @@ export class SettingsPanel {
                     </button>
                     <button type="button" class="settings-nav-item" data-settings-section="audio">
                         <span class="material-symbols-rounded">mic</span>Audio &amp; Mic
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="keybinds">
+                        <span class="material-symbols-rounded">keyboard</span>Keybinds
                     </button>
                     <button type="button" class="settings-nav-item" data-settings-section="privacy">
                         <span class="material-symbols-rounded">shield</span>Privacy &amp; P2P
@@ -343,18 +363,6 @@ export class SettingsPanel {
                                 <label class="settings-switch"><input type="checkbox" id="settings-auto-deafen-away" /><span
                                         class="settings-switch-track"></span></label>
                             </div>
-                            <div class="settings-field settings-live-only">
-                                <label class="settings-label">Deafen keybind</label>
-                                <div class="settings-keybind-row">
-                                    <input type="text" id="settings-deafen-keybind" readonly class="settings-keybind-input"
-                                        placeholder="Click then press a key..." />
-                                    <button type="button" id="deafen-keybind-clear"
-                                        class="text-xs text-muted hover:text-foreground px-2 py-1">&times;</button>
-                                </div>
-                                <p class="text-[10px] text-muted mt-1" id="deafen-keybind-hint">Instantly mutes your mic
-                                    and incoming audio — press again to undo. Works anywhere on the page, not just this
-                                    panel.</p>
-                            </div>
                             <div class="settings-field">
                                 <label for="settings-volume" class="settings-label">Notification volume — <span
                                         id="settings-volume-value">30%</span></label>
@@ -380,17 +388,8 @@ export class SettingsPanel {
                                         style="flex:1;justify-content:center;">Voice Activity</button>
                                 </div>
                             </div>
-                            <div id="keybind-row" class="settings-field">
-                                <label class="settings-label" id="settings-keybind-label">Keybind</label>
-                                <div class="settings-keybind-row">
-                                    <input type="text" id="settings-keybind" readonly class="settings-keybind-input"
-                                        placeholder="Click then press a key..." />
-                                    <button type="button" id="keybind-clear"
-                                        class="text-xs text-muted hover:text-foreground px-2 py-1">&times;</button>
-                                </div>
-                                <p class="text-[10px] text-muted mt-1" id="settings-keybind-hint">Click the field, then press the key you want to bind.
-                                </p>
-                            </div>
+                            <p class="text-[10px] text-muted mb-3">Push-to-talk/mute and deafen keys are set in
+                                Settings &rarr; Keybinds.</p>
                             <div id="mic-threshold-row" class="settings-field hidden">
                                 <label for="settings-mic-threshold" class="settings-label">Mic sensitivity — <span
                                         id="settings-mic-threshold-value">Medium</span></label>
@@ -416,6 +415,15 @@ export class SettingsPanel {
                                 <p class="text-[10px] text-muted mt-1" id="mic-meter-hint">Speak normally — the bar should
                                     clear the vertical line while talking and settle below it at rest.</p>
                             </div>
+                        </div>
+
+                        <!-- Keybinds -->
+                        <div class="settings-section" data-settings-panel="keybinds">
+                            <h1>Keybinds</h1>
+                            <p class="settings-section-subcopy">Every bindable key in one place. Assign the same key to
+                                more than one action if you want one button to do several things, or give each its own key
+                                — your choice.</p>
+                            <div id="keybinds-list"></div>
                         </div>
 
                         <!-- Privacy & P2P -->
@@ -478,22 +486,27 @@ export class SettingsPanel {
         return modal;
     }
 
+    // Read by App.js's global keydown/keyup listeners (push-to-talk/mute,
+    // toggle-mute, deafen) so they pause while a Keybinds-tab row is
+    // mid-capture, rather than reacting to the very keypress being captured.
     isKeybindListening() {
         return this._keybindListening;
     }
 
-    // Written by App.js's dock-button quick-options popovers, which capture
-    // keybinds through their own inputs (a second surface for the same
-    // localStorage keys, not a second data model) — must share this one flag
-    // with the Settings modal's own capture inputs so the global keydown
-    // listeners (mic keybind, deafen keybind) correctly pause during either.
-    setKeybindListening(listening) {
-        this._keybindListening = listening;
-    }
-
-    open() {
+    // `section` optionally jumps straight to a nav tab (e.g. the mic-options
+    // popover's "Keybinds ▸" link) — omitted, it leaves whatever tab was last
+    // active, same as before this param existed.
+    open(section = null) {
         if (!this.modal) return;
         this._refreshAll();
+        if (section) {
+            this.modal.querySelectorAll('.settings-nav-item').forEach(b => {
+                b.classList.toggle('active', b.dataset.settingsSection === section);
+            });
+            this.modal.querySelectorAll('.settings-section').forEach(panel => {
+                panel.classList.toggle('active', panel.dataset.settingsPanel === section);
+            });
+        }
         this.modal.classList.remove('hidden');
         this._startMicMeter();
         // Keep Tab inside the overlay while it's open; released (and prior
@@ -625,6 +638,7 @@ export class SettingsPanel {
         this._refreshAppearance();
         this._refreshVideo();
         this._refreshAudio();
+        this._refreshKeybinds();
         this._refreshPrivacy();
     }
 
@@ -1020,77 +1034,8 @@ export class SettingsPanel {
             this._updateMicHoldTimeLabel(parseFloat(e.target.value));
         });
 
-        const keybindInput = document.getElementById('settings-keybind');
-        if (keybindInput) {
-            keybindInput.addEventListener('click', () => {
-                this._keybindListening = true;
-                keybindInput.value = 'Press a key...';
-                keybindInput.classList.add('ring-1', 'ring-indigo-500');
-            });
-
-            keybindInput.addEventListener('keydown', (e) => {
-                if (!this._keybindListening) return;
-                e.preventDefault();
-                e.stopPropagation();
-                localStorage.setItem('micKeybind', e.code);
-                keybindInput.value = e.code;
-                keybindInput.classList.remove('ring-1', 'ring-indigo-500');
-                this._keybindListening = false;
-            });
-
-            keybindInput.addEventListener('blur', () => {
-                if (this._keybindListening) {
-                    keybindInput.value = localStorage.getItem('micKeybind') || '';
-                    keybindInput.classList.remove('ring-1', 'ring-indigo-500');
-                    this._keybindListening = false;
-                }
-            });
-        }
-
-        document.getElementById('keybind-clear')?.addEventListener('click', () => {
-            localStorage.setItem('micKeybind', '');
-            if (keybindInput) keybindInput.value = '';
-        });
-
         document.getElementById('settings-auto-deafen-away')?.addEventListener('change', (e) => {
             localStorage.setItem('autoDeafenOnAway', e.target.checked ? '1' : '0');
-        });
-
-        // Deafen keybind — same click-then-press-a-key capture pattern as the
-        // mic keybind above, but its own localStorage key: deafen is a global
-        // toggle independent of mic mode, not tied to push-to-talk/push-to-mute.
-        const deafenKeybindInput = document.getElementById('settings-deafen-keybind');
-        if (deafenKeybindInput) {
-            deafenKeybindInput.addEventListener('click', () => {
-                this._keybindListening = true;
-                deafenKeybindInput.value = 'Press a key...';
-                deafenKeybindInput.classList.add('ring-1', 'ring-indigo-500');
-            });
-
-            deafenKeybindInput.addEventListener('keydown', (e) => {
-                if (!this._keybindListening) return;
-                e.preventDefault();
-                e.stopPropagation();
-                localStorage.setItem('deafenKeybind', e.code);
-                deafenKeybindInput.value = e.code;
-                deafenKeybindInput.classList.remove('ring-1', 'ring-indigo-500');
-                this._keybindListening = false;
-                this._updateDeafenKeybindWarning(e.code);
-            });
-
-            deafenKeybindInput.addEventListener('blur', () => {
-                if (this._keybindListening) {
-                    deafenKeybindInput.value = localStorage.getItem('deafenKeybind') || '';
-                    deafenKeybindInput.classList.remove('ring-1', 'ring-indigo-500');
-                    this._keybindListening = false;
-                }
-            });
-        }
-
-        document.getElementById('deafen-keybind-clear')?.addEventListener('click', () => {
-            localStorage.setItem('deafenKeybind', '');
-            if (deafenKeybindInput) deafenKeybindInput.value = '';
-            this._updateDeafenKeybindWarning('');
         });
     }
 
@@ -1098,20 +1043,122 @@ export class SettingsPanel {
     // never lets page JS override via preventDefault (a security/usability
     // guarantee, not a bug) — F11 fullscreen is the one that actually got
     // reported, F5/F12 are the same class of always-wins browser shortcut.
-    // Binding one still toggles deafen, it just *also* does the browser's
-    // own thing at the same time.
+    // Binding one to any action still fires that action, it just *also* does
+    // the browser's own thing at the same time.
     _RESERVED_KEYBIND_CODES = new Set(['F11', 'F5', 'F12']);
 
-    _updateDeafenKeybindWarning(code) {
-        const hint = document.getElementById('deafen-keybind-hint');
-        if (!hint) return;
-        if (this._RESERVED_KEYBIND_CODES.has(code)) {
-            hint.textContent = `${code} is reserved by your browser (fullscreen/reload/devtools) and can't be fully overridden — it'll still toggle deafen, but the browser's own shortcut will fire too. Pick a different key if that's a problem.`;
-            hint.classList.add('text-yellow-400');
-        } else {
-            hint.textContent = 'Instantly mutes your mic and incoming audio — press again to undo. Works anywhere on the page, not just this panel.';
-            hint.classList.remove('text-yellow-400');
+    // Every bindable action in one declarative list — the single source of
+    // truth for the Keybinds tab's rows (see _wireKeybinds/_refreshKeybinds).
+    // Adding a future action (e.g. a camera or screen-share toggle) means
+    // adding one entry here, not a hand-copied markup block.
+    _KEYBIND_ACTIONS = [
+        {
+            id: 'pushToTalk', storageKey: 'keybindPushToTalk', label: 'Push to Talk',
+            desc: 'Hold to open your mic. Active while Mic Mode (Audio & Mic) is set to Push to Talk.',
+        },
+        {
+            id: 'pushToMute', storageKey: 'keybindPushToMute', label: 'Push to Mute',
+            desc: 'Hold to force-mute, even mid-speech in Voice Activity mode. Active while Mic Mode is Toggle or Voice Activity.',
+        },
+        {
+            id: 'toggleMute', storageKey: 'keybindToggleMute', label: 'Toggle Mute',
+            desc: 'Tap to mute/unmute your mic — same as clicking the mic button. Works in any mic mode.',
+        },
+        {
+            id: 'toggleDeafen', storageKey: 'deafenKeybind', label: 'Toggle Deafen',
+            desc: 'Instantly mutes your mic and incoming audio — tap again to undo.',
+        },
+    ];
+
+    // Shared click-then-press-a-key capture, used for every row in the
+    // Keybinds tab — previously this exact sequence (click primes listening,
+    // keydown captures+persists, blur reverts an abandoned capture) was
+    // hand-duplicated per field, which is exactly how the mic/deafen copies
+    // drifted (one had a reserved-key warning, the other didn't).
+    _wireKeybindCapture(input, clearBtn, storageKey, hintEl) {
+        if (input) {
+            input.addEventListener('click', () => {
+                this._keybindListening = true;
+                input.value = 'Press a key...';
+                input.classList.add('ring-1', 'ring-indigo-500');
+            });
+
+            input.addEventListener('keydown', (e) => {
+                if (!this._keybindListening) return;
+                e.preventDefault();
+                e.stopPropagation();
+                localStorage.setItem(storageKey, e.code);
+                input.value = e.code;
+                input.classList.remove('ring-1', 'ring-indigo-500');
+                this._keybindListening = false;
+                this._updateKeybindWarning(hintEl, e.code);
+            });
+
+            input.addEventListener('blur', () => {
+                if (this._keybindListening) {
+                    input.value = localStorage.getItem(storageKey) || '';
+                    input.classList.remove('ring-1', 'ring-indigo-500');
+                    this._keybindListening = false;
+                }
+            });
         }
+
+        clearBtn?.addEventListener('click', () => {
+            localStorage.setItem(storageKey, '');
+            if (input) input.value = '';
+            this._updateKeybindWarning(hintEl, '');
+        });
+    }
+
+    _updateKeybindWarning(hintEl, code) {
+        if (!hintEl) return;
+        if (this._RESERVED_KEYBIND_CODES.has(code)) {
+            hintEl.textContent = `${code} is reserved by your browser (fullscreen/reload/devtools) and can't be fully overridden — it'll still fire this action, but the browser's own shortcut will fire too. Pick a different key if that's a problem.`;
+            hintEl.classList.add('text-yellow-400');
+        } else {
+            hintEl.textContent = hintEl.dataset.defaultHint || '';
+            hintEl.classList.remove('text-yellow-400');
+        }
+    }
+
+    // --- Keybinds ---
+
+    _wireKeybinds() {
+        const list = document.getElementById('keybinds-list');
+        if (!list) return;
+        this._KEYBIND_ACTIONS.forEach(action => {
+            const row = document.createElement('div');
+            row.className = 'settings-toggle-row';
+            row.innerHTML = `
+                <div>
+                    <div class="settings-toggle-row-title">${action.label}</div>
+                    <div class="settings-toggle-row-desc" id="keybind-hint-${action.id}">${action.desc}</div>
+                </div>
+                <div class="settings-keybind-row settings-keybind-row-compact">
+                    <input type="text" id="keybind-input-${action.id}" readonly class="settings-keybind-input"
+                        placeholder="Click then press a key..." />
+                    <button type="button" id="keybind-clear-${action.id}"
+                        class="text-xs text-muted hover:text-foreground px-2 py-1">&times;</button>
+                </div>`;
+            list.appendChild(row);
+
+            const hintEl = row.querySelector(`#keybind-hint-${action.id}`);
+            hintEl.dataset.defaultHint = action.desc;
+            this._wireKeybindCapture(
+                row.querySelector(`#keybind-input-${action.id}`),
+                row.querySelector(`#keybind-clear-${action.id}`),
+                action.storageKey,
+                hintEl,
+            );
+        });
+    }
+
+    _refreshKeybinds() {
+        this._KEYBIND_ACTIONS.forEach(action => {
+            const input = document.getElementById(`keybind-input-${action.id}`);
+            if (input) input.value = localStorage.getItem(action.storageKey) || '';
+            this._updateKeybindWarning(document.getElementById(`keybind-hint-${action.id}`), localStorage.getItem(action.storageKey) || '');
+        });
     }
 
     _refreshMicMode() {
@@ -1128,17 +1175,6 @@ export class SettingsPanel {
         });
         const ruleNote = document.getElementById('settings-mic-room-rule');
         if (ruleNote) ruleNote.style.display = enforced ? '' : 'none';
-        // Always shown: push-to-talk's hold-to-open key in PTT mode, or an
-        // optional push-to-mute (hold to force-mute) key in Toggle/VA mode —
-        // see App.js's keydown/keyup handlers.
-        const keybindLabel = document.getElementById('settings-keybind-label');
-        if (keybindLabel) keybindLabel.textContent = micMode === 'push-to-talk' ? 'Push-to-talk keybind' : 'Push-to-mute keybind (optional)';
-        const keybindHint = document.getElementById('settings-keybind-hint');
-        if (keybindHint) keybindHint.textContent = micMode === 'push-to-talk'
-            ? 'Click the field, then press the key you want to bind. Hold it to talk.'
-            : 'Click the field, then press the key you want to bind. Hold it to force-mute, even mid-speech in Voice Activity mode.';
-        const keybindInput = document.getElementById('settings-keybind');
-        if (keybindInput) keybindInput.value = localStorage.getItem('micKeybind') || '';
 
         const thresholdRow = document.getElementById('mic-threshold-row');
         if (thresholdRow) thresholdRow.classList.toggle('hidden', micMode !== 'voice-activity');
@@ -1239,10 +1275,6 @@ export class SettingsPanel {
 
         const autoDeafenAway = document.getElementById('settings-auto-deafen-away');
         if (autoDeafenAway) autoDeafenAway.checked = localStorage.getItem('autoDeafenOnAway') === '1';
-
-        const deafenKeybindInput = document.getElementById('settings-deafen-keybind');
-        if (deafenKeybindInput) deafenKeybindInput.value = localStorage.getItem('deafenKeybind') || '';
-        this._updateDeafenKeybindWarning(localStorage.getItem('deafenKeybind') || '');
 
         const vol = localStorage.getItem('soundVolume') || '0.3';
         const volume = document.getElementById('settings-volume');

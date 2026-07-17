@@ -3485,6 +3485,14 @@ body,
   font-family: "Fira Code", monospace;
 }
 
+/* Keybinds tab: the keybind-row sits as a .settings-toggle-row's right-hand
+   control (alongside a switch elsewhere), not alone in a full-width field —
+   needs its own fixed width instead of the 100% it gets there. */
+.settings-keybind-row-compact {
+  flex-shrink: 0;
+  width: 11rem;
+}
+
 @media (max-width: 767px) {
   .settings-overlay {
     flex-direction: column;
