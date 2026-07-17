@@ -10,6 +10,7 @@ import { TopbarIdentity } from './TopbarIdentity.js';
 import { initTooltips } from './Tooltip.js';
 import { openEmojiPicker } from './EmojiPicker.js';
 import { getOwnerToken, setOwnerToken } from './ownerTokens.js';
+import { playSound } from './SoundPlayer.js';
 
 initTooltips();
 
@@ -1030,6 +1031,12 @@ new QuickRoomSettings({ ui, peerManager });
 // --- Top-bar identity dropdown (status + Settings) ---
 new TopbarIdentity({ peerManager, settingsPanel });
 
+// Tracks the previous call's state so the sound only fires on a real flip —
+// several call sites (PTM keyup, deafen) call this with the state unchanged.
+// null means "no state applied yet," which also suppresses a sound on the
+// very first call (page load has nothing to compare against).
+let _lastMicUIEnabled = null;
+
 function updateMicUI(enabled) {
     document.getElementById('mic-off-icon').classList.toggle('hidden', enabled);
     document.getElementById('mic-on-icon').classList.toggle('hidden', !enabled);
@@ -1038,6 +1045,10 @@ function updateMicUI(enabled) {
     // tailwind.css) — reused here as a toggled state instead of a permanent one, so a
     // muted mic reads as unmistakably "off" at a glance, Discord-style.
     document.getElementById('mic-toggle').classList.toggle('dock-btn-active-red', !enabled);
+    if (_lastMicUIEnabled !== null && enabled !== _lastMicUIEnabled) {
+        playSound(enabled ? 'unmuted' : 'muted');
+    }
+    _lastMicUIEnabled = enabled;
     if (peerManager.peerId) ui.updateParticipantMic(peerManager.peerId, enabled);
 }
 

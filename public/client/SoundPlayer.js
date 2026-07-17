@@ -5,6 +5,8 @@ const Sounds = {
     newMessage: new Audio('/assets/sfx/new-message.mp3'),
     peerJoin: new Audio('/assets/sfx/peer-join.mp3'),
     peerLeft: new Audio('/assets/sfx/peer-left.mp3'),
+    muted: new Audio('/assets/sfx/muted.mp3'),
+    unmuted: new Audio('/assets/sfx/unmuted.mp3'),
 };
 
 let soundQueue = [];
