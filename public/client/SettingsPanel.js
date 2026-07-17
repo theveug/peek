@@ -7,6 +7,7 @@ import { setAccent, getStoredAccent, accentPresetNames, presetColor } from './Ac
 import { setBackgroundTint, getStoredBackgroundTint, bgTintPresetNames, presetBgColor } from './BackgroundManager.js';
 import { setFontScale, getStoredFontScale, fontScaleLabel } from './FontScaleManager.js';
 import { trapFocus } from './focusTrap.js';
+import { getCustomStatuses, getCustomStatus, upsertCustomStatus, deleteCustomStatus, SWATCHES } from './CustomStatuses.js';
 
 // One-time cleanup for the old 4-way mic-mode picker: 'push-to-mute' used to be
 // its own mutually-exclusive mode, now it's a hold-to-force-mute modifier on
@@ -165,6 +166,16 @@ export class SettingsPanel {
                                 <p class="text-[10px] text-muted mt-1">How long without mouse/keyboard/touch input before
                                     you're marked Away — also drives Audio &amp; Mic's "Auto-deafen when away", if that's
                                     turned on.</p>
+                            </div>
+                            <div class="settings-field" style="margin-bottom:0;">
+                                <div class="settings-label">Custom statuses</div>
+                                <p class="text-[10px] text-muted mt-1" style="margin-bottom:0.625rem;">Save your own
+                                    reusable statuses — pick a color, base status, and what happens when you switch to
+                                    it. Shows up alongside Online/Away/DND in the topbar menu.</p>
+                                <div id="custom-status-list" class="flex flex-col gap-1.5" style="margin-bottom:0.625rem;"></div>
+                                <div id="custom-status-form" class="hidden"></div>
+                                <button type="button" id="custom-status-add-btn" class="settings-avatar-btn">+ New
+                                    status</button>
                             </div>
                         </div>
 
@@ -681,6 +692,7 @@ export class SettingsPanel {
         });
 
         this._wireAvatar();
+        this._wireCustomStatuses();
     }
 
     _refreshProfile() {
@@ -692,6 +704,179 @@ export class SettingsPanel {
         if (awayTimeout) awayTimeout.value = localStorage.getItem('awayTimeoutMinutes') || '15';
         this._highlightStatus();
         this._refreshAvatarPreview();
+        this._renderCustomStatusList();
+    }
+
+    // --- Custom statuses ---
+    // User-defined reusable quick statuses, listed here for create/edit/delete;
+    // TopbarIdentity.js is what actually applies one (setManualStatus/setStatusText
+    // plus the local mute/deafen/drop-streams side effects) — this section only
+    // ever touches the CustomStatuses.js-owned localStorage list.
+
+    _wireCustomStatuses() {
+        document.getElementById('custom-status-add-btn')?.addEventListener('click', () => {
+            this._openCustomStatusForm(null);
+        });
+    }
+
+    _renderCustomStatusList() {
+        const list = document.getElementById('custom-status-list');
+        if (!list) return;
+        list.innerHTML = '';
+        const statuses = getCustomStatuses();
+        if (!statuses.length) {
+            list.innerHTML = '<div class="text-[11px] text-muted">No custom statuses yet.</div>';
+            return;
+        }
+        statuses.forEach((status) => {
+            const row = document.createElement('div');
+            row.className = 'flex items-center justify-between gap-2 px-3 py-2 rounded-lg surface-input';
+
+            const left = document.createElement('div');
+            left.className = 'flex items-center gap-2 min-w-0';
+            const dot = document.createElement('span');
+            dot.className = 'quick-status-dot';
+            dot.style.background = status.color;
+            const name = document.createElement('span');
+            name.className = 'text-xs font-medium truncate';
+            name.textContent = status.label; // user-entered — textContent only, never innerHTML
+            left.append(dot, name);
+
+            const actions = document.createElement('div');
+            actions.className = 'flex items-center gap-1 shrink-0';
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'settings-avatar-btn';
+            editBtn.textContent = 'Edit';
+            editBtn.addEventListener('click', () => this._openCustomStatusForm(status.id));
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.className = 'settings-danger-btn';
+            delBtn.textContent = 'Delete';
+            delBtn.addEventListener('click', () => {
+                deleteCustomStatus(status.id);
+                this._renderCustomStatusList();
+            });
+            actions.append(editBtn, delBtn);
+
+            row.append(left, actions);
+            list.appendChild(row);
+        });
+    }
+
+    /**
+     * Opens the inline create/edit form for a custom status — rebuilt from
+     * scratch each time (same disposable-innerHTML approach as the rest of
+     * this panel) rather than kept alive, since it's only ever open one at a
+     * time and never needs to preserve state across opens.
+     * @param {?string} editingId - null to create a new status
+     */
+    _openCustomStatusForm(editingId) {
+        const existing = editingId ? getCustomStatus(editingId) : null;
+        const form = document.getElementById('custom-status-form');
+        if (!form) return;
+
+        let selectedColor = existing?.color || SWATCHES[0];
+        let selectedBase = existing?.baseStatus || 'online';
+
+        form.innerHTML = `
+            <div class="settings-field">
+                <label for="custom-status-label-input" class="settings-label">Label</label>
+                <input type="text" id="custom-status-label-input" class="settings-text-input" maxlength="40"
+                    placeholder="e.g. In a meeting" />
+            </div>
+            <div class="settings-field">
+                <div class="settings-label">Color</div>
+                <div class="settings-accent-swatches" id="custom-status-color-picker" style="margin-bottom:0;"></div>
+            </div>
+            <div class="settings-field">
+                <div class="settings-label">Shows as</div>
+                <div class="settings-segmented" id="custom-status-base-picker">
+                    <button type="button" data-value="online">Online</button>
+                    <button type="button" data-value="away">Away</button>
+                    <button type="button" data-value="dnd">DND</button>
+                </div>
+            </div>
+            <div class="settings-toggle-row">
+                <div><div class="settings-toggle-row-title">Deafen</div></div>
+                <label class="settings-switch"><input type="checkbox" id="custom-status-deafen-toggle" /><span
+                        class="settings-switch-track"></span></label>
+            </div>
+            <div class="settings-toggle-row">
+                <div><div class="settings-toggle-row-title">Mute mic</div></div>
+                <label class="settings-switch"><input type="checkbox" id="custom-status-mute-toggle" /><span
+                        class="settings-switch-track"></span></label>
+            </div>
+            <div class="settings-toggle-row">
+                <div><div class="settings-toggle-row-title">Stop screen share &amp; camera</div></div>
+                <label class="settings-switch"><input type="checkbox" id="custom-status-dropstreams-toggle" /><span
+                        class="settings-switch-track"></span></label>
+            </div>
+            <div class="flex gap-2">
+                <button type="button" id="custom-status-save-btn" class="settings-avatar-btn">Save</button>
+                <button type="button" id="custom-status-cancel-btn" class="settings-avatar-btn">Cancel</button>
+            </div>
+        `;
+        form.classList.remove('hidden');
+        document.getElementById('custom-status-add-btn')?.classList.add('hidden');
+
+        const labelInput = document.getElementById('custom-status-label-input');
+        labelInput.value = existing?.label || '';
+        labelInput.focus();
+
+        const colorPicker = document.getElementById('custom-status-color-picker');
+        SWATCHES.forEach((color) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'settings-accent-swatch';
+            btn.style.background = color;
+            btn.classList.toggle('active', color === selectedColor);
+            btn.innerHTML = '<span class="material-symbols-rounded icon-filled">check</span>';
+            btn.addEventListener('click', () => {
+                selectedColor = color;
+                colorPicker.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+            });
+            colorPicker.appendChild(btn);
+        });
+
+        const basePicker = document.getElementById('custom-status-base-picker');
+        basePicker.querySelectorAll('button').forEach((btn) => {
+            btn.classList.toggle('active', btn.dataset.value === selectedBase);
+            btn.addEventListener('click', () => {
+                selectedBase = btn.dataset.value;
+                basePicker.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+            });
+        });
+
+        document.getElementById('custom-status-deafen-toggle').checked = !!existing?.deafen;
+        document.getElementById('custom-status-mute-toggle').checked = !!existing?.mute;
+        document.getElementById('custom-status-dropstreams-toggle').checked = !!existing?.dropStreams;
+
+        const close = () => {
+            form.classList.add('hidden');
+            form.innerHTML = '';
+            document.getElementById('custom-status-add-btn')?.classList.remove('hidden');
+        };
+
+        document.getElementById('custom-status-cancel-btn').addEventListener('click', close);
+        document.getElementById('custom-status-save-btn').addEventListener('click', () => {
+            const label = labelInput.value.trim();
+            if (!label) {
+                labelInput.focus();
+                return;
+            }
+            upsertCustomStatus({
+                id: existing?.id,
+                label,
+                color: selectedColor,
+                baseStatus: selectedBase,
+                deafen: document.getElementById('custom-status-deafen-toggle').checked,
+                mute: document.getElementById('custom-status-mute-toggle').checked,
+                dropStreams: document.getElementById('custom-status-dropstreams-toggle').checked,
+            });
+            close();
+            this._renderCustomStatusList();
+        });
     }
 
     /**
