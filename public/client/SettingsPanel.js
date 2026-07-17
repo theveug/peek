@@ -9,6 +9,14 @@ import { setFontScale, getStoredFontScale, fontScaleLabel } from './FontScaleMan
 import { trapFocus } from './focusTrap.js';
 import { getCustomStatuses, getCustomStatus, upsertCustomStatus, deleteCustomStatus, SWATCHES } from './CustomStatuses.js';
 
+// Labels for the tri-state mute/deafen pickers in the custom-status form —
+// 'none' means "leave as-is," so a status can just as easily auto-unmute/
+// undeafen ('off') as it can force mute/deafen on.
+const TOGGLE_LABELS = {
+    deafen: { none: 'No change', on: 'Deafen', off: 'Undeafen' },
+    mute: { none: 'No change', on: 'Mute', off: 'Unmute' },
+};
+
 // One-time cleanup for the old 4-way mic-mode picker: 'push-to-mute' used to be
 // its own mutually-exclusive mode, now it's a hold-to-force-mute modifier on
 // top of 'toggle'/'voice-activity' (see PeerManager's ptmHeld). A user who had
@@ -778,6 +786,16 @@ export class SettingsPanel {
 
         let selectedColor = existing?.color || SWATCHES[0];
         let selectedBase = existing?.baseStatus || 'online';
+        let selectedDeafen = existing?.deafen || 'none';
+        let selectedMute = existing?.mute || 'none';
+
+        const toggleSegmentHTML = (id) => `
+            <div class="settings-segmented" id="${id}">
+                <button type="button" data-value="none">No change</button>
+                <button type="button" data-value="on">On</button>
+                <button type="button" data-value="off">Off</button>
+            </div>
+        `;
 
         form.innerHTML = `
             <div class="settings-field">
@@ -797,15 +815,13 @@ export class SettingsPanel {
                     <button type="button" data-value="dnd">DND</button>
                 </div>
             </div>
-            <div class="settings-toggle-row">
-                <div><div class="settings-toggle-row-title">Deafen</div></div>
-                <label class="settings-switch"><input type="checkbox" id="custom-status-deafen-toggle" /><span
-                        class="settings-switch-track"></span></label>
+            <div class="settings-field">
+                <div class="settings-label">Deafen</div>
+                ${toggleSegmentHTML('custom-status-deafen-picker')}
             </div>
-            <div class="settings-toggle-row">
-                <div><div class="settings-toggle-row-title">Mute mic</div></div>
-                <label class="settings-switch"><input type="checkbox" id="custom-status-mute-toggle" /><span
-                        class="settings-switch-track"></span></label>
+            <div class="settings-field">
+                <div class="settings-label">Microphone</div>
+                ${toggleSegmentHTML('custom-status-mute-picker')}
             </div>
             <div class="settings-toggle-row">
                 <div><div class="settings-toggle-row-title">Stop screen share &amp; camera</div></div>
@@ -848,8 +864,25 @@ export class SettingsPanel {
             });
         });
 
-        document.getElementById('custom-status-deafen-toggle').checked = !!existing?.deafen;
-        document.getElementById('custom-status-mute-toggle').checked = !!existing?.mute;
+        // Deafen/mute are tri-state ('none'/'on'/'off') rather than a plain
+        // switch — 'off' is what lets a status auto-unmute/undeafen (e.g. a
+        // "Back" status reversing what "Lunch" forced on), not just force
+        // them on. Labels come from TOGGLE_LABELS since "on"/"off" alone
+        // don't read clearly per field ("Mute" vs "Unmute").
+        const wireTogglePicker = (id, field, get, set) => {
+            const picker = document.getElementById(id);
+            picker.querySelectorAll('button').forEach((btn) => {
+                btn.textContent = TOGGLE_LABELS[field][btn.dataset.value];
+                btn.classList.toggle('active', btn.dataset.value === get());
+                btn.addEventListener('click', () => {
+                    set(btn.dataset.value);
+                    picker.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+                });
+            });
+        };
+        wireTogglePicker('custom-status-deafen-picker', 'deafen', () => selectedDeafen, (v) => { selectedDeafen = v; });
+        wireTogglePicker('custom-status-mute-picker', 'mute', () => selectedMute, (v) => { selectedMute = v; });
+
         document.getElementById('custom-status-dropstreams-toggle').checked = !!existing?.dropStreams;
 
         const close = () => {
@@ -870,8 +903,8 @@ export class SettingsPanel {
                 label,
                 color: selectedColor,
                 baseStatus: selectedBase,
-                deafen: document.getElementById('custom-status-deafen-toggle').checked,
-                mute: document.getElementById('custom-status-mute-toggle').checked,
+                deafen: selectedDeafen,
+                mute: selectedMute,
                 dropStreams: document.getElementById('custom-status-dropstreams-toggle').checked,
             });
             close();

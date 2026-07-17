@@ -109,14 +109,22 @@ export class TopbarIdentity {
      * (updateMicUI/setDeafenUI/updateShareButton/updateCamUI), none of which
      * PeerManager does itself. Same "click the real button" approach
      * peek-desktop's own hotkey relay and disconnectFromRoom() use, for the
-     * same reason. Mute is clicked before deafen so a status that sets both
-     * leaves `_micEnabledBeforeDeafen` recording "already muted," matching intent.
-     * @param {{id:string,label:string,color:string,baseStatus:string,deafen:boolean,mute:boolean,dropStreams:boolean}} status
+     * same reason.
+     *
+     * deafen/mute are tri-state ('none'/'on'/'off'), not booleans — 'off' is
+     * what lets a status auto-unmute/undeafen (e.g. a "Back" status reversing
+     * what "Lunch" forced on). Deafen is applied before mute: undeafening
+     * restores mic to whatever it was pre-deafen (PeerManager's own
+     * `_micEnabledBeforeDeafen`), and an explicit mute directive on the same
+     * status should win over that restore, so it needs to run after.
+     * @param {{id:string,label:string,color:string,baseStatus:string,deafen:'none'|'on'|'off',mute:'none'|'on'|'off',dropStreams:boolean}} status
      */
     _applyCustomStatus(status) {
         if (!this.peerManager) return;
-        if (status.mute && this.peerManager.micEnabled) document.getElementById('mic-toggle')?.click();
-        if (status.deafen && !this.peerManager.deafened) document.getElementById('deafen-toggle')?.click();
+        if (status.deafen === 'on' && !this.peerManager.deafened) document.getElementById('deafen-toggle')?.click();
+        else if (status.deafen === 'off' && this.peerManager.deafened) document.getElementById('deafen-toggle')?.click();
+        if (status.mute === 'on' && this.peerManager.micEnabled) document.getElementById('mic-toggle')?.click();
+        else if (status.mute === 'off' && !this.peerManager.micEnabled) document.getElementById('mic-toggle')?.click();
         if (status.dropStreams) {
             if (this.peerManager.stream) document.getElementById('stop-share-button')?.click();
             if (this.peerManager.camStream) document.getElementById('cam-toggle')?.click();

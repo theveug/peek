@@ -18,15 +18,36 @@ export const SWATCHES = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', 
 
 export const BASE_STATUSES = ['online', 'away', 'dnd'];
 
+// Mute/deafen are tri-state, not booleans — a status can force them on
+// ('on'), force them off ('off'), or leave them exactly as they were
+// ('none'). That third option is what makes a "Back" status able to
+// auto-unmute/undeafen after a "Lunch" status forced them on, rather than
+// custom statuses only ever being able to mute/deafen and never reverse it.
+export const TOGGLE_VALUES = ['none', 'on', 'off'];
+
+function normalizeToggle(v) {
+    // Back-compat for statuses saved before mute/deafen became tri-state,
+    // when they were plain booleans (true meant "force on", same as 'on' now).
+    if (v === true) return 'on';
+    if (v === false || v === undefined) return 'none';
+    return TOGGLE_VALUES.includes(v) ? v : 'none';
+}
+
 function isValidStatus(s) {
     return s && typeof s.id === 'string' && typeof s.label === 'string' && BASE_STATUSES.includes(s.baseStatus);
 }
 
-/** @returns {Array<{id:string,label:string,color:string,baseStatus:string,deafen:boolean,mute:boolean,dropStreams:boolean,keybind:?string}>} */
+/** @returns {Array<{id:string,label:string,color:string,baseStatus:string,deafen:'none'|'on'|'off',mute:'none'|'on'|'off',dropStreams:boolean,keybind:?string}>} */
 export function getCustomStatuses() {
     try {
         const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-        return Array.isArray(raw) ? raw.filter(isValidStatus) : [];
+        if (!Array.isArray(raw)) return [];
+        return raw.filter(isValidStatus).map((s) => ({
+            ...s,
+            deafen: normalizeToggle(s.deafen),
+            mute: normalizeToggle(s.mute),
+            dropStreams: !!s.dropStreams,
+        }));
     } catch {
         return [];
     }
@@ -43,7 +64,7 @@ function saveCustomStatuses(list) {
 /**
  * Creates or updates a custom status (update when `id` matches an existing
  * entry, create otherwise) and persists the list.
- * @param {{id?: string, label: string, color: string, baseStatus: string, deafen: boolean, mute: boolean, dropStreams: boolean}} status
+ * @param {{id?: string, label: string, color: string, baseStatus: string, deafen: 'none'|'on'|'off', mute: 'none'|'on'|'off', dropStreams: boolean}} status
  */
 export function upsertCustomStatus(status) {
     const list = getCustomStatuses();
@@ -52,8 +73,8 @@ export function upsertCustomStatus(status) {
         label: (status.label || '').trim().slice(0, LABEL_MAX),
         color: SWATCHES.includes(status.color) ? status.color : SWATCHES[0],
         baseStatus: BASE_STATUSES.includes(status.baseStatus) ? status.baseStatus : 'online',
-        deafen: !!status.deafen,
-        mute: !!status.mute,
+        deafen: normalizeToggle(status.deafen),
+        mute: normalizeToggle(status.mute),
         dropStreams: !!status.dropStreams,
         keybind: null, // reserved for a later pass — not wired up yet
     };
