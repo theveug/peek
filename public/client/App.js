@@ -557,7 +557,13 @@ document.getElementById('mic-toggle').addEventListener('click', toggleMicManual)
 // (peerManager.setDeafened may have hard-muted/restored the mic alongside
 // the deafen itself, so the mic icon needs to stay in sync too).
 function setDeafenUI(deafened) {
-    document.querySelectorAll('audio').forEach(a => { a.muted = deafened; });
+    // Screen-share audio has its own opt-in gate (Settings -> Audio & Mic,
+    // "Play audio from screen shares") on top of deafen — undeafening
+    // shouldn't force it back on for someone who's left that setting off.
+    const playShareAudio = localStorage.getItem('playShareAudio') === '1';
+    document.querySelectorAll('audio').forEach(a => {
+        a.muted = deafened || (a.id.endsWith('-screen') && !playShareAudio);
+    });
     document.getElementById('deafen-off-icon').classList.toggle('hidden', deafened);
     document.getElementById('deafen-on-icon').classList.toggle('hidden', !deafened);
     document.getElementById('deafen-toggle').dataset.tip = deafened ? 'Undeafen' : 'Deafen';

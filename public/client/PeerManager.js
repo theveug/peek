@@ -1,4 +1,6 @@
 // --- public/client/PeerManager.js ---
+import { setSharingWithAudio } from './SoundPlayer.js';
+
 const RES_RANK = { '640x360': 0, '640x480': 1, '1280x720': 2, '1920x1080': 3, '2560x1440': 4, source: 5 };
 
 // Caps the effective stream quality as the room fills past the safe mesh size (6).
@@ -418,7 +420,11 @@ export class PeerManager {
         try {
             const constraints = {
                 video: this._resolveQuality('screen'),
-                audio: true,
+                // Off by default (Settings -> Screen & Video) — system audio
+                // capture picks up everything playing through the sharer's
+                // speakers (app sounds, notification chimes, etc.), not just
+                // whatever they meant to share.
+                audio: localStorage.getItem('shareSystemAudio') === '1',
                 cursor: 'always',
             };
 
@@ -446,6 +452,10 @@ export class PeerManager {
             this.stream = newStream;
             this.ui.addStream('me', this.stream);
             this.isSharing = true;
+            // Only true system/tab audio capture leaks local SFX to peers —
+            // the OS/browser share picker lets the user uncheck "share audio",
+            // in which case this stream has no audio track at all.
+            setSharingWithAudio(this.stream.getAudioTracks().length > 0);
             this.ui.updateStageQuality?.(this.getScreenQualityLabel());
 
             this.stream.getVideoTracks()[0].onended = () => {
@@ -1174,6 +1184,7 @@ export class PeerManager {
 
         this.ui.removeStream('me');
         this.isSharing = false;
+        setSharingWithAudio(false);
         this.ui.updateStageQuality?.(null);
 
         // Notify peers that streaming stopped

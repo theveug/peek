@@ -13,6 +13,19 @@ let soundQueue = [];
 let isPlaying = false;
 let audioUnlocked = false;
 
+// While an outgoing screen/window share is capturing system audio, anything
+// played through this tab's speakers (mute chime, new-message ping, etc.)
+// gets picked up by that capture and broadcast to peers as part of the
+// share's audio track — e.g. muting to go quiet then having your "muted"
+// chime announce it to everyone watching. Suppress local SFX for the
+// duration rather than trying to duck just the leak; see PeerManager's
+// startSharing()/stopSharing() for the toggle.
+let sharingWithAudio = false;
+
+export function setSharingWithAudio(active) {
+    sharingWithAudio = active;
+}
+
 function unlockAudio() {
     if (audioUnlocked) return;
     Object.values(Sounds).forEach(s => {
@@ -39,7 +52,7 @@ export function playSound(soundName) {
     const volume = parseFloat(localStorage.getItem('soundVolume') || Sounds.volume);
     const sound = Sounds[soundName];
 
-    if (!sound || muteToggle) return;
+    if (!sound || muteToggle || sharingWithAudio) return;
 
     soundQueue.push(() => {
         sound.currentTime = 0;

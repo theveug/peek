@@ -282,6 +282,17 @@ export class SettingsPanel {
                                     <button type="button" data-value="60">60 fps</button>
                                 </div>
                             </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Share system audio</div>
+                                    <div class="settings-toggle-row-desc">Off by default — when on, whatever's playing
+                                        through your speakers (video/game audio, notification sounds, etc.) is sent
+                                        along with your screen share. Leave this off if you don't want peers to hear
+                                        things like your own volume-change chime or other app sounds.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-share-system-audio" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
                             <div class="settings-field">
                                 <div class="settings-label">Webcam resolution</div>
                                 <div class="settings-segmented" id="settings-cam-res-picker">
@@ -380,6 +391,16 @@ export class SettingsPanel {
                                         alone.</div>
                                 </div>
                                 <label class="settings-switch"><input type="checkbox" id="settings-auto-deafen-away" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Play audio from screen shares</div>
+                                    <div class="settings-toggle-row-desc">Off by default. Turn on to hear system audio
+                                        from peers who've opted in to sharing it — this is separate from hearing them
+                                        talk, which always works.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-play-share-audio" /><span
                                         class="settings-switch-track"></span></label>
                             </div>
                             <div class="settings-field">
@@ -1159,6 +1180,13 @@ export class SettingsPanel {
             this.peerManager?.setBackgroundBlur(e.target.checked);
         });
 
+        // Only takes effect on the *next* share — getDisplayMedia's audio
+        // constraint is fixed for the lifetime of an active capture, there's
+        // no way to add/drop system audio from a share already in progress.
+        document.getElementById('settings-share-system-audio')?.addEventListener('change', (e) => {
+            localStorage.setItem('shareSystemAudio', e.target.checked ? '1' : '0');
+        });
+
         document.getElementById('settings-max-messages')?.addEventListener('change', (e) => {
             localStorage.setItem('maxMessages', e.target.value);
         });
@@ -1178,6 +1206,9 @@ export class SettingsPanel {
 
         const backgroundBlur = document.getElementById('settings-background-blur');
         if (backgroundBlur) backgroundBlur.checked = localStorage.getItem('backgroundBlur') === '1';
+
+        const shareSystemAudio = document.getElementById('settings-share-system-audio');
+        if (shareSystemAudio) shareSystemAudio.checked = localStorage.getItem('shareSystemAudio') === '1';
 
         const maxMessages = document.getElementById('settings-max-messages');
         if (maxMessages) maxMessages.value = localStorage.getItem('maxMessages') || '100';
@@ -1254,6 +1285,11 @@ export class SettingsPanel {
 
         document.getElementById('settings-auto-deafen-away')?.addEventListener('change', (e) => {
             localStorage.setItem('autoDeafenOnAway', e.target.checked ? '1' : '0');
+        });
+
+        document.getElementById('settings-play-share-audio')?.addEventListener('change', (e) => {
+            localStorage.setItem('playShareAudio', e.target.checked ? '1' : '0');
+            this.ui?.applyPlayShareAudio();
         });
     }
 
@@ -1493,6 +1529,9 @@ export class SettingsPanel {
 
         const autoDeafenAway = document.getElementById('settings-auto-deafen-away');
         if (autoDeafenAway) autoDeafenAway.checked = localStorage.getItem('autoDeafenOnAway') === '1';
+
+        const playShareAudio = document.getElementById('settings-play-share-audio');
+        if (playShareAudio) playShareAudio.checked = localStorage.getItem('playShareAudio') === '1';
 
         const vol = localStorage.getItem('soundVolume') || '0.3';
         const volume = document.getElementById('settings-volume');

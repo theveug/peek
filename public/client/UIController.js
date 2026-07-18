@@ -1831,7 +1831,12 @@ export class UIController {
             document.body.appendChild(audio);
         }
         audio.srcObject = new MediaStream([track]);
-        audio.muted = !document.getElementById('deafen-off-icon') || document.getElementById('deafen-off-icon').classList.contains('hidden');
+        const deafened = !document.getElementById('deafen-off-icon') || document.getElementById('deafen-off-icon').classList.contains('hidden');
+        // Screen-share audio is opt-in on the receiving end too (Settings ->
+        // Audio & Mic) — separate from deafen, which is about not hearing
+        // anyone at all, not specifically about a peer's system audio.
+        const isScreenAudio = peerId.endsWith('-screen');
+        audio.muted = deafened || (isScreenAudio && localStorage.getItem('playShareAudio') !== '1');
         this._applyAudioVolume(peerId);
         // New joiners (and reconnects) get whatever output device was already
         // chosen — setSinkId can reject if the browser doesn't support it or
@@ -1855,6 +1860,21 @@ export class UIController {
         if (typeof HTMLMediaElement === 'undefined' || !HTMLMediaElement.prototype.setSinkId) return; // unsupported browser — silently a no-op
         const audios = document.querySelectorAll('audio[id^="audio-"]');
         await Promise.all(Array.from(audios).map(a => a.setSinkId(this._audioOutputDeviceId).catch(() => {})));
+    }
+
+    /**
+     * Re-applies the "Play audio from screen shares" setting to every
+     * already-attached screen-share `<audio>` element, so flipping the
+     * toggle mid-call takes effect immediately instead of only on the next
+     * `addAudio` (which won't come again until the share is restarted).
+     * @returns {void}
+     */
+    applyPlayShareAudio() {
+        const deafened = !document.getElementById('deafen-off-icon') || document.getElementById('deafen-off-icon').classList.contains('hidden');
+        const enabled = localStorage.getItem('playShareAudio') === '1';
+        document.querySelectorAll('audio[id$="-screen"]').forEach((audio) => {
+            audio.muted = deafened || !enabled;
+        });
     }
 
     /** Removes and stops one audio element (see the `audioKey` note on `addAudio`). */
