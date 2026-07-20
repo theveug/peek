@@ -110,6 +110,15 @@ export class PeerManager {
         this._noiseFloor = {};
         this._localAnalyser = null;
         this._localAnalyserStream = null;
+
+        // --- Idle/away presence detection (independent of the speaking ring above) ---
+        this._presenceAnalyser = null;
+        this._presenceAnalyserData = null;
+        this._presenceAnalyserStream = null;
+        this._presenceNoiseFloor = null;
+        // A cloned copy of the raw mic track, kept permanently enabled — see
+        // _refreshPresenceMicStream() for why this can't just be _rawMicStream itself.
+        this._presenceMicStream = null;
     }
 
     /**
@@ -692,6 +701,84 @@ export class PeerManager {
         return Math.sqrt(sumSquares / this._localAnalyserData.length);
     }
 
+    /**
+     * (Re)builds _presenceMicStream, a cloned copy of the raw mic track that's
+     * never touched by mute logic, so presence detection keeps hearing sound
+     * even while muted. This can't just tap _rawMicStream directly: when noise
+     * suppression is off (the default), _applyNoiseSuppression() returns the
+     * raw stream unchanged, so micStream *is* _rawMicStream — the same
+     * MediaStreamTrack object — and toggleMic()'s `track.enabled = false`
+     * would silence this analyser too, since `enabled` is a property of the
+     * track itself, not per-consumer. MediaStreamTrack.clone() produces an
+     * independent track sharing the same hardware source, whose `enabled`
+     * flag is unaffected by the original's. Must be re-run whenever
+     * _rawMicStream itself is replaced (toggleMic()'s first grant,
+     * switchMicrophone()'s device swap) — NOT on a noise-suppression toggle,
+     * which only ever reassigns micStream, leaving _rawMicStream (and this
+     * clone) untouched.
+     * @param {MediaStream} rawStream
+     */
+    _refreshPresenceMicStream(rawStream) {
+        this._presenceMicStream?.getAudioTracks()[0]?.stop();
+        const track = rawStream?.getAudioTracks()[0];
+        this._presenceMicStream = track ? new MediaStream([track.clone()]) : null;
+        this._presenceAnalyserStream = null; // force _rawMicLevel() to rebuild its analyser
+    }
+
+    /**
+     * RMS level of the raw hardware mic, via its own analyser on
+     * _presenceMicStream (see _refreshPresenceMicStream()) — unlike
+     * _localMicLevel() (which reads 0 whenever micEnabled is false), this
+     * keeps listening through mute/deafen/PTT-gate, since a muted mic still
+     * physically hears a barking dog or a side conversation. Works any time
+     * after the mic has been enabled at least once this session, even if
+     * it's currently off.
+     * @returns {number}
+     */
+    _rawMicLevel() {
+        if (!this._presenceMicStream) return 0;
+        if (this._presenceAnalyserStream !== this._presenceMicStream) {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const source = ctx.createMediaStreamSource(this._presenceMicStream);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 512;
+            source.connect(analyser);
+            this._presenceAnalyser = analyser;
+            this._presenceAnalyserData = new Uint8Array(analyser.frequencyBinCount);
+            this._presenceAnalyserStream = this._presenceMicStream;
+        }
+        this._presenceAnalyser.getByteTimeDomainData(this._presenceAnalyserData);
+        let sumSquares = 0;
+        for (const v of this._presenceAnalyserData) {
+            const norm = (v - 128) / 128;
+            sumSquares += norm * norm;
+        }
+        return Math.sqrt(sumSquares / this._presenceAnalyserData.length);
+    }
+
+    /**
+     * Presence-only counterpart to pollSelfMicActivity(): is there real sound
+     * at the mic right now, regardless of mute/deafen state — used purely to
+     * decide whether to reset the idle/away timer (see App.js), never for the
+     * speaking ring or active-speaker picking. Deliberately keeps its own
+     * adaptive noise floor (_presenceNoiseFloor) rather than reusing
+     * _updateSpeakingStates' per-peer state: that function fires
+     * onSpeakingChange, which would light up your own speaking ring (and could
+     * trigger auto-focus) from sound that was never actually transmitted —
+     * misleading, since deafened/muted peers wouldn't be "speaking" to anyone.
+     * @returns {{level: number, active: boolean}}
+     */
+    pollMicPresence() {
+        const level = this._rawMicLevel();
+        const MARGIN = parseFloat(typeof localStorage !== 'undefined' ? localStorage.getItem('micThreshold') : null) || 0.03;
+        if (this._presenceNoiseFloor === null) this._presenceNoiseFloor = level;
+        const floor = this._presenceNoiseFloor;
+        const active = level > floor + MARGIN;
+        const rate = active ? 0 : (level > floor ? 0.02 : 0.2);
+        if (rate) this._presenceNoiseFloor = floor + (level - floor) * rate;
+        return { level, active };
+    }
+
     /** @returns {Promise<Object<string, number>>} peerId -> current inbound audio level, from ICE stats. */
     async _remotePeerLevels() {
         const levels = {};
@@ -921,6 +1008,7 @@ export class PeerManager {
                 this._rawMicStream = await navigator.mediaDevices.getUserMedia({
                     audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true,
                 });
+                this._refreshPresenceMicStream(this._rawMicStream);
                 this.micStream = await this._applyNoiseSuppression(this._rawMicStream);
                 this.micEnabled = true;
 
@@ -2175,6 +2263,7 @@ export class PeerManager {
             this._noiseSuppressor = null;
 
             this._rawMicStream = newRawStream;
+            this._refreshPresenceMicStream(this._rawMicStream);
             this.micStream = await this._applyNoiseSuppression(newRawStream);
             const newTrack = this.micStream.getAudioTracks()[0];
             newTrack.enabled = wasTrackEnabled;

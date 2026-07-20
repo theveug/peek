@@ -830,18 +830,25 @@ function resetIdleTimer() {
 ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach((evt) => {
     document.addEventListener(evt, resetIdleTimer, { passive: true });
 });
-// Talking counts as presence too — alt-tabbing to work in another window
-// while still mid-conversation produces zero mouse/keyboard events on this
-// document, so without this someone actively speaking still got flipped to
-// Away (and, with auto-deafen on, deafened mid-sentence). Reuses
-// pollSelfMicActivity() — the same production speaking-detection algorithm
-// the active-speaker ring runs — rather than a separate heuristic. Web Audio
-// analysers keep running in a backgrounded tab (unlike rAF), so this still
-// fires even while unfocused; a muted mic still can't prove presence this
-// way, but that's an inherent limit of an audio-based signal, not a bug.
+// Sound at the mic counts as presence too — alt-tabbing to work in another
+// window produces zero mouse/keyboard events on this document, so without
+// this someone still at their desk (talking, or just a noisy room) got
+// flipped to Away, and with auto-deafen on, deafened out of a conversation
+// they were still part of. Uses pollMicPresence() (taps the raw hardware
+// mic via its own analyser) rather than pollSelfMicActivity() (the
+// speaking-ring signal, which reads 0 whenever the mic is muted) —
+// deliberately still counts as presence while muted or deafened, since a
+// muted mic still physically hears you. Web Audio analysers keep running
+// in an unfocused/backgrounded window (unlike rAF), so this still fires
+// without focus. Only goes blind if the mic has never been enabled even
+// once this session (no hardware stream to tap yet) — DOM input events
+// still cover that case. Polled every 500ms rather than on the older 2s
+// cadence: the analyser only ever samples an ~11ms instantaneous snapshot
+// (fftSize 512), so a short bark or "hey"-length utterance has a real
+// chance of landing entirely between polls at a slower rate.
 setInterval(() => {
-    if (peerManager.pollSelfMicActivity().speaking) resetIdleTimer();
-}, 2000);
+    if (peerManager.pollMicPresence().active) resetIdleTimer();
+}, 500);
 resetIdleTimer();
 
 
