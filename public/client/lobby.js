@@ -7,6 +7,7 @@ import { initTheme } from '/client/ThemeManager.js';
 import { getSavedRooms, saveRoom, removeRoom } from '/client/savedRooms.js';
 import { SettingsPanel } from '/client/SettingsPanel.js';
 import { initTooltips } from '/client/Tooltip.js';
+import { startRoomStatusPolling } from '/client/roomStatusPoll.js';
 
 initTheme();
 initTooltips();
@@ -192,10 +193,15 @@ joinCode.addEventListener('paste', (e) => {
     joinCode.value = text.replace(/[^A-Za-z0-9]/g, '').slice(-5);
 });
 
-// --- Recent (saved) rooms ---
-const savedSection = document.getElementById('saved-rooms-section');
+// --- Saved rooms sidebar ---
+const savedSection = document.getElementById('saved-rooms-sidebar');
 const savedList = document.getElementById('saved-rooms-list');
 const savedError = document.getElementById('saved-rooms-error');
+
+// code -> {active, peerCount, maxPeers} | undefined, persists across re-renders
+// so badges don't flash back to "unknown" when a neighboring room changes.
+let statusMap = new Map();
+let stopStatusPolling = null;
 
 function hueFromString(str) {
     let hash = 0;
@@ -221,29 +227,47 @@ function formatRelativeTime(ms) {
     return `${day}d ago`;
 }
 
+function statusStateFor(code) {
+    const status = statusMap.get(code);
+    if (!status) return 'unknown';
+    return status.active ? 'active' : 'inactive';
+}
+
+function applyStatusToRow(row, code) {
+    const dot = row.querySelector('.sidebar-room-status');
+    if (!dot) return;
+    const state = statusStateFor(code);
+    dot.dataset.state = state;
+    const status = statusMap.get(code);
+    dot.dataset.tip = state === 'active' ? `${status.peerCount} / ${status.maxPeers} in room` : state === 'inactive' ? 'Not active' : 'Checking…';
+}
+
+function updateStatusBadges(statuses) {
+    for (const [code, status] of Object.entries(statuses)) statusMap.set(code, status);
+    savedList.querySelectorAll('.sidebar-room-row').forEach((row) => applyStatusToRow(row, row.dataset.code));
+}
+
 function renderSavedRooms() {
     const rooms = getSavedRooms();
     savedSection.classList.toggle('hidden', rooms.length === 0);
     savedList.innerHTML = '';
 
     rooms.forEach((room) => {
-        const card = document.createElement('div');
-        card.className = 'lobby-recent-card';
-
-        const top = document.createElement('div');
-        top.className = 'lobby-recent-top';
+        const row = document.createElement('div');
+        row.className = 'sidebar-room-row';
+        row.dataset.code = room.code;
 
         const avatar = document.createElement('div');
-        avatar.className = 'lobby-recent-avatar';
+        avatar.className = 'sidebar-room-avatar';
         avatar.style.background = `oklch(0.55 0.13 ${hueFromString(room.code + room.label)})`;
         avatar.textContent = initialsFromLabel(room.label);
-        top.appendChild(avatar);
+        row.appendChild(avatar);
 
         const info = document.createElement('div');
-        info.className = 'lobby-recent-info';
+        info.className = 'sidebar-room-info';
 
         const nameEl = document.createElement('div');
-        nameEl.className = 'lobby-recent-name';
+        nameEl.className = 'sidebar-room-name';
         nameEl.textContent = room.label;
         if (room.password) {
             const lockIcon = document.createElement('span');
@@ -254,20 +278,24 @@ function renderSavedRooms() {
         info.appendChild(nameEl);
 
         const metaEl = document.createElement('div');
-        metaEl.className = 'lobby-recent-meta font-mono-app';
+        metaEl.className = 'sidebar-room-meta font-mono-app';
         metaEl.textContent = room.code + (room.savedAt ? ` · ${formatRelativeTime(room.savedAt)}` : '');
         info.appendChild(metaEl);
 
-        top.appendChild(info);
-        card.appendChild(top);
+        row.appendChild(info);
 
-        const bottom = document.createElement('div');
-        bottom.className = 'lobby-recent-bottom';
+        const statusDot = document.createElement('span');
+        statusDot.className = 'sidebar-room-status';
+        row.appendChild(statusDot);
+
+        const actions = document.createElement('div');
+        actions.className = 'sidebar-room-actions';
 
         const rejoinBtn = document.createElement('button');
         rejoinBtn.type = 'button';
-        rejoinBtn.className = 'lobby-recent-rejoin';
-        rejoinBtn.innerHTML = 'Rejoin <span class="material-symbols-rounded" style="font-size:1rem;">arrow_forward</span>';
+        rejoinBtn.dataset.tip = 'Rejoin';
+        rejoinBtn.className = 'sidebar-room-rejoin';
+        rejoinBtn.innerHTML = '<span class="material-symbols-rounded">arrow_forward</span>';
         rejoinBtn.addEventListener('click', async () => {
             savedError.classList.add('hidden');
             rejoinBtn.disabled = true;
@@ -298,22 +326,33 @@ function renderSavedRooms() {
                 rejoinBtn.disabled = false;
             }
         });
-        bottom.appendChild(rejoinBtn);
-        card.appendChild(bottom);
+        actions.appendChild(rejoinBtn);
 
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.dataset.tip = 'Remove';
-        removeBtn.className = 'lobby-recent-remove';
+        removeBtn.className = 'sidebar-room-remove';
         removeBtn.innerHTML = '<span class="material-symbols-rounded">close</span>';
         removeBtn.addEventListener('click', () => {
             removeRoom(room.code);
             renderSavedRooms();
         });
-        card.appendChild(removeBtn);
+        actions.appendChild(removeBtn);
 
-        savedList.appendChild(card);
+        row.appendChild(actions);
+
+        savedList.appendChild(row);
+        applyStatusToRow(row, room.code);
     });
+
+    // Start/stop the poller as the saved-room count transitions across zero,
+    // so removing the last saved room actually stops network traffic.
+    if (rooms.length > 0 && !stopStatusPolling) {
+        stopStatusPolling = startRoomStatusPolling(() => getSavedRooms().map((r) => r.code), updateStatusBadges);
+    } else if (rooms.length === 0 && stopStatusPolling) {
+        stopStatusPolling();
+        stopStatusPolling = null;
+    }
 }
 
 renderSavedRooms();

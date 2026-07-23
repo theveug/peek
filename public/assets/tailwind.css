@@ -3918,6 +3918,15 @@ body,
   padding: 2.5rem 1.5rem;
 }
 
+.lobby-layout {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 73.75rem;
+}
+
 .lobby-glow {
   position: fixed;
   top: -7.5rem;
@@ -3948,6 +3957,7 @@ body,
   position: relative;
   z-index: 10;
   width: 100%;
+  min-width: 0;
   max-width: 56.25rem;
 }
 
@@ -4207,17 +4217,23 @@ body,
   color: var(--t3);
 }
 
-.lobby-recent {
-  margin-bottom: 2.125rem;
+/* ===== Lobby sidebar (redesign, Phase 2d) ===== */
+.lobby-sidebar {
+  width: 15rem;
+  flex-shrink: 0;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  padding: 0.75rem 0;
+  max-height: calc(100vh - 5rem);
+  overflow-y: auto;
 }
 
-.lobby-recent-header {
+.lobby-sidebar-header {
+  padding: 0 0.875rem 0.625rem;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.875rem;
+  flex-direction: column;
+  gap: 0.125rem;
 }
 
 .lobby-recent-note {
@@ -4225,97 +4241,111 @@ body,
   color: var(--t3);
 }
 
-.lobby-recent-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.875rem;
-}
-
-.lobby-recent-card {
-  position: relative;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 0.875rem;
-  padding: 0.875rem;
+.lobby-sidebar-list {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
 }
 
-.lobby-recent-top {
+.sidebar-room-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 0.625rem;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
 }
 
-.lobby-recent-avatar {
-  width: 2.625rem;
-  height: 2.625rem;
-  border-radius: 0.75rem;
+.sidebar-room-row:hover {
+  background: var(--card-hover);
+}
+
+.sidebar-room-avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.625rem;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
   font-weight: 800;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
 }
 
-.lobby-recent-info {
+.sidebar-room-status {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--t3);
+}
+
+.sidebar-room-status[data-state="active"] {
+  background: var(--green);
+}
+
+.sidebar-room-info {
   min-width: 0;
+  flex: 1;
 }
 
-.lobby-recent-name {
+.sidebar-room-name {
   display: flex;
   align-items: center;
   gap: 0.25rem;
   font-weight: 700;
   color: var(--t1);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.lobby-recent-name .material-symbols-rounded {
-  font-size: 0.875rem;
+.sidebar-room-name .material-symbols-rounded {
+  font-size: 0.8125rem;
   color: var(--t3);
   flex-shrink: 0;
 }
 
-.lobby-recent-meta {
-  font-size: 0.7188rem;
+.sidebar-room-meta {
+  font-size: 0.6875rem;
   color: var(--t3);
-  margin-top: 0.125rem;
+  margin-top: 0.0625rem;
 }
 
-.lobby-recent-bottom {
-  display: flex;
+/* Rejoin/remove collapse behind a hover reveal, same pattern as
+   .participant-actions in the members sidebar — keeps each row compact. */
+.sidebar-room-actions {
+  display: none;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.125rem;
+  flex-shrink: 0;
 }
 
-.lobby-recent-rejoin {
+.sidebar-room-row:hover .sidebar-room-actions,
+.sidebar-room-row:focus-within .sidebar-room-actions {
+  display: flex;
+}
+
+.sidebar-room-rejoin {
   background: none;
   border: none;
-  padding: 0;
+  padding: 0.25rem;
   color: var(--accent);
-  font-weight: 700;
-  font-size: 0.8125rem;
   cursor: pointer;
   display: flex;
-  align-items: center;
-  gap: 0.25rem;
+  border-radius: 0.5rem;
 }
 
-.lobby-recent-rejoin:hover {
-  text-decoration: underline;
+.sidebar-room-rejoin:hover {
+  background: var(--bg3);
 }
 
-.lobby-recent-remove {
-  position: absolute;
-  top: 0.625rem;
-  right: 0.625rem;
+.sidebar-room-rejoin .material-symbols-rounded {
+  font-size: 1.0625rem;
+  display: block;
+}
+
+.sidebar-room-remove {
   color: var(--t3);
   padding: 0.25rem;
   border-radius: 0.5rem;
@@ -4324,12 +4354,12 @@ body,
     background 0.15s;
 }
 
-.lobby-recent-remove:hover {
+.sidebar-room-remove:hover {
   color: var(--red);
   background: var(--bg3);
 }
 
-.lobby-recent-remove .material-symbols-rounded {
+.sidebar-room-remove .material-symbols-rounded {
   font-size: 1rem;
   display: block;
 }
@@ -4355,9 +4385,55 @@ body,
 }
 
 @media (max-width: 700px) {
-  .lobby-cards,
-  .lobby-recent-grid {
+  .lobby-cards {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Sidebar has no competing panel on the lobby page (unlike the in-room
+   .members-panel drawer), so on narrow screens it just reflows to a
+   horizontal strip above the shell instead of a slide-in drawer. */
+@media (max-width: 53.75rem) {
+  .lobby-layout {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .lobby-sidebar {
+    width: 100%;
+    max-height: none;
+  }
+
+  .lobby-sidebar-list {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 0.25rem;
+    padding: 0 0.5rem;
+  }
+
+  .sidebar-room-row {
+    flex-direction: column;
+    min-width: 4.5rem;
+    text-align: center;
+    padding: 0.5rem;
+  }
+
+  .sidebar-room-info {
+    flex: none;
+  }
+
+  .sidebar-room-name {
+    max-width: 4rem;
+  }
+
+  .sidebar-room-meta {
+    display: none;
+  }
+
+  /* No hover on touch — keep actions always visible, same convention as
+     .participant-actions' mobile override. */
+  .sidebar-room-actions {
+    display: flex;
   }
 }
 

@@ -202,6 +202,29 @@ app.post('/api/validate-room', rateLimit(60_000, 30), (req, res) => {
     res.json({ valid: true, needsPassword: false, name: meta.name });
 });
 
+// API: Live status for saved rooms (lobby sidebar badges) — reads only the
+// in-memory session state getSessionMeta() already exposes for validate-room;
+// nothing new is stored or tracked server-side. Projects down to the minimum
+// public-safe fields (no creatorPeerId/moderatorPeerIds/name/hasPassword).
+const MAX_STATUS_CODES = 50;
+const ROOM_CODE_RE = /^[A-Za-z0-9]{5}$/;
+app.post('/api/room-status', rateLimit(60_000, 40), (req, res) => {
+    const { codes } = req.body || {};
+    if (!Array.isArray(codes)) {
+        res.json({ statuses: {} });
+        return;
+    }
+    const statuses = {};
+    for (const code of codes.slice(0, MAX_STATUS_CODES)) {
+        if (typeof code !== 'string' || !ROOM_CODE_RE.test(code)) continue;
+        const meta = manager.getSessionMeta(code);
+        statuses[code] = meta
+            ? { active: true, peerCount: meta.peerCount, maxPeers: meta.maxPeers }
+            : { active: false };
+    }
+    res.json({ statuses });
+});
+
 // Retired standalone settings page — settings now live in a single overlay
 // reachable from the lobby and in-room (see public/client/SettingsPanel.js).
 // Redirect old bookmarked URLs instead of 404ing.
