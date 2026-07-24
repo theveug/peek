@@ -1,6 +1,7 @@
 import { playSound } from './SoundPlayer.js';
 import { ChatUI } from './ChatUI.js';
 import { escapeHtml } from './escapeHtml.js';
+import * as chatHistoryStore from './chatHistoryStore.js';
 
 /**
  * Owns everything DOM-facing for the room page: the video grid/focus stage,
@@ -42,6 +43,7 @@ export class UIController {
             getAllNicknames: () => this._allNicknames(),
             isModerator: () => !!this.selfPeerId && this.moderatorPeerIds.has(this.selfPeerId),
             getAvatar: (id) => this.peerAvatars.get(id) || null,
+            getRoomCode: () => this.roomCode,
         });
         // A dragged self-view PiP's saved left/top can end up off-screen after the
         // window shrinks (e.g. undocking to a smaller monitor) — reclamp on resize.
@@ -1494,6 +1496,11 @@ export class UIController {
      * @returns {void}
      */
     setRoomMeta({ name, code, hasPassword, maxPeers }) {
+        // Compare before overwriting: a same-room reconnect (network blip, server
+        // restart) must not re-load and re-render history a second time, only an
+        // actual room change (first join, or RoomRail switching rooms) should.
+        const isNewRoom = !!code && code !== this.roomCode;
+
         this.roomName = name || null;
         this.roomCode = code || null;
         this.maxPeers = maxPeers || 6;
@@ -1509,6 +1516,39 @@ export class UIController {
         if (codeEl) codeEl.textContent = code;
 
         this._updateMemberCount();
+
+        if (isNewRoom) this._loadChatHistory(code);
+    }
+
+    /**
+     * Renders a room's locally-persisted chat history (see `chatHistoryStore.js`)
+     * above the live chat log on join/room-switch, oldest-first, read-only
+     * (`isHistorical = true` — no hover action bar, never re-persisted). No-ops
+     * entirely when the opt-in `chatHistoryEnabled` setting is off. A one-time
+     * "today" divider separates the loaded scrollback from whatever live traffic
+     * arrives next.
+     * @param {string} code
+     * @returns {Promise<void>}
+     */
+    async _loadChatHistory(code) {
+        if (localStorage.getItem('chatHistoryEnabled') !== '1') return;
+        const days = parseInt(localStorage.getItem('chatHistoryDays'), 10) || 7;
+        const entries = await chatHistoryStore.getHistory(code, days);
+        if (!entries.length) return;
+        // The room may have changed again (fast room-switch) by the time this
+        // async read resolves — don't paint stale history into the wrong room.
+        if (this.roomCode !== code) return;
+
+        for (const entry of entries) {
+            this.chat.addChatMessage(entry.sender, entry.text, entry.messageId, null, entry.isSelf, null, true);
+        }
+        const chatLog = document.getElementById('chat-log');
+        if (chatLog) {
+            const divider = document.createElement('div');
+            divider.className = 'chat-history-divider';
+            divider.textContent = 'Today';
+            chatLog.appendChild(divider);
+        }
     }
 
     /**

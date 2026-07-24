@@ -2,6 +2,7 @@ import { playSound } from './SoundPlayer.js';
 import { escapeHtml } from './escapeHtml.js';
 import { openEmojiPicker } from './EmojiPicker.js';
 import { trapFocus } from './focusTrap.js';
+import * as chatHistoryStore from './chatHistoryStore.js';
 
 /**
  * Chat panel behavior: messages, typing indicators, reactions, polls,
@@ -21,13 +22,17 @@ export class ChatUI {
      *   custom-avatar data URL (from `UIController.peerAvatars`), or null/undefined for the
      *   initials fallback. Ends the chat-message-avatars scope cut noted in CLAUDE.md — callers
      *   now thread a peerId alongside the resolved nickname string wherever a message is added.
+     * @param {() => string} [deps.getRoomCode] - current room code, for keying local chat-history
+     *   persistence (`chatHistoryStore.js`). Lazy like `getAvatar`/`getAllNicknames` since the room
+     *   code isn't known yet at construction time.
      */
-    constructor({ getNickname, avatarInitials, getAllNicknames, isModerator, getAvatar }) {
+    constructor({ getNickname, avatarInitials, getAllNicknames, isModerator, getAvatar, getRoomCode }) {
         this._getNickname = getNickname;
         this._avatarInitials = avatarInitials || ((name) => name.charAt(0).toUpperCase());
         this._getAllNicknames = getAllNicknames || (() => []);
         this._isModerator = isModerator || (() => false);
         this._getAvatar = getAvatar || (() => null);
+        this._getRoomCode = getRoomCode || (() => null);
         this.maxMessages = 100;
         this._typingPeers = new Set();
         this._reactions = new Map();
@@ -52,6 +57,23 @@ export class ChatUI {
         this.onUnpinMessage = null; // (messageId) — wired to PeerManager.broadcastUnpin
         this._wirePinnedPanel();
         this._wireSearchPanel();
+    }
+
+    /**
+     * Persists one text message to `chatHistoryStore.js`, gated on the opt-in
+     * `chatHistoryEnabled` setting. Never called for historical entries being
+     * re-rendered on rejoin (that would just re-write what was just read back).
+     * @param {string} messageId
+     * @param {string} sender
+     * @param {string} text
+     * @param {boolean} isSelf
+     * @returns {void}
+     */
+    _persistHistoryMessage(messageId, sender, text, isSelf) {
+        if (localStorage.getItem('chatHistoryEnabled') !== '1') return;
+        const roomCode = this._getRoomCode();
+        if (!roomCode) return;
+        chatHistoryStore.appendMessage(roomCode, { messageId, sender, text, ts: Date.now(), isSelf });
     }
 
     /**
@@ -715,6 +737,9 @@ export class ChatUI {
                 this._messageMeta.delete(key);
             }
             this._setupEmojiPicker(msgContainer.querySelector('.chat-message'), messageId, caption || '', isSelf);
+            // Only the caption text is ever persisted — file bytes aren't stored anywhere in
+            // this app today, and history is text-only by design (see chatHistoryStore.js).
+            if (caption) this._persistHistoryMessage(messageId, sender, caption, isSelf);
         }
 
         chatLog.appendChild(msgContainer);
@@ -1302,9 +1327,13 @@ export class ChatUI {
      * @param {string|null} [senderPeerId=null] - for avatar lookup — the message author's
      *   peerId (or the local user's own peerId for the self echo), separate from the resolved
      *   nickname string in `sender`. See `ChatUI` constructor's `getAvatar` dep.
+     * @param {boolean} [isHistorical=false] - true when re-rendering a message loaded from
+     *   `chatHistoryStore.js` on rejoin, rather than live traffic. Renders read-only (no hover
+     *   action bar — editing/replying to a days-old message means nothing once the original
+     *   peers are gone) and is never itself persisted back to history.
      * @returns {void}
      */
-    addChatMessage(sender, text, messageId, replyData, isSelf = false, senderPeerId = null) {
+    addChatMessage(sender, text, messageId, replyData, isSelf = false, senderPeerId = null, isHistorical = false) {
         const chatLog = document.getElementById('chat-log');
         const msgContainer = document.createElement('div');
         if (!messageId) messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
@@ -1316,7 +1345,7 @@ export class ChatUI {
         const color = isSelf ? '#22c55e' : this._colorForName(sender);
         const replyHtml = this._replyQuoteHtml(replyData);
 
-        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5">${this._avatarHtml(senderPeerId, initial, color)}<span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}<div class="chat-markdown chat-body prose ml-7">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm${isHistorical ? ' chat-message-history' : ''}"><div class="flex items-center gap-2 mb-0.5">${this._avatarHtml(senderPeerId, initial, color)}<span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}<div class="chat-markdown chat-body prose ml-7">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
 
         this._wireReplyQuote(msgContainer);
 
@@ -1329,7 +1358,10 @@ export class ChatUI {
             if (this._messageMeta.size <= 300) break;
             this._messageMeta.delete(key);
         }
-        this._setupEmojiPicker(msg, messageId, text, isSelf);
+        if (!isHistorical) {
+            this._setupEmojiPicker(msg, messageId, text, isSelf);
+            this._persistHistoryMessage(messageId, sender, text, isSelf);
+        }
         chatLog.appendChild(msgContainer);
 
         while (chatLog.children.length > this.maxMessages) {
@@ -1337,6 +1369,11 @@ export class ChatUI {
         }
 
         const mentionedMe = this._finalizeMarkdownBody(msgContainer);
+
+        if (isHistorical) {
+            this._scrollIfAtBottom(chatLog);
+            return;
+        }
 
         const newMessageIndicator = document.getElementById('new-message-indicator');
         const tabFocused = document.hasFocus();
@@ -1427,6 +1464,7 @@ export class ChatUI {
         if (!container || !body) return;
         const meta = this._messageMeta.get(messageId);
         if (meta) meta.rawText = newText;
+        if (localStorage.getItem('chatHistoryEnabled') === '1') chatHistoryStore.updateMessage(messageId, newText);
 
         // A remote edit racing a local inline-edit session: drop the editor
         // rather than leave it saving over text the user can no longer see.
@@ -1461,6 +1499,7 @@ export class ChatUI {
         this._messageMeta.delete(messageId);
         this._reactions.delete(messageId);
         if (this._pinned.delete(messageId)) this._renderPinnedPanel();
+        if (localStorage.getItem('chatHistoryEnabled') === '1') chatHistoryStore.deleteMessage(messageId);
     }
 
     /**

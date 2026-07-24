@@ -31,7 +31,8 @@
     "test:datachannel": "node tests/datachannel-hardening.mjs",
     "test:avatar": "node tests/avatar-validation.mjs",
     "test:password-hardening": "node tests/password-hardening.mjs",
-    "test:mic-policy": "node tests/mic-policy.mjs"
+    "test:mic-policy": "node tests/mic-policy.mjs",
+    "test:chat-history": "node tests/chat-history-retention.mjs"
   },
   "author": "",
   "license": "ISC",

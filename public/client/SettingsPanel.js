@@ -8,6 +8,7 @@ import { setBackgroundTint, getStoredBackgroundTint, bgTintPresetNames, presetBg
 import { setFontScale, getStoredFontScale, fontScaleLabel } from './FontScaleManager.js';
 import { trapFocus } from './focusTrap.js';
 import { getCustomStatuses, getCustomStatus, upsertCustomStatus, deleteCustomStatus, SWATCHES } from './CustomStatuses.js';
+import * as chatHistoryStore from './chatHistoryStore.js';
 
 // Labels for the tri-state mute/deafen pickers in the custom-status form —
 // 'none' means "leave as-is," so a status can just as easily auto-unmute/
@@ -508,10 +509,41 @@ export class SettingsPanel {
                             </div>
                             <div class="settings-toggle-row">
                                 <div>
+                                    <div class="settings-toggle-row-title">Save chat history on this device</div>
+                                    <div class="settings-toggle-row-desc">Keeps a local copy of your chat text so it's
+                                        here when you rejoin this room. Only ever stored in your browser — never sent
+                                        anywhere, and other peers can't tell it's on.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox"
+                                        id="settings-chat-history-enabled" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-field hidden" id="chat-history-days-field">
+                                <label for="settings-chat-history-days" class="settings-label">Keep history for</label>
+                                <select id="settings-chat-history-days" class="settings-text-input">
+                                    <option value="1">1 day</option>
+                                    <option value="3">3 days</option>
+                                    <option value="7">7 days</option>
+                                    <option value="14">14 days</option>
+                                    <option value="30">30 days</option>
+                                </select>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Clear chat history</div>
+                                    <div class="settings-toggle-row-desc">Wipes locally-saved chat text for every room,
+                                        separately from every other preference below.</div>
+                                </div>
+                                <button type="button" id="settings-clear-chat-history" class="settings-danger-btn">Clear
+                                    history</button>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
                                     <div class="settings-toggle-row-title">Clear all local data</div>
                                     <div class="settings-toggle-row-desc">Wipes everything Peek has saved in this browser —
-                                        nickname, theme &amp; appearance, mic/video preferences, and saved rooms (including
-                                        their passwords). Doesn't affect anyone else or end your current call.</div>
+                                        nickname, theme &amp; appearance, mic/video preferences, saved rooms (including
+                                        their passwords), and chat history. Doesn't affect anyone else or end your current
+                                        call.</div>
                                 </div>
                                 <button type="button" id="settings-clear-data" class="settings-danger-btn">Clear
                                     data</button>
@@ -1555,6 +1587,48 @@ export class SettingsPanel {
             localStorage.setItem('autoAcceptFiles', e.target.checked ? '1' : '0');
         });
 
+        const historyToggle = document.getElementById('settings-chat-history-enabled');
+        const daysField = document.getElementById('chat-history-days-field');
+        historyToggle?.addEventListener('change', (e) => {
+            localStorage.setItem('chatHistoryEnabled', e.target.checked ? '1' : '0');
+            daysField?.classList.toggle('hidden', !e.target.checked);
+        });
+        document.getElementById('settings-chat-history-days')?.addEventListener('change', (e) => {
+            localStorage.setItem('chatHistoryDays', e.target.value);
+        });
+
+        // Lighter-weight sibling of "Clear all local data" below — wipes only
+        // chatHistoryStore.js's IndexedDB data, not every other preference.
+        // Same two-step armed-confirm pattern as that button.
+        const clearHistoryBtn = document.getElementById('settings-clear-chat-history');
+        if (clearHistoryBtn) {
+            const defaultLabel = clearHistoryBtn.textContent;
+            let confirming = false;
+            let resetTimer = null;
+
+            clearHistoryBtn.addEventListener('click', () => {
+                if (!confirming) {
+                    confirming = true;
+                    clearHistoryBtn.textContent = 'Click again to confirm';
+                    clearHistoryBtn.classList.add('confirming');
+                    resetTimer = setTimeout(() => {
+                        confirming = false;
+                        clearHistoryBtn.textContent = defaultLabel;
+                        clearHistoryBtn.classList.remove('confirming');
+                    }, 4000);
+                    return;
+                }
+
+                clearTimeout(resetTimer);
+                chatHistoryStore.clearAll();
+                confirming = false;
+                clearHistoryBtn.classList.remove('confirming');
+                clearHistoryBtn.textContent = 'Cleared';
+                this.ui?.showToast?.('Chat history cleared', 'info');
+                setTimeout(() => (clearHistoryBtn.textContent = defaultLabel), 1500);
+            });
+        }
+
         // No confirm-before-destructive-action pattern exists elsewhere in the
         // app to reuse (removing a saved room / kicking a peer both fire
         // immediately) — this is a two-step "click again to confirm" button
@@ -1581,6 +1655,7 @@ export class SettingsPanel {
 
                 clearTimeout(resetTimer);
                 localStorage.clear();
+                chatHistoryStore.clearAll();
                 clearBtn.textContent = 'Cleared — reloading...';
                 this.ui?.showToast?.('Local data cleared', 'info');
                 setTimeout(() => window.location.reload(), 600);
@@ -1591,5 +1666,12 @@ export class SettingsPanel {
     _refreshPrivacy() {
         const autoAccept = document.getElementById('settings-auto-accept-files');
         if (autoAccept) autoAccept.checked = localStorage.getItem('autoAcceptFiles') === '1';
+
+        const historyToggle = document.getElementById('settings-chat-history-enabled');
+        const historyEnabled = localStorage.getItem('chatHistoryEnabled') === '1';
+        if (historyToggle) historyToggle.checked = historyEnabled;
+        document.getElementById('chat-history-days-field')?.classList.toggle('hidden', !historyEnabled);
+        const daysSelect = document.getElementById('settings-chat-history-days');
+        if (daysSelect) daysSelect.value = localStorage.getItem('chatHistoryDays') || '7';
     }
 }
