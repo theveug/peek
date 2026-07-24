@@ -4,16 +4,22 @@
 // `script-src 'self'` with no 'unsafe-inline'. Same module semantics (deferred),
 // so behavior is unchanged.
 import { initTheme } from '/client/ThemeManager.js';
-import { getSavedRooms, saveRoom, removeRoom } from '/client/savedRooms.js';
+import { saveRoom } from '/client/savedRooms.js';
 import { SettingsPanel } from '/client/SettingsPanel.js';
 import { initTooltips } from '/client/Tooltip.js';
-import { startRoomStatusPolling } from '/client/roomStatusPoll.js';
+import { RoomRail } from '/client/RoomRail.js';
 
 initTheme();
 initTooltips();
 
 const settingsPanel = new SettingsPanel();
 document.getElementById('settings-button').addEventListener('click', () => settingsPanel.open());
+
+const roomRail = new RoomRail({ currentRoomCode: null, navigate: (url) => { window.location.href = url; } });
+
+if (new URLSearchParams(location.search).get('new')) {
+    document.getElementById('create-name')?.focus();
+}
 
 if (new URLSearchParams(location.search).get('full')) {
     const fullRoomError = document.getElementById('join-error');
@@ -192,167 +198,3 @@ joinCode.addEventListener('paste', (e) => {
     e.preventDefault();
     joinCode.value = text.replace(/[^A-Za-z0-9]/g, '').slice(-5);
 });
-
-// --- Saved rooms sidebar ---
-const savedSection = document.getElementById('saved-rooms-sidebar');
-const savedList = document.getElementById('saved-rooms-list');
-const savedError = document.getElementById('saved-rooms-error');
-
-// code -> {active, peerCount, maxPeers} | undefined, persists across re-renders
-// so badges don't flash back to "unknown" when a neighboring room changes.
-let statusMap = new Map();
-let stopStatusPolling = null;
-
-function hueFromString(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) % 360;
-    return Math.abs(hash);
-}
-
-function initialsFromLabel(label) {
-    const words = label.trim().split(/\s+/).filter(Boolean);
-    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
-    return label.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || '??';
-}
-
-function formatRelativeTime(ms) {
-    if (!ms) return '';
-    const diff = Date.now() - ms;
-    const min = Math.round(diff / 60000);
-    if (min < 1) return 'just now';
-    if (min < 60) return `${min}m ago`;
-    const hr = Math.round(min / 60);
-    if (hr < 24) return `${hr}h ago`;
-    const day = Math.round(hr / 24);
-    return `${day}d ago`;
-}
-
-function statusStateFor(code) {
-    const status = statusMap.get(code);
-    if (!status) return 'unknown';
-    return status.active ? 'active' : 'inactive';
-}
-
-function applyStatusToRow(row, code) {
-    const dot = row.querySelector('.sidebar-room-status');
-    if (!dot) return;
-    const state = statusStateFor(code);
-    dot.dataset.state = state;
-    const status = statusMap.get(code);
-    dot.dataset.tip = state === 'active' ? `${status.peerCount} / ${status.maxPeers} in room` : state === 'inactive' ? 'Not active' : 'Checking…';
-}
-
-function updateStatusBadges(statuses) {
-    for (const [code, status] of Object.entries(statuses)) statusMap.set(code, status);
-    savedList.querySelectorAll('.sidebar-room-row').forEach((row) => applyStatusToRow(row, row.dataset.code));
-}
-
-function renderSavedRooms() {
-    const rooms = getSavedRooms();
-    savedSection.classList.toggle('hidden', rooms.length === 0);
-    savedList.innerHTML = '';
-
-    rooms.forEach((room) => {
-        const row = document.createElement('div');
-        row.className = 'sidebar-room-row';
-        row.dataset.code = room.code;
-
-        const avatar = document.createElement('div');
-        avatar.className = 'sidebar-room-avatar';
-        avatar.style.background = `oklch(0.55 0.13 ${hueFromString(room.code + room.label)})`;
-        avatar.textContent = initialsFromLabel(room.label);
-        row.appendChild(avatar);
-
-        const info = document.createElement('div');
-        info.className = 'sidebar-room-info';
-
-        const nameEl = document.createElement('div');
-        nameEl.className = 'sidebar-room-name';
-        nameEl.textContent = room.label;
-        if (room.password) {
-            const lockIcon = document.createElement('span');
-            lockIcon.className = 'material-symbols-rounded';
-            lockIcon.textContent = 'lock';
-            nameEl.appendChild(lockIcon);
-        }
-        info.appendChild(nameEl);
-
-        const metaEl = document.createElement('div');
-        metaEl.className = 'sidebar-room-meta font-mono-app';
-        metaEl.textContent = room.code + (room.savedAt ? ` · ${formatRelativeTime(room.savedAt)}` : '');
-        info.appendChild(metaEl);
-
-        row.appendChild(info);
-
-        const statusDot = document.createElement('span');
-        statusDot.className = 'sidebar-room-status';
-        row.appendChild(statusDot);
-
-        const actions = document.createElement('div');
-        actions.className = 'sidebar-room-actions';
-
-        const rejoinBtn = document.createElement('button');
-        rejoinBtn.type = 'button';
-        rejoinBtn.dataset.tip = 'Rejoin';
-        rejoinBtn.className = 'sidebar-room-rejoin';
-        rejoinBtn.innerHTML = '<span class="material-symbols-rounded">arrow_forward</span>';
-        rejoinBtn.addEventListener('click', async () => {
-            savedError.classList.add('hidden');
-            rejoinBtn.disabled = true;
-            try {
-                await attemptJoin(room.code, room.password, {
-                    onFull: () => {
-                        savedError.textContent = `"${room.label}" is full.`;
-                        savedError.classList.remove('hidden');
-                    },
-                    onNeedsPassword: () => {
-                        savedError.textContent = `"${room.label}" now needs a password — enter it below manually.`;
-                        savedError.classList.remove('hidden');
-                        joinCode.value = room.code;
-                        joinPasswordRow.classList.remove('hidden');
-                        joinPassword.focus();
-                    },
-                    onWrongPassword: () => {
-                        savedError.textContent = `"${room.label}" exists but the saved password is wrong — someone else may have recreated it. Enter the correct password below.`;
-                        savedError.classList.remove('hidden');
-                        joinCode.value = room.code;
-                        joinPasswordRow.classList.remove('hidden');
-                        joinPassword.focus();
-                    },
-                }).then((joined) => {
-                    if (joined) saveRoom({ code: room.code, label: room.label, password: room.password });
-                });
-            } finally {
-                rejoinBtn.disabled = false;
-            }
-        });
-        actions.appendChild(rejoinBtn);
-
-        const removeBtn = document.createElement('button');
-        removeBtn.type = 'button';
-        removeBtn.dataset.tip = 'Remove';
-        removeBtn.className = 'sidebar-room-remove';
-        removeBtn.innerHTML = '<span class="material-symbols-rounded">close</span>';
-        removeBtn.addEventListener('click', () => {
-            removeRoom(room.code);
-            renderSavedRooms();
-        });
-        actions.appendChild(removeBtn);
-
-        row.appendChild(actions);
-
-        savedList.appendChild(row);
-        applyStatusToRow(row, room.code);
-    });
-
-    // Start/stop the poller as the saved-room count transitions across zero,
-    // so removing the last saved room actually stops network traffic.
-    if (rooms.length > 0 && !stopStatusPolling) {
-        stopStatusPolling = startRoomStatusPolling(() => getSavedRooms().map((r) => r.code), updateStatusBadges);
-    } else if (rooms.length === 0 && stopStatusPolling) {
-        stopStatusPolling();
-        stopStatusPolling = null;
-    }
-}
-
-renderSavedRooms();

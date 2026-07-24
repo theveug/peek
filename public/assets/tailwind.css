@@ -3916,15 +3916,7 @@ body,
   align-items: center;
   justify-content: center;
   padding: 2.5rem 1.5rem;
-}
-
-.lobby-layout {
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 1.5rem;
-  width: 100%;
-  max-width: 73.75rem;
+  padding-left: calc(1.5rem + var(--room-rail-width));
 }
 
 .lobby-glow {
@@ -4217,153 +4209,6 @@ body,
   color: var(--t3);
 }
 
-/* ===== Lobby sidebar (redesign, Phase 2d) ===== */
-.lobby-sidebar {
-  width: 15rem;
-  flex-shrink: 0;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 0.875rem;
-  padding: 0.75rem 0;
-  max-height: calc(100vh - 5rem);
-  overflow-y: auto;
-}
-
-.lobby-sidebar-header {
-  padding: 0 0.875rem 0.625rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-
-.lobby-recent-note {
-  font-size: 0.7188rem;
-  color: var(--t3);
-}
-
-.lobby-sidebar-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar-room-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.875rem;
-}
-
-.sidebar-room-row:hover {
-  background: var(--card-hover);
-}
-
-.sidebar-room-avatar {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.625rem;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: 0.75rem;
-}
-
-.sidebar-room-status {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--t3);
-}
-
-.sidebar-room-status[data-state="active"] {
-  background: var(--green);
-}
-
-.sidebar-room-info {
-  min-width: 0;
-  flex: 1;
-}
-
-.sidebar-room-name {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-weight: 700;
-  color: var(--t1);
-  font-size: 0.8125rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sidebar-room-name .material-symbols-rounded {
-  font-size: 0.8125rem;
-  color: var(--t3);
-  flex-shrink: 0;
-}
-
-.sidebar-room-meta {
-  font-size: 0.6875rem;
-  color: var(--t3);
-  margin-top: 0.0625rem;
-}
-
-/* Rejoin/remove collapse behind a hover reveal, same pattern as
-   .participant-actions in the members sidebar — keeps each row compact. */
-.sidebar-room-actions {
-  display: none;
-  align-items: center;
-  gap: 0.125rem;
-  flex-shrink: 0;
-}
-
-.sidebar-room-row:hover .sidebar-room-actions,
-.sidebar-room-row:focus-within .sidebar-room-actions {
-  display: flex;
-}
-
-.sidebar-room-rejoin {
-  background: none;
-  border: none;
-  padding: 0.25rem;
-  color: var(--accent);
-  cursor: pointer;
-  display: flex;
-  border-radius: 0.5rem;
-}
-
-.sidebar-room-rejoin:hover {
-  background: var(--bg3);
-}
-
-.sidebar-room-rejoin .material-symbols-rounded {
-  font-size: 1.0625rem;
-  display: block;
-}
-
-.sidebar-room-remove {
-  color: var(--t3);
-  padding: 0.25rem;
-  border-radius: 0.5rem;
-  transition:
-    color 0.15s,
-    background 0.15s;
-}
-
-.sidebar-room-remove:hover {
-  color: var(--red);
-  background: var(--bg3);
-}
-
-.sidebar-room-remove .material-symbols-rounded {
-  font-size: 1rem;
-  display: block;
-}
-
 .lobby-privacy-footer {
   display: flex;
   flex-wrap: wrap;
@@ -4390,53 +4235,6 @@ body,
   }
 }
 
-/* Sidebar has no competing panel on the lobby page (unlike the in-room
-   .members-panel drawer), so on narrow screens it just reflows to a
-   horizontal strip above the shell instead of a slide-in drawer. */
-@media (max-width: 53.75rem) {
-  .lobby-layout {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .lobby-sidebar {
-    width: 100%;
-    max-height: none;
-  }
-
-  .lobby-sidebar-list {
-    flex-direction: row;
-    overflow-x: auto;
-    gap: 0.25rem;
-    padding: 0 0.5rem;
-  }
-
-  .sidebar-room-row {
-    flex-direction: column;
-    min-width: 4.5rem;
-    text-align: center;
-    padding: 0.5rem;
-  }
-
-  .sidebar-room-info {
-    flex: none;
-  }
-
-  .sidebar-room-name {
-    max-width: 4rem;
-  }
-
-  .sidebar-room-meta {
-    display: none;
-  }
-
-  /* No hover on touch — keep actions always visible, same convention as
-     .participant-actions' mobile override. */
-  .sidebar-room-actions {
-    display: flex;
-  }
-}
-
 @media (max-width: 480px) {
   .lobby-form-row {
     flex-direction: column;
@@ -4444,6 +4242,175 @@ body,
 
   .lobby-stepper {
     justify-content: center;
+  }
+}
+
+/* ===== Room rail (Discord-style room switcher, 2026-07-24) =====
+   Shared component (public/client/RoomRail.js) mounted on both the lobby and
+   in-room pages — persists across a room switch so a saved room is one click
+   away without leaving to the lobby first. Reserves real layout space via
+   --room-rail-width (rather than overlaying) so .room-shell (index.html) and
+   .lobby-page (below) can each account for it in one place; the mobile hide
+   just zeroes the one custom property instead of three separate rules. */
+:root {
+  --room-rail-width: 4.25rem;
+}
+
+.room-shell {
+  margin-left: var(--room-rail-width);
+}
+
+.room-rail {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 15;
+  width: var(--room-rail-width);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+}
+
+.room-rail-btn {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: var(--bg5);
+  color: var(--t1);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.room-rail-btn:hover {
+  background: var(--bg4);
+}
+
+.room-rail-list {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.room-rail-divider {
+  width: 2rem;
+  height: 0.0625rem;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.room-rail-item {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.room-rail-avatar-btn {
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.8125rem;
+}
+
+/* Same corner-badge geometry as .topbar-identity-status-dot, retargeted for
+   the room-rail's active/unknown states (no away/dnd here — a room is only
+   ever "has live peers" or "doesn't"). */
+.room-rail-status {
+  position: absolute;
+  bottom: -0.125rem;
+  right: -0.125rem;
+  width: 0.6875rem;
+  height: 0.6875rem;
+  border-radius: 50%;
+  border: 2px solid var(--bg2);
+  background: var(--t3);
+}
+
+.room-rail-status[data-state="active"] {
+  background: var(--green);
+}
+
+/* Same small-badge geometry as .dock-caret, opposite corner from the status
+   dot; hover/focus-within reveal matches .participant-actions' convention
+   rather than introducing a right-click context menu. */
+.room-rail-remove {
+  display: none;
+  position: absolute;
+  top: -0.25rem;
+  right: -0.25rem;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg2);
+  color: var(--t3);
+  align-items: center;
+  justify-content: center;
+}
+
+.room-rail-item:hover .room-rail-remove,
+.room-rail-item:focus-within .room-rail-remove {
+  display: flex;
+}
+
+.room-rail-remove:hover {
+  color: var(--red);
+}
+
+.room-rail-remove .material-symbols-rounded {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.room-rail-item.current .room-rail-avatar-btn {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.room-rail-popover {
+  position: fixed;
+  z-index: 70;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.875rem;
+  width: 15.5rem;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.25);
+}
+
+.room-rail-popover-title {
+  font-weight: 700;
+  color: var(--t1);
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+
+.room-rail-popover-status {
+  font-size: 0.8125rem;
+  color: var(--t3);
+  margin-bottom: 0.625rem;
+}
+
+.room-rail-popover-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+@media (max-width: 767px) {
+  .room-rail {
+    display: none;
+  }
+  :root {
+    --room-rail-width: 0rem;
   }
 }
 

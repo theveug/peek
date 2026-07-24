@@ -11,6 +11,7 @@ import { initTooltips } from './Tooltip.js';
 import { openEmojiPicker } from './EmojiPicker.js';
 import { getOwnerToken, setOwnerToken } from './ownerTokens.js';
 import { playSound } from './SoundPlayer.js';
+import { RoomRail } from './RoomRail.js';
 
 initTooltips();
 
@@ -524,17 +525,29 @@ document.getElementById('stage-view-focus').addEventListener('click', () => {
     ui.setViewMode('focus');
 });
 
-document.getElementById('leave-room-button').addEventListener('click', () => {
+// Room-agnostic teardown shared by the Leave Room button and RoomRail's
+// room-switch/Home/"+" actions — everything EXCEPT roomPassword, since that
+// has a different correct value depending on the destination (cleared when
+// heading to the password-less lobby, but set to the *target* room's own
+// password when RoomRail is switching straight into another room). Each call
+// site owns clearing/setting roomPassword itself before calling this.
+function leaveSession(destinationUrl) {
     leavingRoom = true;
     clearTimeout(reconnectTimer);
     socket?.close();
-    // Don't let this room's password/creator-token survive into whatever room
-    // gets created/joined next in this tab — see lobby.html's create/join
+    sessionStorage.removeItem('creatorToken');
+    window.location.href = destinationUrl;
+}
+
+document.getElementById('leave-room-button').addEventListener('click', () => {
+    // Don't let this room's password survive into whatever room gets
+    // created/joined next in this tab — see lobby.html's create/join
     // handlers for the matching set-or-clear fix on the other end of this bug.
     sessionStorage.removeItem('roomPassword');
-    sessionStorage.removeItem('creatorToken');
-    window.location.href = '/';
+    leaveSession('/');
 });
+
+new RoomRail({ currentRoomCode: sessionId, navigate: leaveSession });
 
 // Manual mic toggle — the mic button's click and the Toggle Mute keybind
 // (below) both call this. Mirrors toggleDeafen()'s click+keybind sharing.
