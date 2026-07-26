@@ -37,6 +37,7 @@ export class PeerManager {
         this.onBanList = null; // set by QuickRoomSettings — (bans[]) from listBans()/unbanPeer()
         this.onMicPolicy = null; // set by App.js — (policy, isInitial) on 'init' and every 'mic-policy-update'
         this.micPolicy = 'open'; // room mic rule ('open'|'ptt'), server-supplied via 'init'/'mic-policy-update'
+        this.onMicModeForceMuted = null; // set by App.js — (enabled) when enforcePttMuteOnModeSwitch() mutes an open mic
         this.isSharing = false;
         // Placeholder until the server's 'init' supplies the real list (built
         // from the deployment's STUN_URL/TURN env config). Deliberately empty,
@@ -972,6 +973,31 @@ export class PeerManager {
     _effectiveMicMode() {
         if (this.micPolicy === 'ptt') return 'push-to-talk';
         return (typeof localStorage !== 'undefined' && localStorage.getItem('micMode')) || 'toggle';
+    }
+
+    /**
+     * Force-mutes an already-open mic when the user manually switches their
+     * personal mic-mode preference to push-to-talk — the same "an open mic
+     * doesn't stay live" rule the room-imposed 'ptt' policy already enforces
+     * (see the `onMicPolicy` handling in App.js). Without this, switching
+     * modes mid-conversation left the mic transmitting continuously: the
+     * transmit-gate formula in `_reconcileMicGate` only depends on `micMode`
+     * through the voice-activity branch, so for push-to-talk it reduces to
+     * just `micEnabled` — nothing closes the gate on a mode switch by itself,
+     * only a full press+release of the PTT key does (and pressing while
+     * already enabled is a no-op, so only the *release* half of that first
+     * press actually closed it).
+     *
+     * Called after writing the new mode to `localStorage['micMode']`, from
+     * every mic-mode picker (dock quick popover, Settings panel) — one data
+     * model, two UI surfaces, but this enforcement should only live once.
+     * @param {string} mode - the newly selected mic mode.
+     * @returns {Promise<void>}
+     */
+    async enforcePttMuteOnModeSwitch(mode) {
+        if (mode !== 'push-to-talk' || !this.micEnabled || this.ptmHeld) return;
+        const enabled = await this.toggleMic();
+        this.onMicModeForceMuted?.(enabled);
     }
 
     /** Starts the 200ms active-speaker/mic-gate poll (idempotent). */

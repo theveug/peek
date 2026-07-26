@@ -732,6 +732,7 @@ function updateMicOptionsThresholdLabel(threshold) {
 const refreshMicOptionsMode = wireSegmentedPicker('mic-options-mode-picker', 'micMode', (value) => {
     ui.updateMicModeBadge(value);
     refreshMicOptionsRows();
+    peerManager.enforcePttMuteOnModeSwitch(value);
 });
 
 // Room mic rule: while the room enforces push-to-talk, the quick popover's
@@ -763,15 +764,20 @@ peerManager.onMicPolicy = (policy) => {
     refreshMicOptionsRows();
     if (policy === 'ptt') {
         // The rule takes effect immediately: an open mic gets muted rather than
-        // staying live until the next manual toggle.
-        if (peerManager.micEnabled) {
-            peerManager.toggleMic().then(enabled => updateMicUI(enabled));
-        }
+        // staying live until the next manual toggle. Same rule (and the same
+        // shared enforcement) as a personal mode switch to push-to-talk below.
+        peerManager.enforcePttMuteOnModeSwitch('push-to-talk');
         if (!localStorage.getItem('keybindPushToTalk')) {
             ui.addSystemMessage('This room uses push-to-talk — set a Push to Talk keybind via Settings → Keybinds', 'info');
         }
     }
 };
+
+// Fires whenever enforcePttMuteOnModeSwitch() force-mutes an already-open mic
+// on a mode switch (personal preference or the room rule above) — the one
+// place that keeps the dock mic icon in sync with that side effect,
+// regardless of which UI surface triggered the switch.
+peerManager.onMicModeForceMuted = (enabled) => updateMicUI(enabled);
 
 document.getElementById('mic-options-threshold')?.addEventListener('input', (e) => {
     localStorage.setItem('micThreshold', e.target.value);
@@ -1063,7 +1069,12 @@ new TopbarIdentity({ peerManager, settingsPanel });
 // very first call (page load has nothing to compare against).
 let _lastMicUIEnabled = null;
 
-function updateMicUI(enabled) {
+// `silent` skips the mute/unmute chime — used by the push-to-talk/push-to-mute
+// hold handlers below, since every key-down/key-up of a held PTT/PTM keybind
+// is an expected, rapid, per-utterance state flip (not a deliberate "mute
+// myself" action), and chiming on every single one is just noise. The click
+// toggle, Toggle Mute keybind, and deafen all still want the chime.
+function updateMicUI(enabled, silent = false) {
     document.getElementById('mic-off-icon').classList.toggle('hidden', enabled);
     document.getElementById('mic-on-icon').classList.toggle('hidden', !enabled);
     document.getElementById('mic-toggle').dataset.tip = enabled ? 'Mute Microphone' : 'Unmute Microphone';
@@ -1071,7 +1082,7 @@ function updateMicUI(enabled) {
     // tailwind.css) — reused here as a toggled state instead of a permanent one, so a
     // muted mic reads as unmistakably "off" at a glance, Discord-style.
     document.getElementById('mic-toggle').classList.toggle('dock-btn-active-red', !enabled);
-    if (_lastMicUIEnabled !== null && enabled !== _lastMicUIEnabled) {
+    if (!silent && _lastMicUIEnabled !== null && enabled !== _lastMicUIEnabled) {
         playSound(enabled ? 'unmuted' : 'muted');
     }
     _lastMicUIEnabled = enabled;
@@ -1096,9 +1107,9 @@ window.addEventListener('keydown', (e) => {
 
     if (micMode === 'push-to-talk') {
         if (!peerManager.micStream) {
-            peerManager.toggleMic().then(enabled => updateMicUI(enabled));
+            peerManager.toggleMic().then(enabled => updateMicUI(enabled, true));
         } else if (!peerManager.micEnabled) {
-            peerManager.toggleMic().then(enabled => updateMicUI(enabled));
+            peerManager.toggleMic().then(enabled => updateMicUI(enabled, true));
         }
     } else {
         // Toggle or voice-activity: hold to force-mute. Doesn't touch
@@ -1109,7 +1120,7 @@ window.addEventListener('keydown', (e) => {
         // so peers see the mute the same frame as the local UI does.
         peerManager.ptmHeld = true;
         peerManager.broadcastMicStatus();
-        updateMicUI(false);
+        updateMicUI(false, true);
     }
 });
 
@@ -1123,12 +1134,12 @@ window.addEventListener('keyup', (e) => {
 
     if (micMode === 'push-to-talk') {
         if (peerManager.micEnabled) {
-            peerManager.toggleMic().then(enabled => updateMicUI(enabled));
+            peerManager.toggleMic().then(enabled => updateMicUI(enabled, true));
         }
     } else {
         peerManager.ptmHeld = false;
         peerManager.broadcastMicStatus();
-        updateMicUI(peerManager.micEnabled);
+        updateMicUI(peerManager.micEnabled, true);
     }
 });
 

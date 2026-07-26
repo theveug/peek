@@ -1300,6 +1300,7 @@ export class SettingsPanel {
             btn.addEventListener('click', () => {
                 localStorage.setItem('micMode', btn.dataset.micMode);
                 this._refreshMicMode();
+                this.peerManager?.enforcePttMuteOnModeSwitch(btn.dataset.micMode);
             });
         });
 
