@@ -4406,7 +4406,10 @@ body,
 
 .room-rail-popover {
   position: fixed;
-  z-index: 70;
+  /* Above .room-rail's own mobile z-index:80 (drawer) — a room-click popover
+     (password prompt, "joining…") is anchored to a button inside the rail
+     and must stay visible above it, not get tucked underneath. */
+  z-index: 81;
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
@@ -4433,12 +4436,60 @@ body,
   gap: 0.5rem;
 }
 
+/* Floating opener for the mobile drawer below — no host-page anchor exists
+   to attach an edge tab to (unlike .chat-tab/.members-tab, which attach to
+   #videos, absent on the lobby page), so this is a self-positioned FAB built
+   by RoomRail.js itself. Hidden on desktop; hidden again once the drawer it
+   opens is actually open, since the opaque rail would otherwise just cover it. */
+.room-rail-mobile-toggle {
+  display: none;
+  position: fixed;
+  top: calc(3.625rem + 0.625rem);
+  left: 0.625rem;
+  z-index: 40;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg4);
+  color: var(--t1);
+  border: 1px solid var(--border);
+  box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.3);
+}
+
 @media (max-width: 767px) {
+  /* Was display:none outright — saved rooms had no way to be reached on
+     mobile at all once RoomRail replaced the old lobby-only sidebar (see
+     CLAUDE.md's "Room rail" entry). Now a left slide-in drawer instead,
+     opened via .room-rail-mobile-toggle above and closed by tapping outside
+     it (RoomRail.js's document click/Escape handlers) — same dismissible-
+     overlay convention as the chat/members mobile drawers, just without
+     their shared #mobile-backdrop (room-page-only element; RoomRail also
+     mounts on the lobby, so it can't depend on it). */
   .room-rail {
-    display: none;
+    display: flex;
+    width: 4.25rem;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 80;
+    box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.35);
   }
+
+  .room-rail.mobile-open {
+    transform: translateX(0);
+  }
+
   :root {
     --room-rail-width: 0rem;
+  }
+
+  .room-rail-mobile-toggle {
+    display: flex;
+  }
+
+  .room-rail.mobile-open ~ .room-rail-mobile-toggle {
+    display: none;
   }
 }
 

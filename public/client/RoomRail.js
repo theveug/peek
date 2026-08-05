@@ -38,6 +38,7 @@ export class RoomRail {
         this.rail = document.getElementById('room-rail') || this._buildRail();
         this.listEl = this.rail.querySelector('#room-rail-list');
         this.popover = document.getElementById('room-rail-popover') || this._buildPopover();
+        this.mobileToggle = document.getElementById('room-rail-mobile-toggle') || this._buildMobileToggle();
 
         this._wireOutsideClick();
         this.render();
@@ -63,6 +64,32 @@ export class RoomRail {
         return rail;
     }
 
+    // Mobile has no host-page anchor to attach an edge tab to the way
+    // .chat-tab/.members-tab attach to #videos (which doesn't exist on the
+    // lobby page) — so the rail's own drawer gets a small floating FAB
+    // instead, built here rather than in either HTML file, same
+    // no-markup-duplication reasoning as the rail/popover above.
+    _buildMobileToggle() {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'room-rail-mobile-toggle';
+        btn.className = 'room-rail-mobile-toggle';
+        btn.dataset.tip = 'Rooms';
+        btn.innerHTML = '<span class="material-symbols-rounded">apps</span>';
+        document.body.appendChild(btn);
+        btn.addEventListener('click', () => this._toggleMobileRail());
+        return btn;
+    }
+
+    _toggleMobileRail() {
+        this._closePopover();
+        this.rail.classList.toggle('mobile-open');
+    }
+
+    _closeMobileRail() {
+        this.rail.classList.remove('mobile-open');
+    }
+
     _buildPopover() {
         const el = document.createElement('div');
         el.id = 'room-rail-popover';
@@ -72,12 +99,14 @@ export class RoomRail {
     }
 
     _handleHome() {
+        this._closeMobileRail();
         if (location.pathname === '/') return;
         sessionStorage.removeItem('roomPassword');
         this.navigate('/');
     }
 
     _handleAdd() {
+        this._closeMobileRail();
         sessionStorage.removeItem('roomPassword');
         this.navigate('/?new=1');
     }
@@ -203,6 +232,7 @@ export class RoomRail {
         if (password !== room.password) saveRoom({ code: room.code, label: room.label, password: password || null });
 
         this._closePopover();
+        this._closeMobileRail();
         this.navigate('/' + room.code);
     }
 
@@ -251,12 +281,25 @@ export class RoomRail {
 
     _wireOutsideClick() {
         document.addEventListener('click', (e) => {
-            if (this.popover.classList.contains('hidden')) return;
-            if (this.popover.contains(e.target) || (this._anchor && this._anchor.contains(e.target))) return;
-            this._closePopover();
+            if (!this.popover.classList.contains('hidden')) {
+                if (this.popover.contains(e.target) || (this._anchor && this._anchor.contains(e.target))) return;
+                this._closePopover();
+            }
         });
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !this.popover.classList.contains('hidden')) this._closePopover();
+            if (e.key !== 'Escape') return;
+            if (!this.popover.classList.contains('hidden')) this._closePopover();
+            if (this.rail.classList.contains('mobile-open')) this._closeMobileRail();
+        });
+
+        // Mobile drawer: any tap outside the rail itself (and its own opener
+        // button) closes it, same "dismissible overlay" convention as the
+        // chat/members mobile-backdrop, but self-contained here since
+        // #mobile-backdrop only exists on the room page, not the lobby.
+        document.addEventListener('click', (e) => {
+            if (!this.rail.classList.contains('mobile-open')) return;
+            if (this.rail.contains(e.target) || e.target === this.mobileToggle || this.mobileToggle.contains(e.target)) return;
+            this._closeMobileRail();
         });
     }
 }
