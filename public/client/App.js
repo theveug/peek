@@ -78,6 +78,27 @@ function showUpdateBanner() {
     if (banner) banner.classList.remove('hidden');
 }
 
+// Screen Wake Lock: keeps the phone/laptop screen from auto-locking mid-call
+// (locking kills audio until the user manually unlocks again). The OS/browser
+// releases the lock itself whenever the tab goes hidden, so it's re-requested
+// on every visibilitychange back to visible, not just once at join. No-ops
+// silently on browsers without the API (desktop Safari, older mobile) — the
+// call still works, it just won't hold the screen on.
+let wakeLock = null;
+async function acquireWakeLock() {
+    if (!('wakeLock' in navigator) || wakeLock || document.visibilityState !== 'visible') return;
+    try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch {
+        // Permission denied / battery saver / etc — nothing to do but continue without it.
+    }
+}
+function releaseWakeLock() {
+    wakeLock?.release();
+    wakeLock = null;
+}
+
 function connect() {
     socket = new WebSocket(`${protocol}://${location.host}`);
     peerManager.socket = socket;
@@ -122,6 +143,7 @@ function connect() {
         }
         if (msg.type === 'init') {
             checkBuildId(msg.buildId);
+            acquireWakeLock();
             ui.setRoomMeta({ name: msg.roomName, code: sessionId, hasPassword: msg.hasPassword, maxPeers: msg.maxPeers });
             // Present only when this join lazily created the room, making us
             // its owner — persist like lobby.js does for /api/create-room.
@@ -536,6 +558,7 @@ function leaveSession(destinationUrl) {
     clearTimeout(reconnectTimer);
     socket?.close();
     sessionStorage.removeItem('creatorToken');
+    releaseWakeLock();
     window.location.href = destinationUrl;
 }
 
@@ -804,6 +827,7 @@ window.addEventListener('focus', handleFocusChange);
 document.addEventListener('visibilitychange', () => {
     handleFocusChange();
     peerManager.handleTabVisibility(document.hidden);
+    if (!document.hidden) acquireWakeLock();
 });
 
 // Idle/away auto-detection: flips status to the real (yellow) Away after a
