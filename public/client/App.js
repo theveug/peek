@@ -512,9 +512,11 @@ document.getElementById('switch-cam-button').addEventListener('click', () => {
 });
 
 // getDisplayMedia (screen share) isn't implemented in any mobile browser (iOS WebKit
-// or Android) — hide the button entirely rather than let it silently no-op on click.
+// or Android) — hide the whole dock-btn-wrap (button + quality-settings caret +
+// popover), not just the toggle button, so the caret can't be left dangling with
+// no way to reach the button that would normally sit next to it.
 if (!navigator.mediaDevices?.getDisplayMedia) {
-    document.getElementById('share-toggle').style.display = 'none';
+    document.getElementById('share-toggle').closest('.dock-btn-wrap').style.display = 'none';
 }
 
 // Only worth offering camera switching if the device actually has more than one.
