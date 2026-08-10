@@ -2108,14 +2108,22 @@ export class PeerManager {
         }
 
         try {
-            this._camFacingMode = 'user';
             const camDeviceId = localStorage.getItem('camDeviceId');
-            this._rawCamStream = camDeviceId
-                ? await navigator.mediaDevices.getUserMedia({
-                      video: { ...this._resolveQuality('cam'), deviceId: { exact: camDeviceId } },
-                      audio: false,
-                  })
-                : await this._acquireCamStream(this._camFacingMode);
+            if (camDeviceId) {
+                this._rawCamStream = await navigator.mediaDevices.getUserMedia({
+                    video: { ...this._resolveQuality('cam'), deviceId: { exact: camDeviceId } },
+                    audio: false,
+                });
+                const settings = this._rawCamStream.getVideoTracks()[0].getSettings();
+                // Don't assume 'user' just because that's the typical default — an
+                // explicit Settings device pick can just as well be the rear camera.
+                this._camFacingMode = settings.facingMode === 'environment' ? 'environment' : 'user';
+                if (settings.deviceId) localStorage.setItem(`camDeviceId:${this._camFacingMode}`, settings.deviceId);
+            } else {
+                const acquired = await this._acquireCamStream('user');
+                this._rawCamStream = acquired.stream;
+                this._camFacingMode = acquired.facingMode;
+            }
             this._rawCamStream.getVideoTracks()[0].onended = () => {
                 this.stopCam();
                 document.getElementById('cam-on-icon')?.classList.add('hidden');
@@ -2338,47 +2346,70 @@ export class PeerManager {
      * Samsung/Chrome bug: `facingMode: {ideal}` on phones with a multi-lens rear
      * array (wide/ultra-wide/telephoto) can resolve to a non-primary lens that
      * throws `NotReadableError` on open, even though the device has a perfectly
-     * usable primary rear camera. Caches whichever deviceId actually worked per
-     * direction (`camDeviceId:user`/`camDeviceId:environment`) so later switches
-     * go straight to the known-good device instead of re-gambling on facingMode;
-     * if facingMode itself picks a dead lens, probes the remaining videoinput
-     * devices (skipping whichever one is already confirmed for the opposite
-     * direction) until one actually streams.
+     * usable primary rear camera.
+     *
+     * Every candidate's *actual* facing direction is read back from the opened
+     * track's own `getSettings().facingMode` (which Chrome/Android reports
+     * reliably from the hardware's Camera2 `LENS_FACING` characteristic) —
+     * never assumed from what was merely requested. This matters because the
+     * fallback probe below can succeed on a camera facing the *other*
+     * direction (e.g. it lands on the front lens while trying to satisfy an
+     * 'environment' request, because that's the only other lens that actually
+     * streams) — trusting the request instead of the hardware previously
+     * poisoned `camDeviceId:environment` with the front camera's id, making
+     * every later attempt to switch back to rear open the front camera again.
+     * A mismatch is treated as a miss for the requested direction: it's
+     * cached under its *true* direction (self-healing a stale/poisoned entry)
+     * and the search continues rather than being accepted.
+     *
+     * Caches whichever deviceId is confirmed for each direction
+     * (`camDeviceId:user`/`camDeviceId:environment`) so later switches go
+     * straight to the known-good device instead of re-gambling on facingMode.
      * @param {'user'|'environment'} facingMode
-     * @returns {Promise<MediaStream>}
+     * @returns {Promise<{stream: MediaStream, facingMode: 'user'|'environment'}>}
      */
     async _acquireCamStream(facingMode) {
         const quality = this._resolveQuality('cam');
         const tried = new Set();
 
-        const tryDeviceId = async (id) => {
-            tried.add(id);
+        const open = async (constraints) => {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { ...quality, deviceId: { exact: id } },
+                video: { ...quality, ...constraints },
                 audio: false,
             });
-            localStorage.setItem(`camDeviceId:${facingMode}`, id);
-            return stream;
+            const settings = stream.getVideoTracks()[0].getSettings();
+            if (settings.deviceId) tried.add(settings.deviceId);
+            // Some devices never report facingMode at all — in that case there's
+            // no ground truth to check against, so trust the request.
+            const resolved = settings.facingMode === 'user' || settings.facingMode === 'environment'
+                ? settings.facingMode
+                : facingMode;
+            return { stream, deviceId: settings.deviceId, resolved };
         };
 
+        const accept = ({ stream, deviceId, resolved }) => {
+            if (deviceId) localStorage.setItem(`camDeviceId:${resolved}`, deviceId);
+            return { stream, facingMode: resolved };
+        };
+
+        const attempts = [];
         const rememberedId = localStorage.getItem(`camDeviceId:${facingMode}`);
-        if (rememberedId) {
-            try {
-                return await tryDeviceId(rememberedId);
-            } catch { /* remembered device no longer available — fall through */ }
-        }
+        if (rememberedId) attempts.push({ deviceId: { exact: rememberedId } });
+        attempts.push({ facingMode: { ideal: facingMode } });
 
         let lastErr;
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { ...quality, facingMode: { ideal: facingMode } },
-                audio: false,
-            });
-            const id = stream.getVideoTracks()[0].getSettings().deviceId;
-            if (id) localStorage.setItem(`camDeviceId:${facingMode}`, id);
-            return stream;
-        } catch (err) {
-            lastErr = err;
+        for (const constraints of attempts) {
+            try {
+                const result = await open(constraints);
+                if (result.resolved === facingMode) return accept(result);
+                // Wrong-direction camera (stale remembered id, or facingMode
+                // honored the opposite lens) — record its true direction and
+                // keep looking instead of accepting it.
+                if (result.deviceId) localStorage.setItem(`camDeviceId:${result.resolved}`, result.deviceId);
+                result.stream.getTracks().forEach(t => t.stop());
+            } catch (err) {
+                lastErr = err;
+            }
         }
 
         const otherFacingId = localStorage.getItem(`camDeviceId:${facingMode === 'user' ? 'environment' : 'user'}`);
@@ -2386,12 +2417,15 @@ export class PeerManager {
         const candidates = devices.filter(d => d.kind === 'videoinput' && d.deviceId !== otherFacingId && !tried.has(d.deviceId));
         for (const cam of candidates) {
             try {
-                return await tryDeviceId(cam.deviceId);
+                const result = await open({ deviceId: { exact: cam.deviceId } });
+                if (result.resolved === facingMode) return accept(result);
+                if (result.deviceId) localStorage.setItem(`camDeviceId:${result.resolved}`, result.deviceId);
+                result.stream.getTracks().forEach(t => t.stop());
             } catch (err) {
                 lastErr = err;
             }
         }
-        throw lastErr;
+        throw lastErr || new Error(`No working camera found for facingMode "${facingMode}"`);
     }
 
     /**
@@ -2411,12 +2445,22 @@ export class PeerManager {
         const nextFacingMode = this._camFacingMode === 'environment' ? 'user' : 'environment';
 
         try {
-            const newRawStream = deviceId
-                ? await navigator.mediaDevices.getUserMedia({
-                      video: { ...this._resolveQuality('cam'), deviceId: { exact: deviceId } },
-                      audio: false,
-                  })
-                : await this._acquireCamStream(nextFacingMode);
+            let newRawStream, resolvedFacing;
+            if (deviceId) {
+                newRawStream = await navigator.mediaDevices.getUserMedia({
+                    video: { ...this._resolveQuality('cam'), deviceId: { exact: deviceId } },
+                    audio: false,
+                });
+                const settings = newRawStream.getVideoTracks()[0].getSettings();
+                resolvedFacing = settings.facingMode === 'user' || settings.facingMode === 'environment'
+                    ? settings.facingMode
+                    : this._camFacingMode;
+                if (settings.deviceId) localStorage.setItem(`camDeviceId:${resolvedFacing}`, settings.deviceId);
+            } else {
+                const acquired = await this._acquireCamStream(nextFacingMode);
+                newRawStream = acquired.stream;
+                resolvedFacing = acquired.facingMode;
+            }
             newRawStream.getVideoTracks()[0].onended = () => {
                 this.stopCam();
                 document.getElementById('cam-on-icon')?.classList.add('hidden');
@@ -2429,7 +2473,7 @@ export class PeerManager {
             this._virtualBackground = null;
 
             this._rawCamStream = newRawStream;
-            if (!deviceId) this._camFacingMode = nextFacingMode;
+            this._camFacingMode = resolvedFacing;
             this.camStream = await this._applyBackgroundProcessing(newRawStream);
             const newTrack = this.camStream.getVideoTracks()[0];
 
