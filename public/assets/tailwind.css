@@ -3793,6 +3793,22 @@ body,
     height: 4rem;
   }
 
+  /* .panel-close-btn (chat/members panel headers) relies on a :hover
+     background to read as a button, which does nothing on touch — on mobile
+     it's just a small faint cross. Give it a persistent background, a
+     higher-contrast icon, and a bigger touch target. */
+  .panel-close-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    background: var(--bg5);
+    color: var(--t1);
+  }
+
+  .panel-close-btn svg {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+
   /* No resize handle exists on mobile at all (hidden above), so there's no
      4px gap to pull the tabs back over here. */
   .chat-tab {
