@@ -2110,12 +2110,12 @@ export class PeerManager {
         try {
             this._camFacingMode = 'user';
             const camDeviceId = localStorage.getItem('camDeviceId');
-            this._rawCamStream = await navigator.mediaDevices.getUserMedia({
-                video: camDeviceId
-                    ? { ...this._resolveQuality('cam'), deviceId: { exact: camDeviceId } }
-                    : { ...this._resolveQuality('cam'), facingMode: { ideal: this._camFacingMode } },
-                audio: false,
-            });
+            this._rawCamStream = camDeviceId
+                ? await navigator.mediaDevices.getUserMedia({
+                      video: { ...this._resolveQuality('cam'), deviceId: { exact: camDeviceId } },
+                      audio: false,
+                  })
+                : await this._acquireCamStream(this._camFacingMode);
             this._rawCamStream.getVideoTracks()[0].onended = () => {
                 this.stopCam();
                 document.getElementById('cam-on-icon')?.classList.add('hidden');
@@ -2334,6 +2334,67 @@ export class PeerManager {
     }
 
     /**
+     * Opens a camera stream for a facing direction, working around a real-world
+     * Samsung/Chrome bug: `facingMode: {ideal}` on phones with a multi-lens rear
+     * array (wide/ultra-wide/telephoto) can resolve to a non-primary lens that
+     * throws `NotReadableError` on open, even though the device has a perfectly
+     * usable primary rear camera. Caches whichever deviceId actually worked per
+     * direction (`camDeviceId:user`/`camDeviceId:environment`) so later switches
+     * go straight to the known-good device instead of re-gambling on facingMode;
+     * if facingMode itself picks a dead lens, probes the remaining videoinput
+     * devices (skipping whichever one is already confirmed for the opposite
+     * direction) until one actually streams.
+     * @param {'user'|'environment'} facingMode
+     * @returns {Promise<MediaStream>}
+     */
+    async _acquireCamStream(facingMode) {
+        const quality = this._resolveQuality('cam');
+        const tried = new Set();
+
+        const tryDeviceId = async (id) => {
+            tried.add(id);
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { ...quality, deviceId: { exact: id } },
+                audio: false,
+            });
+            localStorage.setItem(`camDeviceId:${facingMode}`, id);
+            return stream;
+        };
+
+        const rememberedId = localStorage.getItem(`camDeviceId:${facingMode}`);
+        if (rememberedId) {
+            try {
+                return await tryDeviceId(rememberedId);
+            } catch { /* remembered device no longer available — fall through */ }
+        }
+
+        let lastErr;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { ...quality, facingMode: { ideal: facingMode } },
+                audio: false,
+            });
+            const id = stream.getVideoTracks()[0].getSettings().deviceId;
+            if (id) localStorage.setItem(`camDeviceId:${facingMode}`, id);
+            return stream;
+        } catch (err) {
+            lastErr = err;
+        }
+
+        const otherFacingId = localStorage.getItem(`camDeviceId:${facingMode === 'user' ? 'environment' : 'user'}`);
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const candidates = devices.filter(d => d.kind === 'videoinput' && d.deviceId !== otherFacingId && !tried.has(d.deviceId));
+        for (const cam of candidates) {
+            try {
+                return await tryDeviceId(cam.deviceId);
+            } catch (err) {
+                lastErr = err;
+            }
+        }
+        throw lastErr;
+    }
+
+    /**
      * Flips between front/back camera without renegotiating — swaps the outbound
      * track via replaceTrack() on each existing sender, same mechanism the
      * watch/unwatch pause system and mic-gate use for track swaps without SDP churn.
@@ -2350,12 +2411,12 @@ export class PeerManager {
         const nextFacingMode = this._camFacingMode === 'environment' ? 'user' : 'environment';
 
         try {
-            const newRawStream = await navigator.mediaDevices.getUserMedia({
-                video: deviceId
-                    ? { ...this._resolveQuality('cam'), deviceId: { exact: deviceId } }
-                    : { ...this._resolveQuality('cam'), facingMode: { ideal: nextFacingMode } },
-                audio: false,
-            });
+            const newRawStream = deviceId
+                ? await navigator.mediaDevices.getUserMedia({
+                      video: { ...this._resolveQuality('cam'), deviceId: { exact: deviceId } },
+                      audio: false,
+                  })
+                : await this._acquireCamStream(nextFacingMode);
             newRawStream.getVideoTracks()[0].onended = () => {
                 this.stopCam();
                 document.getElementById('cam-on-icon')?.classList.add('hidden');
