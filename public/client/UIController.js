@@ -794,7 +794,17 @@ export class UIController {
         if (count === 0) return;
 
         if (count <= 1) {
-            this._autoWatchOrSkip(remoteIds[0]);
+            // Only decide once per stream key, not on every rebuild — buildGrid()
+            // re-runs on any addStream() call, including a peer switching their
+            // share source mid-call (a new renegotiated MediaStream for the same
+            // peerId). Without this guard, a 'audioOnlyMode' user who manually
+            // clicked to watch a lone tile got auto-un-watched right back to the
+            // paused overlay on every such re-render, since _autoWatchOrSkip()
+            // unconditionally re-applies the audioOnlyMode skip. Focus view
+            // doesn't have this bug because its equivalent auto-pick in
+            // updateLayout() is already guarded the same way (only runs while
+            // nothing is focused yet).
+            if (!this._watchSentState.has(remoteIds[0])) this._autoWatchOrSkip(remoteIds[0]);
         } else {
             remoteIds.forEach(id => {
                 if (this._watchOrder.includes(id)) this._setWatched(id, true);
