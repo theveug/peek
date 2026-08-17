@@ -3,7 +3,7 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --include=dev
+RUN npm ci --include=dev --ignore-scripts
 
 COPY . .
 RUN npm run build:css
