@@ -5,6 +5,8 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
+    "prepare": "node scripts/install-hooks.mjs",
+    "check:docs": "node scripts/check-doc-drift.mjs",
     "dev": "concurrently \"npm:serve\" \"npm:tailwind\"",
     "serve": "nodemon server.js",
     "start": "node server.js",

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Blocks a commit if CLAUDE.md's file line-counts or documented test list
+# have drifted from reality — see scripts/check-doc-drift.mjs. Installed by
+# scripts/install-hooks.mjs (npm's "prepare" lifecycle script).
+#
+# Bypass just this once (not recommended): git commit --no-verify
+node scripts/check-doc-drift.mjs

@@ -2159,6 +2159,16 @@ export class UIController {
             this._autoWatchOrSkip(peerId);
             this.focusedPeerId = peerId;
             this.focusedVideo.srcObject = stream;
+        } else if (peerId === this.focusedPeerId) {
+            // Same peer, but a genuinely new MediaStream object — they picked a
+            // different window/screen (or camera) mid-share, which tears down
+            // the old sender and renegotiates a brand-new stream rather than
+            // just swapping tracks. watchedTiles/_watchSentState are untouched
+            // (we're still "watching" them, no re-consent needed), but the
+            // <video> element itself still points at the now-dead old stream
+            // and would otherwise freeze on its last frame until the user
+            // manually stopped and re-started watching.
+            this.focusedVideo.srcObject = stream;
         }
 
         this.updateLayout();
