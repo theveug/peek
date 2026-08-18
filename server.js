@@ -247,10 +247,28 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
 const APP_NAME = process.env.APP_NAME || 'Peek';
+// Undefined (default) binds all interfaces, same as before this existed.
+// An embedder that fronts this process with its own HTTP-level reverse
+// proxy can set this to '127.0.0.1' so the raw server is never reachable
+// except through that proxy — load-bearing for TRUST_PROXY above: trusting
+// X-Forwarded-For is only safe when the proxy is the sole way in. Left
+// unset by embedders exposing this process directly (e.g. peek-desktop's
+// "Host a Room", reachable over LAN and via router port-forwarding, with no
+// proxy in front at all) — those must also leave TRUST_PROXY unset, since
+// there's no proxy to trust a forwarded-for header from.
+const HOST = process.env.HOST || undefined;
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
     const proto = useHttps ? 'https' : 'http';
+    // server.address().port (not the PORT var) so PORT=0's OS-assigned port
+    // shows up correctly here too, not just in the machine-readable line below.
+    const boundPort = server.address().port;
     console.log(`${APP_NAME} v${APP_VERSION}`);
-    console.log(`Server listening at ${proto}://localhost:${PORT}`);
+    console.log(`Server listening at ${proto}://${HOST || 'localhost'}:${boundPort}`);
     if (!useHttps) console.log('  → Add certs/localhost.pem + certs/localhost-key.pem for HTTPS (see README)');
+    // Machine-readable readiness signal, deliberately separate from the
+    // human-facing lines above — lets an embedder spawn with PORT=0 and
+    // learn the OS-assigned port with no bind/probe/close/reopen dance, and
+    // no need to parse the human log lines (which can change wording).
+    console.log(`__PEEK_READY__ ${JSON.stringify({ port: server.address().port })}`);
 });
