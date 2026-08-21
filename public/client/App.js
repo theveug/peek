@@ -10,6 +10,7 @@ import { TopbarIdentity } from './TopbarIdentity.js';
 import { initTooltips } from './Tooltip.js';
 import { openEmojiPicker } from './EmojiPicker.js';
 import { getOwnerToken, setOwnerToken } from './ownerTokens.js';
+import { getMediaState, saveMediaState, clearMediaState } from './mediaStateStore.js';
 import { playSound } from './SoundPlayer.js';
 import { RoomRail } from './RoomRail.js';
 import { isModifierCode, comboFromEvent, isComboHeld } from './keybindUtils.js';
@@ -43,6 +44,12 @@ peerManager.onSpeakingChange = (peerId, speaking) => ui.setSpeaking(peerId, spea
 let socket;
 let reconnectTimer;
 let leavingRoom = false;
+// True only for the first 'init' this page load ever sees — a later 'init'
+// means an in-tab reconnect (network blip/server restart), where mic/cam
+// streams were never torn down in the first place, so re-applying saved
+// media state there would be wrong (could fight a mute the user just did
+// mid-blip). Only a genuine page load should trigger a restore.
+let hasRestoredMedia = false;
 let roomPassword = sessionStorage.getItem('roomPassword') || null;
 // `let`, not `const`: joining a code with no live session lazily creates the
 // room, and the server mints + returns a creator token in 'init' — it must be
@@ -139,6 +146,7 @@ function connect() {
             leavingRoom = true;
             clearTimeout(reconnectTimer);
             socket.close();
+            clearMediaState(sessionId);
             location.href = msg.type === 'banned' ? '/?banned=1' : '/?kicked=1';
             return;
         }
@@ -155,6 +163,12 @@ function connect() {
             }
         }
         peerManager.handleSignal(msg);
+        // Runs after handleSignal so peerManager.micPolicy (set inside its
+        // 'init' case) is already up to date before restoreMediaState reads it.
+        if (msg.type === 'init' && !hasRestoredMedia) {
+            hasRestoredMedia = true;
+            restoreMediaState();
+        }
     };
 
     socket.onclose = () => {
@@ -506,7 +520,39 @@ document.getElementById('cam-toggle').addEventListener('click', async () => {
         } catch { /* keep whatever the page-load check found */ }
     }
     updateCamUI(enabled);
+    saveMediaState(sessionId, { camEnabled: enabled });
 });
+
+// Re-applies mic/cam/screen-share state saved (below) from before a refresh —
+// only called once, for the very first 'init' this page load sees. Mic/cam
+// use getUserMedia(), which browsers don't gate behind a fresh user gesture
+// once permission's already granted to this origin, so both can be silently
+// re-acquired here. Screen share is different: getDisplayMedia() always
+// requires a real click, so it can only be nudged back on via a toast.
+async function restoreMediaState() {
+    const state = getMediaState(sessionId);
+    if (!state) return;
+
+    if (state.micEnabled && peerManager.micPolicy !== 'ptt') {
+        const enabled = await peerManager.toggleMic();
+        updateMicUI(enabled);
+    }
+
+    if (state.camEnabled) {
+        const enabled = await peerManager.toggleCam();
+        if (enabled) {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                hasMultipleCameras = devices.filter(d => d.kind === 'videoinput').length > 1;
+            } catch { /* keep whatever the page-load check found */ }
+        }
+        updateCamUI(enabled);
+    }
+
+    if (state.wasSharing) {
+        ui.showToast('You were sharing your screen before refreshing — click Share screen to resume');
+    }
+}
 
 document.getElementById('switch-cam-button').addEventListener('click', () => {
     peerManager.switchCamera();
@@ -530,16 +576,19 @@ navigator.mediaDevices?.enumerateDevices?.().then(devices => {
 peerManager.onForceStopped = () => {
     updateShareButton();
     updateCamUI(false);
+    saveMediaState(sessionId, { camEnabled: false, wasSharing: false });
 };
 
 document.getElementById('share-toggle').onclick = async () => {
     await peerManager.startSharing();
     updateShareButton();
+    saveMediaState(sessionId, { wasSharing: peerManager.isSharing });
 };
 
 document.getElementById('stop-share-button').onclick = () => {
     peerManager.stopSharing();
     updateShareButton();
+    saveMediaState(sessionId, { wasSharing: false });
 };
 
 document.getElementById('stage-view-grid').addEventListener('click', () => {
@@ -561,6 +610,7 @@ function leaveSession(destinationUrl) {
     clearTimeout(reconnectTimer);
     socket?.close();
     sessionStorage.removeItem('creatorToken');
+    clearMediaState(sessionId);
     releaseWakeLock();
     window.location.href = destinationUrl;
 }
@@ -587,6 +637,7 @@ async function toggleMicManual() {
     }
     const enabled = await peerManager.toggleMic();
     updateMicUI(enabled);
+    saveMediaState(sessionId, { micEnabled: enabled });
 }
 
 document.getElementById('mic-toggle').addEventListener('click', toggleMicManual);
@@ -831,6 +882,23 @@ document.addEventListener('visibilitychange', () => {
     handleFocusChange();
     peerManager.handleTabVisibility(document.hidden);
     if (!document.hidden) acquireWakeLock();
+});
+
+// Refreshes the saved media-state timestamp at the actual moment of leaving
+// (refresh, tab close, navigating away), not just whenever mic/cam were last
+// toggled — otherwise someone on a long call with mic/cam untouched for over
+// 5 minutes would refresh and find their state already "expired" even though
+// they never actually left. Skipped on a deliberate leave (leaveSession
+// already called clearMediaState) so this can't resurrect what was just
+// cleared. pagehide fires more reliably than beforeunload, including on
+// mobile bfcache navigations.
+window.addEventListener('pagehide', () => {
+    if (leavingRoom) return;
+    saveMediaState(sessionId, {
+        micEnabled: peerManager.micEnabled,
+        camEnabled: peerManager.camEnabled,
+        wasSharing: peerManager.isSharing,
+    });
 });
 
 // Idle/away auto-detection: flips status to the real (yellow) Away after a
