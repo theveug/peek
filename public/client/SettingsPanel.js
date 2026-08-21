@@ -92,22 +92,22 @@ export class SettingsPanel {
             <div class="settings-overlay">
                 <div class="settings-nav">
                     <div class="settings-nav-title">SETTINGS</div>
-                    <button type="button" class="settings-nav-item active" data-settings-section="profile">
+                    <button type="button" class="settings-nav-item active" data-settings-section="profile" data-settings-label="Profile">
                         <span class="material-symbols-rounded">person</span>Profile
                     </button>
-                    <button type="button" class="settings-nav-item" data-settings-section="appearance">
+                    <button type="button" class="settings-nav-item" data-settings-section="appearance" data-settings-label="Appearance">
                         <span class="material-symbols-rounded">palette</span>Appearance
                     </button>
-                    <button type="button" class="settings-nav-item" data-settings-section="video">
+                    <button type="button" class="settings-nav-item" data-settings-section="video" data-settings-label="Screen &amp; Video">
                         <span class="material-symbols-rounded">screen_share</span>Screen &amp; Video
                     </button>
-                    <button type="button" class="settings-nav-item" data-settings-section="audio">
+                    <button type="button" class="settings-nav-item" data-settings-section="audio" data-settings-label="Audio &amp; Mic">
                         <span class="material-symbols-rounded">mic</span>Audio &amp; Mic
                     </button>
-                    <button type="button" class="settings-nav-item" data-settings-section="keybinds">
+                    <button type="button" class="settings-nav-item" data-settings-section="keybinds" data-settings-label="Keybinds">
                         <span class="material-symbols-rounded">keyboard</span>Keybinds
                     </button>
-                    <button type="button" class="settings-nav-item" data-settings-section="privacy">
+                    <button type="button" class="settings-nav-item" data-settings-section="privacy" data-settings-label="Privacy &amp; P2P">
                         <span class="material-symbols-rounded">shield</span>Privacy &amp; P2P
                     </button>
                     <div class="settings-nav-spacer"></div>
@@ -116,16 +116,18 @@ export class SettingsPanel {
                 </div>
 
                 <div class="settings-content">
-                    <button type="button" id="close-settings" class="settings-close-btn" data-tip="Close">
-                        <span class="settings-close-btn-icon"><span class="material-symbols-rounded">close</span></span>
-                        <span class="settings-close-btn-esc">ESC</span>
-                    </button>
+                    <div class="settings-sticky-header">
+                        <h1 id="settings-current-title" class="settings-current-title">Profile</h1>
+                        <button type="button" id="close-settings" class="settings-close-btn" data-tip="Close">
+                            <span class="settings-close-btn-icon"><span class="material-symbols-rounded">close</span></span>
+                            <span class="settings-close-btn-esc">ESC</span>
+                        </button>
+                    </div>
 
                     <div class="settings-section-body">
 
                         <!-- Profile -->
                         <div class="settings-section active" data-settings-panel="profile">
-                            <h1>Profile</h1>
                             <p class="settings-section-subcopy">Your name and status, visible to everyone in the room.</p>
                             <div class="settings-field">
                                 <div class="settings-label">Avatar</div>
@@ -191,7 +193,6 @@ export class SettingsPanel {
 
                         <!-- Appearance -->
                         <div class="settings-section" data-settings-panel="appearance">
-                            <h1>Appearance</h1>
                             <p class="settings-section-subcopy">Make Peek yours. Changes apply instantly and save to this
                                 device.</p>
                             <div class="settings-label">Theme</div>
@@ -246,7 +247,6 @@ export class SettingsPanel {
 
                         <!-- Screen & Video -->
                         <div class="settings-section" data-settings-panel="video">
-                            <h1>Screen &amp; Video</h1>
                             <p class="settings-section-subcopy">Quality auto-caps as the room grows, and restores when peers
                                 leave.</p>
                             <div class="settings-field">
@@ -341,7 +341,6 @@ export class SettingsPanel {
 
                         <!-- Audio & Mic -->
                         <div class="settings-section" data-settings-panel="audio">
-                            <h1>Audio &amp; Mic</h1>
                             <p class="settings-section-subcopy">Audio keeps flowing when the tab is backgrounded — only
                                 video pauses.</p>
                             <div class="settings-field">
@@ -461,7 +460,6 @@ export class SettingsPanel {
 
                         <!-- Keybinds -->
                         <div class="settings-section" data-settings-panel="keybinds">
-                            <h1>Keybinds</h1>
                             <p class="settings-section-subcopy">Every bindable key in one place. Assign the same key to
                                 more than one action if you want one button to do several things, or give each its own key
                                 — your choice.</p>
@@ -470,7 +468,6 @@ export class SettingsPanel {
 
                         <!-- Privacy & P2P -->
                         <div class="settings-section" data-settings-panel="privacy">
-                            <h1>Privacy &amp; P2P</h1>
                             <p class="settings-section-subcopy">Peek never stores anything on a server — most of this is how
                                 it always works, not a setting to turn on.</p>
                             <div class="settings-info-card">
@@ -579,6 +576,7 @@ export class SettingsPanel {
             this.modal.querySelectorAll('.settings-section').forEach(panel => {
                 panel.classList.toggle('active', panel.dataset.settingsPanel === section);
             });
+            this._setCurrentTitle(section);
         }
         this.modal.classList.remove('hidden');
         this._startMicMeter();
@@ -598,6 +596,19 @@ export class SettingsPanel {
 
     // --- Nav ---
 
+    // Drives the sticky header's title (#settings-current-title) — the per-
+    // section <h1> was moved there so it (and the close button beside it)
+    // stay visible while .settings-content scrolls, rather than living
+    // inside each .settings-section and scrolling away with the rest of
+    // that section's fields. Reads the label off the nav button's own
+    // data-settings-label rather than a separate lookup table, so there's
+    // one place (the button markup) to update if a section's name changes.
+    _setCurrentTitle(section) {
+        const btn = this.modal.querySelector(`.settings-nav-item[data-settings-section="${section}"]`);
+        const titleEl = document.getElementById('settings-current-title');
+        if (btn && titleEl) titleEl.textContent = btn.dataset.settingsLabel;
+    }
+
     _wireNav() {
         const items = this.modal.querySelectorAll('.settings-nav-item');
         items.forEach(btn => {
@@ -607,6 +618,7 @@ export class SettingsPanel {
                 this.modal.querySelectorAll('.settings-section').forEach(panel => {
                     panel.classList.toggle('active', panel.dataset.settingsPanel === section);
                 });
+                this._setCurrentTitle(section);
             });
         });
     }

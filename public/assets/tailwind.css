@@ -3105,10 +3105,34 @@ body,
   position: relative;
 }
 
+/* Sticky header: holds the current section's title + the close button, both
+   pinned to the top of .settings-content's scroll area (position: sticky
+   works here because .settings-content is that scrolling ancestor and this
+   header is a normal-flow child of it, unlike the old .settings-close-btn
+   which was position:absolute and scrolled away with everything else). */
+.settings-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  padding: 1.375rem 1.625rem 1.375rem 3rem;
+}
+
+.settings-current-title {
+  font-size: 1.5625rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--t1);
+}
+
 .settings-close-btn {
-  position: absolute;
-  top: 1.375rem;
-  right: 1.625rem;
+  flex: none;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3117,7 +3141,6 @@ body,
   border: none;
   color: var(--t3);
   cursor: pointer;
-  z-index: 1;
 }
 
 .settings-close-btn-icon {
@@ -3137,7 +3160,7 @@ body,
 
 .settings-section-body {
   max-width: 42.5rem;
-  padding: 2.5rem 3rem;
+  padding: 1.75rem 3rem 2.5rem;
 }
 
 .settings-section {
@@ -3146,14 +3169,6 @@ body,
 
 .settings-section.active {
   display: block;
-}
-
-.settings-section h1 {
-  font-size: 1.5625rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 0 0 0.25rem;
-  color: var(--t1);
 }
 
 .settings-section-subcopy {
@@ -3549,7 +3564,15 @@ body,
   }
 
   .settings-section-body {
-    padding: 1.5rem 1.25rem;
+    padding: 1.25rem 1.25rem 1.5rem;
+  }
+
+  .settings-sticky-header {
+    padding: 1rem 1.25rem;
+  }
+
+  .settings-current-title {
+    font-size: 1.25rem;
   }
 }
 
