@@ -12,6 +12,7 @@ import { openEmojiPicker } from './EmojiPicker.js';
 import { getOwnerToken, setOwnerToken } from './ownerTokens.js';
 import { playSound } from './SoundPlayer.js';
 import { RoomRail } from './RoomRail.js';
+import { isModifierCode, comboFromEvent, isComboHeld } from './keybindUtils.js';
 
 initTooltips();
 
@@ -1115,21 +1116,45 @@ function updateMicUI(enabled, silent = false) {
     if (peerManager.peerId) ui.updateParticipantMic(peerManager.peerId, enabled);
 }
 
+// Physical non-modifier keys currently held, tracked independently of any
+// specific bind — a combo hold-bind (Push to Talk/Push to Mute) must stop on
+// releasing ANY one of its keys, not just the last one pressed, but a keyup
+// event only ever reports the single key that came up. Modifier state itself
+// doesn't need separate tracking: e.ctrlKey/altKey/shiftKey/metaKey are
+// always browser-accurate for whichever key just fired the current event,
+// including that key's own release. Cleared on window blur as a stuck-key
+// guard — more simultaneously-held keys means more surface for a missed
+// keyup if focus is lost mid-hold (e.g. an OS-level alt-tab).
+const _heldNonModCodes = new Set();
+window.addEventListener('keydown', (e) => {
+    if (!isModifierCode(e.code)) _heldNonModCodes.add(e.code);
+});
+window.addEventListener('keyup', (e) => {
+    _heldNonModCodes.delete(e.code);
+});
+window.addEventListener('blur', () => _heldNonModCodes.clear());
+
 // Push-to-talk / push-to-mute keydown/keyup — each has its own independent
 // keybind now (Settings → Keybinds), read fresh from localStorage rather than
 // cached in a module variable, since the settings UI is the only writer.
 // Only one of the two is "active" at a time, picked by effective mic mode:
 // Push to Talk is hold-to-open, Push to Mute is hold-to-force-mute — a
 // modifier on top of Toggle/Voice-Activity mode, not a mode of its own.
+// `_micHoldEngaged` tracks whether the bind is *currently* satisfied (via
+// isComboHeld, not a single e.code match) so a combo's engage/disengage
+// actions each fire exactly once per press, on whichever key completes or
+// breaks the combo.
+let _micHoldEngaged = false;
 window.addEventListener('keydown', (e) => {
     if (settingsPanel.isKeybindListening()) return;
     // Effective mode — a 'ptt' room rule forces push-to-talk over the stored preference.
     const micMode = peerManager._effectiveMicMode();
     const boundKey = localStorage.getItem(micMode === 'push-to-talk' ? 'keybindPushToTalk' : 'keybindPushToMute') || '';
-    if (!boundKey || e.code !== boundKey) return;
+    if (!boundKey || _micHoldEngaged || !isComboHeld(boundKey, e, _heldNonModCodes)) return;
     if (e.repeat) return;
     const focused = document.activeElement;
     if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
+    _micHoldEngaged = true;
 
     if (micMode === 'push-to-talk') {
         if (!peerManager.micStream) {
@@ -1152,9 +1177,11 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('keyup', (e) => {
     if (settingsPanel.isKeybindListening()) return;
+    if (!_micHoldEngaged) return;
     const micMode = peerManager._effectiveMicMode();
     const boundKey = localStorage.getItem(micMode === 'push-to-talk' ? 'keybindPushToTalk' : 'keybindPushToMute') || '';
-    if (!boundKey || e.code !== boundKey) return;
+    if (isComboHeld(boundKey, e, _heldNonModCodes)) return; // still fully held (e.g. an unrelated key's keyup)
+    _micHoldEngaged = false;
     const focused = document.activeElement;
     if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
 
@@ -1175,7 +1202,7 @@ window.addEventListener('keyup', (e) => {
 window.addEventListener('keydown', (e) => {
     if (settingsPanel.isKeybindListening()) return;
     const boundKey = localStorage.getItem('keybindToggleMute') || '';
-    if (!boundKey || e.code !== boundKey) return;
+    if (!boundKey || comboFromEvent(e) !== boundKey) return;
     if (e.repeat) return;
     const focused = document.activeElement;
     if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
@@ -1198,7 +1225,7 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keydown', (e) => {
     if (settingsPanel.isKeybindListening()) return;
     const deafenKeybind = localStorage.getItem('deafenKeybind') || '';
-    if (!deafenKeybind || e.code !== deafenKeybind) return;
+    if (!deafenKeybind || comboFromEvent(e) !== deafenKeybind) return;
     if (e.repeat) return;
     const focused = document.activeElement;
     if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;

@@ -34,7 +34,8 @@
     "test:avatar": "node tests/avatar-validation.mjs",
     "test:password-hardening": "node tests/password-hardening.mjs",
     "test:mic-policy": "node tests/mic-policy.mjs",
-    "test:chat-history": "node tests/chat-history-retention.mjs"
+    "test:chat-history": "node tests/chat-history-retention.mjs",
+    "test:keybind-combo": "node tests/keybind-combo-logic.mjs"
   },
   "author": "",
   "license": "ISC",

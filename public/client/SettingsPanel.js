@@ -9,6 +9,7 @@ import { setFontScale, getStoredFontScale, fontScaleLabel } from './FontScaleMan
 import { trapFocus } from './focusTrap.js';
 import { getCustomStatuses, getCustomStatus, upsertCustomStatus, deleteCustomStatus, SWATCHES } from './CustomStatuses.js';
 import * as chatHistoryStore from './chatHistoryStore.js';
+import { isModifierCode, comboFromEvent } from './keybindUtils.js';
 
 // Labels for the tri-state mute/deafen pickers in the custom-status form —
 // 'none' means "leave as-is," so a status can just as easily auto-unmute/
@@ -1333,6 +1334,9 @@ export class SettingsPanel {
     // Binding one to any action still fires that action, it just *also* does
     // the browser's own thing at the same time.
     _RESERVED_KEYBIND_CODES = new Set(['F11', 'F5', 'F12']);
+    // Full-combo (not just trailing-code) reserved checks — common browser
+    // tab/window shortcuts that fire regardless of what a page's JS does.
+    _RESERVED_KEYBIND_COMBOS = new Set(['Ctrl+KeyW', 'Ctrl+KeyT', 'Ctrl+KeyN', 'Meta+KeyW', 'Meta+KeyT', 'Meta+KeyN']);
 
     // Every bindable action in one declarative list — the single source of
     // truth for the Keybinds tab's rows (see _wireKeybinds/_refreshKeybinds).
@@ -1357,16 +1361,27 @@ export class SettingsPanel {
         },
     ];
 
-    // Shared click-then-press-a-key capture, used for every row in the
-    // Keybinds tab — previously this exact sequence (click primes listening,
-    // keydown captures+persists, blur reverts an abandoned capture) was
-    // hand-duplicated per field, which is exactly how the mic/deafen copies
+    // Shared click-then-press capture, used for every row in the Keybinds
+    // tab — previously this exact sequence (click primes listening, keydown
+    // captures+persists, blur reverts an abandoned capture) was hand-
+    // duplicated per field, which is exactly how the mic/deafen copies
     // drifted (one had a reserved-key warning, the other didn't).
+    //
+    // Combo capture (modifiers + one regular key): a modifier keydown
+    // doesn't finalize — it only updates the live "recording" display and
+    // keeps listening, since Ctrl/Shift/etc. are meant to be held down
+    // *while* the actual bind key is pressed, not bound on their own. The
+    // first non-modifier keydown finalizes via keybindUtils' comboFromEvent,
+    // which reads the modifiers straight off that same event's
+    // ctrlKey/altKey/shiftKey/metaKey flags — so holding Ctrl+Shift then
+    // pressing M naturally captures "Ctrl+Shift+KeyM". A bare key with no
+    // modifiers held still captures as just its own code, unchanged from
+    // before combo support existed.
     _wireKeybindCapture(input, clearBtn, storageKey, hintEl) {
         if (input) {
             input.addEventListener('click', () => {
                 this._keybindListening = true;
-                input.value = 'Press a key...';
+                input.value = 'Press a key or combo...';
                 input.classList.add('ring-1', 'ring-indigo-500');
             });
 
@@ -1374,11 +1389,31 @@ export class SettingsPanel {
                 if (!this._keybindListening) return;
                 e.preventDefault();
                 e.stopPropagation();
-                localStorage.setItem(storageKey, e.code);
-                input.value = e.code;
+
+                if (e.code === 'Escape' && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
+                    input.value = localStorage.getItem(storageKey) || '';
+                    input.classList.remove('ring-1', 'ring-indigo-500');
+                    this._keybindListening = false;
+                    return;
+                }
+
+                if (isModifierCode(e.code)) {
+                    // Still building the combo — show progress, keep listening.
+                    const mods = [];
+                    if (e.ctrlKey) mods.push('Ctrl');
+                    if (e.altKey) mods.push('Alt');
+                    if (e.shiftKey) mods.push('Shift');
+                    if (e.metaKey) mods.push('Meta');
+                    input.value = `${mods.join('+')}...`;
+                    return;
+                }
+
+                const combo = comboFromEvent(e);
+                localStorage.setItem(storageKey, combo);
+                input.value = combo;
                 input.classList.remove('ring-1', 'ring-indigo-500');
                 this._keybindListening = false;
-                this._updateKeybindWarning(hintEl, e.code);
+                this._updateKeybindWarning(hintEl, combo);
             });
 
             input.addEventListener('blur', () => {
@@ -1397,10 +1432,11 @@ export class SettingsPanel {
         });
     }
 
-    _updateKeybindWarning(hintEl, code) {
+    _updateKeybindWarning(hintEl, combo) {
         if (!hintEl) return;
-        if (this._RESERVED_KEYBIND_CODES.has(code)) {
-            hintEl.textContent = `${code} is reserved by your browser (fullscreen/reload/devtools) and can't be fully overridden — it'll still fire this action, but the browser's own shortcut will fire too. Pick a different key if that's a problem.`;
+        const mainCode = combo ? combo.split('+').pop() : '';
+        if (this._RESERVED_KEYBIND_CODES.has(mainCode) || this._RESERVED_KEYBIND_COMBOS.has(combo)) {
+            hintEl.textContent = `${combo} is reserved by your browser (fullscreen/reload/new tab/close tab/devtools) and can't be fully overridden — it'll still fire this action, but the browser's own shortcut will fire too. Pick a different combo if that's a problem.`;
             hintEl.classList.add('text-yellow-400');
         } else {
             hintEl.textContent = hintEl.dataset.defaultHint || '';
@@ -1423,7 +1459,7 @@ export class SettingsPanel {
                 </div>
                 <div class="settings-keybind-row settings-keybind-row-compact">
                     <input type="text" id="keybind-input-${action.id}" readonly class="settings-keybind-input"
-                        placeholder="Click then press a key..." />
+                        placeholder="Click then press a key or combo..." />
                     <button type="button" id="keybind-clear-${action.id}"
                         class="text-xs text-muted hover:text-foreground px-2 py-1">&times;</button>
                 </div>`;
