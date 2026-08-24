@@ -1659,6 +1659,18 @@ a.link-preview:hover {
 }
 
 /* ===== Chat markdown ===== */
+/* Jumbo emoji (Discord/Messenger-style) — a message that's *only* emoji, up to
+   a small count (see ChatUI._isEmojiOnly), renders oversized with no bubble
+   copy around it instead of at normal chat-text size. */
+.chat-markdown.chat-emoji-only {
+  font-size: 2.5rem;
+  line-height: 1.25;
+}
+
+.chat-markdown.chat-emoji-only p {
+  margin: 0;
+}
+
 .chat-markdown pre {
   background-color: var(--bg1);
   border: 1px solid var(--border);

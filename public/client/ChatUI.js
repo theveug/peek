@@ -1286,6 +1286,32 @@ export class ChatUI {
         return this._chatAvatarColors[Math.abs(hash) % this._chatAvatarColors.length];
     }
 
+    // Matches one emoji "unit" — a pictograph with optional variation selector
+    // and ZWJ-joined sequences (👨‍👩‍👧, 🏳️‍🌈), or a flag (two regional indicators).
+    // \p{Extended_Pictographic} (not \p{Emoji}) deliberately excludes bare digits/
+    // #/* — those carry the Emoji property but aren't emoji on their own, so
+    // "123" must never jumbo.
+    static _EMOJI_UNIT_RE = /\p{Regional_Indicator}{2}|\p{Extended_Pictographic}️?(?:‍\p{Extended_Pictographic}️?)*/gu;
+
+    /**
+     * Discord/Messenger-style "jumbo emoji" detection: true when the raw message
+     * text is nothing but emoji (and whitespace between them), up to a small cap —
+     * used to render the message body at a much larger size instead of a normal
+     * text bubble. Caps at 10 units so someone pasting a huge emoji wall doesn't
+     * blow up the message height.
+     * @param {string} text - raw pre-markdown message text.
+     * @returns {boolean}
+     */
+    _isEmojiOnly(text) {
+        const trimmed = text.trim();
+        if (!trimmed) return false;
+        const units = trimmed.match(ChatUI._EMOJI_UNIT_RE) || [];
+        if (units.length === 0 || units.length > 10) return false;
+        // Every unit consumed with only whitespace left over between them —
+        // otherwise there's real non-emoji text mixed in.
+        return trimmed.replace(ChatUI._EMOJI_UNIT_RE, '').trim() === '';
+    }
+
     /**
      * Builds the `.chat-avatar` HTML for a message header — a custom avatar
      * image when `getAvatar(peerId)` resolves one (already validated by
@@ -1344,8 +1370,9 @@ export class ChatUI {
         const initial = this._avatarInitials(sender);
         const color = isSelf ? '#22c55e' : this._colorForName(sender);
         const replyHtml = this._replyQuoteHtml(replyData);
+        const emojiOnlyClass = this._isEmojiOnly(text) ? ' chat-emoji-only' : '';
 
-        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm${isHistorical ? ' chat-message-history' : ''}"><div class="flex items-center gap-2 mb-0.5">${this._avatarHtml(senderPeerId, initial, color)}<span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}<div class="chat-markdown chat-body prose ml-7">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm${isHistorical ? ' chat-message-history' : ''}"><div class="flex items-center gap-2 mb-0.5">${this._avatarHtml(senderPeerId, initial, color)}<span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}<div class="chat-markdown chat-body prose ml-7${emojiOnlyClass}">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
 
         this._wireReplyQuote(msgContainer);
 
@@ -1470,6 +1497,7 @@ export class ChatUI {
         // rather than leave it saving over text the user can no longer see.
         container.querySelector('.chat-edit-area')?.remove();
         body.style.display = '';
+        body.classList.toggle('chat-emoji-only', this._isEmojiOnly(newText));
         body.innerHTML = DOMPurify.sanitize(marked.parse(newText));
         const mentionedMe = this._finalizeMarkdownBody(container);
 
