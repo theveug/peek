@@ -1108,28 +1108,13 @@ body:focus-within #controls {
   font-size: 0.75rem;
 }
 
-/* ===== Link previews ===== */
-a.link-preview {
-  display: inline-flex;
-  flex-direction: column;
-  padding: 0.25rem 0.5rem;
-  border-left: 2px solid var(--chat-sender);
-  border-radius: 0 0.25rem 0.25rem 0;
-  background: var(--surface-input);
-  text-decoration: none;
-  transition: background 0.15s;
-  margin-top: 0.25rem;
-}
-
-a.link-preview:hover {
-  background: var(--card-hover);
-}
-
-.link-host {
-  display: block;
-  font-size: 0.625rem;
-  color: var(--color-muted);
-  margin-top: 0.125rem;
+/* ===== Link previews =====
+   Non-image links render as plain inline text (see ChatUI._processLinkPreviews
+   for why there's no rich embed card) — this rule just keeps a long unbroken
+   URL from forcing the chat panel to scroll horizontally, breaking mid-word
+   if it has to rather than overflowing. */
+.chat-markdown a {
+  overflow-wrap: anywhere;
 }
 
 .chat-image-preview {

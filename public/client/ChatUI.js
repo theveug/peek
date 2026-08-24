@@ -1229,9 +1229,14 @@ export class ChatUI {
 
     /**
      * Expands links in a rendered message body: image URLs get an inline
-     * preview thumbnail (capped at 5 per message), other links get a
-     * hostname badge. Also forces `target="_blank" rel="noopener noreferrer"`
-     * on every link.
+     * preview thumbnail (capped at 5 per message). Also forces
+     * `target="_blank" rel="noopener noreferrer"` on every link. Non-image
+     * links are deliberately left as plain inline text — no rich embed
+     * (title/description/thumbnail) is fetched, since that would require the
+     * server to make an outbound request to whatever URL a peer posts,
+     * against the no-server-involvement design principle (see CLAUDE.md).
+     * `.chat-markdown a`'s `overflow-wrap` (tailwind.css) is what keeps a
+     * long unbroken URL from forcing horizontal scroll.
      * @param {HTMLElement} container
      * @returns {void}
      */
@@ -1258,15 +1263,6 @@ export class ChatUI {
                 preview.appendChild(img);
                 const body = container.querySelector('.chat-markdown');
                 if (body) body.appendChild(preview);
-            } else if (!this._imageUrlPattern.test(href)) {
-                a.classList.add('link-preview');
-                try {
-                    const host = new URL(href).hostname;
-                    const hostLabel = document.createElement('span');
-                    hostLabel.className = 'link-host';
-                    hostLabel.textContent = host;
-                    a.appendChild(hostLabel);
-                } catch {}
             }
         });
     }
