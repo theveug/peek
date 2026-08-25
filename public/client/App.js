@@ -1184,6 +1184,14 @@ new TopbarIdentity({ peerManager, settingsPanel });
 // very first call (page load has nothing to compare against).
 let _lastMicUIEnabled = null;
 
+// Tracks whether the mic has ever actually been turned on this session —
+// distinct from `enabled`, which is just its current state. A mic that's
+// never been on isn't "muted," it's just not connected yet; conflating the
+// two made the dock button (and the self participant card) show the same
+// alarming "you're muted" red treatment on a fresh join as after a real
+// deliberate mute, which read as the app lying about your own state.
+let _micEverEnabled = false;
+
 // `silent` skips the mute/unmute chime — used by the push-to-talk/push-to-mute
 // hold handlers below, since every key-down/key-up of a held PTT/PTM keybind
 // is an expected, rapid, per-utterance state flip (not a deliberate "mute
@@ -1192,16 +1200,21 @@ let _lastMicUIEnabled = null;
 function updateMicUI(enabled, silent = false) {
     document.getElementById('mic-off-icon').classList.toggle('hidden', enabled);
     document.getElementById('mic-on-icon').classList.toggle('hidden', !enabled);
-    document.getElementById('mic-toggle').dataset.tip = enabled ? 'Mute Microphone' : 'Unmute Microphone';
+    if (enabled) _micEverEnabled = true;
+    const micToggle = document.getElementById('mic-toggle');
+    micToggle.dataset.tip = enabled
+        ? 'Mute Microphone'
+        : (_micEverEnabled ? 'Unmute Microphone' : 'Turn on Microphone');
     // Same solid-red fill `#stop-share-button` uses while sharing (`.dock-btn-active-red`,
     // tailwind.css) — reused here as a toggled state instead of a permanent one, so a
-    // muted mic reads as unmistakably "off" at a glance, Discord-style.
-    document.getElementById('mic-toggle').classList.toggle('dock-btn-active-red', !enabled);
+    // muted mic reads as unmistakably "off" at a glance, Discord-style. Only applied once
+    // the mic has actually been on at least once — see `_micEverEnabled` above.
+    micToggle.classList.toggle('dock-btn-active-red', !enabled && _micEverEnabled);
     if (!silent && _lastMicUIEnabled !== null && enabled !== _lastMicUIEnabled) {
         playSound(enabled ? 'unmuted' : 'muted');
     }
     _lastMicUIEnabled = enabled;
-    if (peerManager.peerId) ui.updateParticipantMic(peerManager.peerId, enabled);
+    if (peerManager.peerId) ui.updateParticipantMic(peerManager.peerId, enabled, !_micEverEnabled);
 }
 
 // Physical non-modifier keys currently held, tracked independently of any

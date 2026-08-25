@@ -1231,7 +1231,12 @@ export class UIController {
 
         const micIcon = document.createElement('span');
         micIcon.className = 'participant-mic inline-flex items-center';
-        micIcon.style.color = '#ef4444';
+        // Neutral grey, not the alarming "muted" red — nothing is actually known
+        // about this peer's mic yet (same "unknown until told otherwise" treatment
+        // the signal-strength icon just above already uses). updateParticipantMic()
+        // repaints this for real once a mic-status broadcast (or, for the local
+        // card, an actual toggle) arrives.
+        micIcon.style.color = '#6b7280';
         micIcon.innerHTML = this._micOffSvg();
         passiveIcons.appendChild(micIcon);
         rightCol.appendChild(passiveIcons);
@@ -1695,9 +1700,13 @@ export class UIController {
      * the next speaking-poll tick.
      * @param {string} peerId
      * @param {boolean} enabled
+     * @param {boolean} [neverEnabled=false] - the mic has never been turned on
+     *   this session (as opposed to turned on then off) — renders as a neutral
+     *   "not connected" grey instead of an active "muted" red, since nothing
+     *   has actually been silenced. See App.js's `_micEverEnabled`.
      * @returns {void}
      */
-    updateParticipantMic(peerId, enabled) {
+    updateParticipantMic(peerId, enabled, neverEnabled = false) {
         let el = document.getElementById(`participant-${peerId}`);
         if (!el) {
             this.addParticipant(peerId);
@@ -1712,6 +1721,11 @@ export class UIController {
             dot.style.color = '#22c55e';
             dot.innerHTML = this._micOnSvg();
             if (label) label.textContent = 'Unmuted';
+        } else if (neverEnabled) {
+            dot.style.color = '#6b7280';
+            dot.innerHTML = this._micOffSvg();
+            if (label) label.textContent = 'Mic off';
+            this.setSpeaking(peerId, false);
         } else {
             dot.style.color = '#ef4444';
             dot.innerHTML = this._micOffSvg();
