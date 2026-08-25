@@ -13,6 +13,7 @@ import { getOwnerToken, setOwnerToken } from './ownerTokens.js';
 import { getMediaState, saveMediaState, clearMediaState } from './mediaStateStore.js';
 import { playSound } from './SoundPlayer.js';
 import { RoomRail } from './RoomRail.js';
+import { updateSavedRoomPassword } from './savedRooms.js';
 import { isModifierCode, comboFromEvent, isComboHeld } from './keybindUtils.js';
 
 initTooltips();
@@ -855,6 +856,25 @@ peerManager.onMicPolicy = (policy) => {
 // place that keeps the dock mic icon in sync with that side effect,
 // regardless of which UI surface triggered the switch.
 peerManager.onMicModeForceMuted = (enabled) => updateMicUI(enabled);
+
+// Fires on every 'password-update' (creator-only room password change),
+// including for the creator's own client — one apply path for everyone.
+// Only affects future joins (see SessionManager.setPassword's doc comment);
+// everyone already connected, including us, stays in the call untouched.
+// `roomPassword` (this module's own variable, not just sessionStorage) is
+// what connect()'s join message actually reads on a reconnect, so both must
+// be updated together or a later server restart would retry with the stale
+// value and bounce into the password prompt.
+peerManager.onPasswordUpdate = (password) => {
+    roomPassword = password;
+    if (password) sessionStorage.setItem('roomPassword', password);
+    else sessionStorage.removeItem('roomPassword');
+    ui.setHasPassword(!!password);
+    updateSavedRoomPassword(sessionId, password);
+    ui.addSystemMessage(password
+        ? 'The room creator changed the room password'
+        : 'The room creator removed the room password', 'info');
+};
 
 document.getElementById('mic-options-threshold')?.addEventListener('input', (e) => {
     localStorage.setItem('micThreshold', e.target.value);

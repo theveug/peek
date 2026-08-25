@@ -193,6 +193,30 @@ export class SessionManager {
     }
 
     /**
+     * Changes (or removes, with a falsy `password`) the room's join password.
+     * Creator-only. Only affects FUTURE joins — validatePassword() is only
+     * ever consulted from the WS 'join' case, so anyone already connected
+     * stays in the call untouched; this is a deliberate choice (less
+     * disruptive than force-kicking the whole room to re-auth on every
+     * password rotation) documented in CLAUDE.md.
+     * @param {string} sessionId
+     * @param {string} requesterPeerId
+     * @param {string|null} password
+     * @returns {false|{password: string|null}} false if unauthorized;
+     *   otherwise the normalized value actually stored (an object, even when
+     *   `password` is `null`, so a successful removal doesn't read as falsy
+     *   to a caller doing `if (!setPassword(...))`).
+     */
+    setPassword(sessionId, requesterPeerId, password) {
+        const s = this.sessions.get(sessionId);
+        if (!s || s.creatorPeerId !== requesterPeerId) return false;
+        // Same normalization as /api/create-room: a non-empty string becomes
+        // the new password, anything else (including a non-string) clears it.
+        s.password = (typeof password === 'string' && password) ? password.slice(0, 200) : null;
+        return { password: s.password };
+    }
+
+    /**
      * True if the presented token matches the session's creator token — a pure
      * check with no side effects, unlike claimModerator(). Used by the ban
      * gate so the creator can never be locked out of their own room (e.g.

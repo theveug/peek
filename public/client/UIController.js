@@ -1531,6 +1531,20 @@ export class UIController {
     }
 
     /**
+     * Live-updates just the topbar's password-lock icon — used when the room
+     * creator changes the password mid-call. Deliberately separate from
+     * setRoomMeta() so a live password change never re-triggers that method's
+     * isNewRoom/chat-history-load logic, which must only fire on an actual
+     * room change.
+     * @param {boolean} hasPassword
+     * @returns {void}
+     */
+    setHasPassword(hasPassword) {
+        const lockEl = document.getElementById('topbar-room-lock');
+        if (lockEl) lockEl.style.display = hasPassword ? '' : 'none';
+    }
+
+    /**
      * Renders a room's locally-persisted chat history (see `chatHistoryStore.js`)
      * above the live chat log on join/room-switch, oldest-first, read-only
      * (`isHistorical = true` — no hover action bar, never re-persisted). No-ops

@@ -141,6 +141,20 @@
                             </div>
                         </div>
 
+                        <div class="settings-field" id="quick-password-section" style="display:none;">
+                            <div class="settings-label">Room password</div>
+                            <div class="topbar-invite-field">
+                                <input type="password" id="quick-password-input" class="settings-text-input font-mono-app"
+                                    style="max-width:none;" placeholder="No password set" autocomplete="off" />
+                                <button type="button" id="quick-password-set" class="lobby-btn-primary"
+                                    style="width:auto;padding:0.5625rem 0.875rem;">Set</button>
+                            </div>
+                            <button type="button" id="quick-password-remove" class="lobby-btn-secondary"
+                                style="margin-top:0.5rem;display:none;">Remove password</button>
+                            <p class="settings-section-subcopy" style="margin:0.375rem 0 0;font-size:0.7813rem;">Only
+                                affects future joins — everyone already in the call stays connected.</p>
+                        </div>
+
                         <div class="settings-field" id="quick-banned-section" style="display:none;margin-bottom:0;">
                             <div class="settings-label">Banned users</div>
                             <div id="quick-banned-list" class="quick-banned-list">

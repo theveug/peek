@@ -38,6 +38,7 @@ export class PeerManager {
         this.onMicPolicy = null; // set by App.js — (policy, isInitial) on 'init' and every 'mic-policy-update'
         this.micPolicy = 'open'; // room mic rule ('open'|'ptt'), server-supplied via 'init'/'mic-policy-update'
         this.onMicModeForceMuted = null; // set by App.js — (enabled) when enforcePttMuteOnModeSwitch() mutes an open mic
+        this.onPasswordUpdate = null; // set by App.js — (password: string|null) on every 'password-update'
         this.isSharing = false;
         // Placeholder until the server's 'init' supplies the real list (built
         // from the deployment's STUN_URL/TURN env config). Deliberately empty,
@@ -273,6 +274,18 @@ export class PeerManager {
                     ? 'The room creator turned on push-to-talk for this room — hold your Push to Talk keybind to talk'
                     : 'The room creator switched this room back to open mic', 'info');
                 this.onMicPolicy?.(policy, false);
+                break;
+            }
+
+            // Server-validated (creator-only) room password change — sent to every
+            // peer INCLUDING the requesting creator, same single-apply-path shape as
+            // 'mic-policy-update'. Deliberately not handled here beyond the callback:
+            // App.js owns the module-level `roomPassword` variable that mirrors
+            // sessionStorage['roomPassword'] (used on every reconnect's join message),
+            // so it — not PeerManager — is what actually persists this.
+            case 'password-update': {
+                const password = typeof payload.password === 'string' ? payload.password : null;
+                this.onPasswordUpdate?.(password);
                 break;
             }
 
@@ -2548,6 +2561,20 @@ export class PeerManager {
      */
     setMicPolicy(policy) {
         this.send('set-mic-policy', null, { policy });
+    }
+
+    /**
+     * Asks the server to change (or remove, with a falsy value) the room's join
+     * password (creator-only — server-enforced; a non-creator's request is
+     * silently ignored). Only affects future joins — everyone already connected,
+     * including us, stays in the call untouched. The new value lands back via
+     * the 'password-update' broadcast, which is also how our own client applies
+     * it — no optimistic local flip here.
+     * @param {string|null} password
+     * @returns {void}
+     */
+    setPassword(password) {
+        this.send('set-password', null, { password: password || null });
     }
 
     // All four actions are enforced server-side (WebSocketServer.js checks

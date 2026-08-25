@@ -23,12 +23,14 @@ export class QuickRoomSettings {
         this._wireOutsideClick();
         this._wireBannedList();
         this._wireMicPolicy();
+        this._wirePassword();
     }
 
     open() {
         this._refresh();
         this._refreshBannedSection();
         this._refreshMicPolicySection();
+        this._refreshPasswordSection();
         this.popover.classList.remove('hidden');
     }
 
@@ -136,6 +138,49 @@ export class QuickRoomSettings {
         document.getElementById('quick-mic-policy-picker')?.querySelectorAll('button').forEach(b => {
             b.classList.toggle('active', b.dataset.value === current);
         });
+    }
+
+    /**
+     * Creator-only "Room password" field — send a new value with Set, or clear
+     * protection entirely with Remove. Both just send the request; the actual
+     * apply (for this client too) happens through PeerManager's
+     * 'password-update' broadcast handler (App.js's onPasswordUpdate), same
+     * single-apply-path shape as the mic-policy picker above — no optimistic
+     * local flip here beyond re-disabling Remove once the input empties.
+     * @returns {void}
+     */
+    _wirePassword() {
+        document.getElementById('quick-password-set')?.addEventListener('click', () => {
+            const input = document.getElementById('quick-password-input');
+            const value = (input?.value || '').trim();
+            if (!value) return;
+            this.peerManager?.setPassword(value);
+        });
+        document.getElementById('quick-password-remove')?.addEventListener('click', () => {
+            this.peerManager?.setPassword(null);
+        });
+    }
+
+    /**
+     * Shows the room-password field for the creator only, prefilled from
+     * sessionStorage's current value (readable by every peer already in the
+     * room, not creator-specific — see PeerManager's 'password-update'
+     * handling) so editing/clearing it doesn't require retyping it first.
+     * @returns {void}
+     */
+    _refreshPasswordSection() {
+        const section = document.getElementById('quick-password-section');
+        if (!section) return;
+        if (!this.peerManager?.isCreatorMe?.()) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = '';
+        const current = sessionStorage.getItem('roomPassword') || '';
+        const input = document.getElementById('quick-password-input');
+        if (input) input.value = current;
+        const removeBtn = document.getElementById('quick-password-remove');
+        if (removeBtn) removeBtn.style.display = current ? '' : 'none';
     }
 
     /**

@@ -301,6 +301,27 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                     break;
                 }
 
+                // Room join password — creator-only, same tier as mic-policy. Only
+                // affects future joins (see SessionManager.setPassword); broadcasts the
+                // actual new value to EVERY peer including the requester, not just a
+                // hasPassword flag — anyone already in the room already knows a working
+                // password (the old one, if any got them in) or none was ever required,
+                // so this isn't a new trust boundary, just keeping every client's own
+                // join/invite state (a reconnect, an Invite-by-email send) from going
+                // stale after the creator rotates it.
+                case 'set-password': {
+                    const sessionId = manager.getSessionId(peerId);
+                    const result = manager.setPassword(sessionId, peerId, payload?.password);
+                    if (!result) break;
+                    manager.getPeersInSession(sessionId).forEach(pid => {
+                        const socket = manager.getPeerSocket(pid);
+                        if (socket) {
+                            socket.send(JSON.stringify({ type: 'password-update', payload: { hasPassword: !!result.password, password: result.password } }));
+                        }
+                    });
+                    break;
+                }
+
                 // Promote/demote are also owner-only — SessionManager's methods already
                 // re-check isCreator internally, but checking here too avoids doing any
                 // work (or broadcasting) for an unauthorized request.
