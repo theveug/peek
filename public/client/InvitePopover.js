@@ -29,7 +29,23 @@ export class InvitePopover {
 
         this._renderQrCode(link);
 
+        const emailLink = document.getElementById('invite-email-link');
+        if (emailLink) emailLink.href = this._buildMailtoHref(link);
+
         this.popover.classList.remove('hidden');
+    }
+
+    // sessionStorage['roomPassword'] (not this.roomCode/this constructor) is
+    // the same flat per-tab key App.js already reads/writes for joining —
+    // read fresh here rather than cached at construction time, since it can
+    // be set *after* the popover is built (entering a password to join).
+    _buildMailtoHref(link) {
+        const password = sessionStorage.getItem('roomPassword');
+        const subject = 'Join me on Peek';
+        let body = `Hey,\n\nJoin me for a call on Peek — just click the link below, no account or install needed:\n${link}\n\nRoom code: ${this.roomCode}`;
+        if (password) body += `\nPassword: ${password}`;
+        body += '\n\nSee you there!';
+        return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     }
 
     // qrcode-generator (public/assets/vendor/qrcode-generator.min.js) — pure
