@@ -930,17 +930,23 @@ export class UIController {
     // --- Peers ---
 
     /**
-     * Handles a new peer joining: plays a sound, adds their participant
-     * card immediately, and (after a short delay, to let their real
-     * nickname arrive first) posts a "joined" system message.
+     * Handles a new peer joining: adds their participant card immediately
+     * (dimmed, see `setPeerConnecting`) and, after a short delay to let their
+     * real nickname arrive first, posts a "joined" system message. The join
+     * *sound* is deliberately not played here — this fires off the raw WS
+     * signaling event, before any `RTCPeerConnection` to them exists, so
+     * sounding it here would falsely suggest audio could already be flowing.
+     * It's queued in `_pendingJoinSounds` instead and actually played by
+     * `markPeerConnected()` once the connection is real.
      * @param {string} peerId
      * @returns {void}
      */
     addPeer(peerId) {
-        playSound('peerJoin');
         this.addParticipant(peerId);
         if (!this._pendingJoinToasts) this._pendingJoinToasts = new Set();
         this._pendingJoinToasts.add(peerId);
+        if (!this._pendingJoinSounds) this._pendingJoinSounds = new Set();
+        this._pendingJoinSounds.add(peerId);
         setTimeout(() => {
             if (this._pendingJoinToasts.has(peerId)) {
                 this._pendingJoinToasts.delete(peerId);
@@ -1007,6 +1013,53 @@ export class UIController {
     addParticipant(peerId) {
         if (document.getElementById(`participant-${peerId}`)) return;
         this._createParticipantCard(peerId, peerId.substring(0, 8), false);
+        this.setPeerConnecting(peerId, true);
+    }
+
+    /**
+     * Toggles the dimmed "still negotiating" look on a participant card —
+     * applied the moment the card is created (both `addParticipant()`'s
+     * initial-room-list path and `addPeer()`'s later-joiner path), before the
+     * real `RTCPeerConnection` has finished ICE/DTLS, and cleared by
+     * `markPeerConnected()` once it actually has. Safe to call for a card
+     * that no longer exists (peer already left).
+     * @param {string} peerId
+     * @param {boolean} connecting
+     * @returns {void}
+     */
+    setPeerConnecting(peerId, connecting) {
+        const card = document.getElementById(`participant-${peerId}`);
+        if (!card) return;
+        card.classList.toggle('participant-connecting', connecting);
+        if (connecting) {
+            const dot = card.querySelector('.participant-status-dot');
+            if (dot) {
+                dot.style.background = this._statusColors.offline;
+                dot.dataset.tip = 'Connecting…';
+            }
+            const label = card.querySelector('.participant-status-label');
+            if (label) label.textContent = 'Connecting…';
+        }
+    }
+
+    /**
+     * Called once this peer's `RTCPeerConnection` actually reaches
+     * `connectionState === 'connected'` (a real media path is up), not just
+     * the signaling-layer join `addPeer()`/`addParticipant()` respond to
+     * immediately. Clears the connecting look and, only for a peer who
+     * joined after us (queued in `_pendingJoinSounds` by `addPeer()` — a
+     * peer already in the room at `'init'` never gets queued, so connecting
+     * to them can't replay a spurious join chime), plays the join sound —
+     * see `addPeer()` for why it doesn't play any earlier.
+     * @param {string} peerId
+     * @returns {void}
+     */
+    markPeerConnected(peerId) {
+        this.setPeerConnecting(peerId, false);
+        if (this._pendingJoinSounds?.has(peerId)) {
+            this._pendingJoinSounds.delete(peerId);
+            playSound('peerJoin');
+        }
     }
 
     _statusColors = {

@@ -1365,7 +1365,12 @@ export class PeerManager {
         };
 
         pc.onconnectionstatechange = () => {
-            if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+            if (pc.connectionState === 'connected') {
+                // Real media path up — see UIController.markPeerConnected()
+                // for why the join chime and the card's connecting-dim both
+                // wait for this instead of firing off the join signal alone.
+                this.ui.markPeerConnected(remotePeerId);
+            } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
                 this.removePeer(remotePeerId);
             }
         };

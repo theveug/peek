@@ -1996,6 +1996,30 @@ body:has(#members-sidebar.collapsed) .members-tab {
   background: var(--card-hover);
 }
 
+/* A peer whose RTCPeerConnection hasn't reached 'connected' yet (card exists
+   the instant they join the room/mesh, but the real P2P media path can take
+   another beat) — dimmed and the status dot pulses grey, distinct from any
+   real presence color, so it can't be mistaken for an actual status.
+   Cleared by UIController.markPeerConnected(). See CLAUDE.md's "peer
+   connecting state" convention. */
+.participant-connecting {
+  opacity: 0.55;
+  transition: opacity 0.3s ease;
+}
+
+.participant-connecting .participant-status-dot {
+  animation: connectingDotPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes connectingDotPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
 /* ===== Members sidebar (redesign, Phase 2c) ===== */
 /* Rows are plain (no hover, no click) — DMs are out of scope, so nothing
    should look interactive here. Scoped to .members-panel since the base
