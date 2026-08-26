@@ -2780,18 +2780,22 @@ body,
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem;
-  border-radius: 999px;
+  border-radius: 1rem;
   background: var(--bg3);
   border: 1px solid var(--border);
 }
 
+/* Discord-style: icon-only buttons with no chrome at rest — the bar itself
+   (bg3 + border above) already reads as a toolbar, so individual buttons only
+   need hover/active feedback, not their own resting fill. Squared corners
+   (was a full circle) to match the app's other icon buttons (.topbar-icon-btn). */
 .dock-btn {
   position: relative;
   width: 3rem;
   height: 3rem;
   border: none;
-  border-radius: 50%;
-  background: var(--bg5);
+  border-radius: 0.75rem;
+  background: transparent;
   color: var(--t1);
   cursor: pointer;
   display: flex;
@@ -2981,7 +2985,7 @@ body,
   width: 1rem;
   height: 1rem;
   border: none;
-  border-radius: 50%;
+  border-radius: 0.375rem;
   background: var(--bg2);
   border: 1px solid var(--border);
   color: var(--t2);
@@ -3089,7 +3093,7 @@ body,
 .dock-leave-btn {
   height: 3rem;
   border: none;
-  border-radius: 1.5rem;
+  border-radius: 0.75rem;
   background: var(--red);
   color: #fff;
   cursor: pointer;
