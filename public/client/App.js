@@ -15,6 +15,7 @@ import { playSound } from './SoundPlayer.js';
 import { RoomRail } from './RoomRail.js';
 import { updateSavedRoomPassword } from './savedRooms.js';
 import { isModifierCode, comboFromEvent, isComboHeld } from './keybindUtils.js';
+import { CallRecorder } from './CallRecorder.js';
 
 initTooltips();
 
@@ -26,6 +27,7 @@ const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
 const ui = new UIController();
 const peerManager = new PeerManager(null, ui);
 const debug = new DebugPanel(peerManager);
+const callRecorder = new CallRecorder({ peerManager, ui });
 ui.onWatchChange = (streamKey, watched) => peerManager.setWatched(streamKey, watched);
 ui.onEditMessage = (messageId, text) => peerManager.broadcastChatEdit(messageId, text);
 ui.onDeleteMessage = (messageId) => peerManager.broadcastChatDelete(messageId);
@@ -52,6 +54,12 @@ let leavingRoom = false;
 // mid-blip). Only a genuine page load should trigger a restore.
 let hasRestoredMedia = false;
 let roomPassword = sessionStorage.getItem('roomPassword') || null;
+// Same "resend on every join so a lazy recreate doesn't lose it" treatment
+// as roomPassword above — protects against the room's only peer's socket
+// dropping and reconnecting (or a plain page reload) before anyone else
+// joins, which would otherwise delete-then-lazily-recreate the session with
+// no topic at all.
+let roomTopic = sessionStorage.getItem('roomTopic') || null;
 // `let`, not `const`: joining a code with no live session lazily creates the
 // room, and the server mints + returns a creator token in 'init' — it must be
 // adopted here so reconnects within this tab re-claim ownership. Falls back
@@ -117,6 +125,7 @@ function connect() {
         const joinMsg = { type: 'join', sessionId };
         if (roomPassword) joinMsg.password = roomPassword;
         if (creatorToken) joinMsg.creatorToken = creatorToken;
+        if (roomTopic) joinMsg.topic = roomTopic;
         socket.send(JSON.stringify(joinMsg));
     };
 
@@ -606,7 +615,10 @@ document.getElementById('stage-view-focus').addEventListener('click', () => {
 // heading to the password-less lobby, but set to the *target* room's own
 // password when RoomRail is switching straight into another room). Each call
 // site owns clearing/setting roomPassword itself before calling this.
-function leaveSession(destinationUrl) {
+async function leaveSession(destinationUrl) {
+    // Must finish before navigating away, or the recording's download never
+    // gets a chance to fire (see CallRecorder.stop()'s doc comment).
+    if (callRecorder.isRecording()) await callRecorder.stop();
     leavingRoom = true;
     clearTimeout(reconnectTimer);
     socket?.close();
@@ -617,10 +629,11 @@ function leaveSession(destinationUrl) {
 }
 
 document.getElementById('leave-room-button').addEventListener('click', () => {
-    // Don't let this room's password survive into whatever room gets
+    // Don't let this room's password/topic survive into whatever room gets
     // created/joined next in this tab — see lobby.html's create/join
     // handlers for the matching set-or-clear fix on the other end of this bug.
     sessionStorage.removeItem('roomPassword');
+    sessionStorage.removeItem('roomTopic');
     leaveSession('/');
 });
 
@@ -832,6 +845,39 @@ function refreshMicPolicyLock() {
 
 wireQuickPopover('mic-options-caret', 'mic-options-popover', () => { refreshMicOptionsMode(); refreshMicOptionsRows(); refreshMicPolicyLock(); });
 
+// Local call recording — see CallRecorder.js. Local-only feedback via
+// showToast() (this is about your own downloaded file, not a room event);
+// the separate 'recording-status' broadcast CallRecorder sends for 'audio'/
+// 'composite' modes is what other peers see (a card badge + system message).
+const refreshRecordMode = wireSegmentedPicker('record-mode-picker', 'recordMode', () => {});
+wireQuickPopover('record-options-caret', 'record-options-popover', () => {
+    refreshRecordMode();
+    // Mode switching is only meaningful before a recording starts.
+    document.querySelectorAll('#record-mode-picker button[data-value]').forEach(b => {
+        b.disabled = callRecorder.isRecording();
+    });
+});
+
+document.getElementById('record-toggle').addEventListener('click', async () => {
+    const btn = document.getElementById('record-toggle');
+    if (callRecorder.isRecording()) {
+        await callRecorder.stop();
+        btn.classList.remove('dock-btn-active-red');
+        btn.dataset.tip = 'Start recording';
+        ui.showToast('Recording saved to your downloads');
+    } else {
+        const mode = localStorage.getItem('recordMode') || 'composite';
+        try {
+            await callRecorder.start(mode);
+            btn.classList.add('dock-btn-active-red');
+            btn.dataset.tip = 'Stop recording';
+            ui.showToast('Recording started — saved locally, nothing is sent to a server');
+        } catch (err) {
+            ui.showToast(err.message || 'Could not start recording');
+        }
+    }
+});
+
 // Fires on 'init' and every creator rule change (PeerManager also passes an
 // isInitial flag, unused here — the inline system message for changes comes
 // from its 'mic-policy-update' handler; this callback only owns the DOM
@@ -875,6 +921,57 @@ peerManager.onPasswordUpdate = (password) => {
         ? 'The room creator changed the room password'
         : 'The room creator removed the room password', 'info');
 };
+
+// Fires on 'init' (isInitial=true, no system message — nothing changed, this
+// is just the room's existing value) and on every live 'topic-update'
+// (isInitial=false — a real creator edit, worth a system message).
+peerManager.onTopicUpdate = (topic, isInitial) => {
+    roomTopic = topic;
+    if (topic) sessionStorage.setItem('roomTopic', topic);
+    else sessionStorage.removeItem('roomTopic');
+    ui.setTopic(topic);
+    if (!isInitial) {
+        ui.addSystemMessage(topic ? `The room creator changed the topic to "${topic}"` : 'The room creator cleared the room topic', 'info');
+    }
+};
+
+// Room topic banner: click the pencil to swap the topic text for an inline
+// input, Enter/blur saves via peerManager.setTopic(), Escape cancels — same
+// interaction shape as TopbarIdentity.js's #topbar-status-text field.
+document.getElementById('room-topic-edit-btn')?.addEventListener('click', () => {
+    const banner = document.getElementById('room-topic-banner');
+    const textEl = document.getElementById('room-topic-text');
+    const editBtn = document.getElementById('room-topic-edit-btn');
+    if (!banner || !textEl || !editBtn) return;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 120;
+    input.className = 'room-topic-input';
+    input.value = ui.roomTopic || '';
+    input.placeholder = 'Add a topic for this room...';
+
+    // Removing a focused element from the DOM (replaceWith below) fires a
+    // synchronous blur, which would otherwise call finish() a second time.
+    let done = false;
+    const finish = (save) => {
+        if (done) return;
+        done = true;
+        if (save) peerManager.setTopic(input.value.trim());
+        input.replaceWith(textEl);
+        ui.setTopic(ui.roomTopic);
+    };
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') finish(true);
+        else if (e.key === 'Escape') finish(false);
+    });
+    input.addEventListener('blur', () => finish(true));
+
+    textEl.replaceWith(input);
+    editBtn.style.display = 'none';
+    input.focus();
+    input.select();
+});
 
 document.getElementById('mic-options-threshold')?.addEventListener('input', (e) => {
     localStorage.setItem('micThreshold', e.target.value);

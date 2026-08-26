@@ -64,6 +64,7 @@ export class UIController {
         this.maxPeers = 6;
         this.roomName = null;
         this.roomCode = null;
+        this.roomTopic = null;
         // Local-only playback volume per remote peer (0-1, default 1). Not
         // persisted: peerIds are freshly assigned every reconnect, so a
         // localStorage entry keyed by peerId would never be looked up again.
@@ -80,6 +81,9 @@ export class UIController {
         // the sidebar queue's order. Same non-persistence rationale as
         // peerVolumes above — cleared in clearAllParticipants().
         this.raisedHands = new Map();
+        // peerIds currently broadcasting "I'm recording a mode that captures
+        // others" — session-scoped like raisedHands, cleared the same way.
+        this.recordingPeers = new Set();
         // Overall call volume, multiplied with each peer's own volume. This one
         // *is* persisted — it's a personal preference, not tied to any peer/session.
         this.masterCallVolume = parseFloat(localStorage.getItem('masterCallVolume'));
@@ -1524,6 +1528,7 @@ export class UIController {
         const el = document.getElementById(`participant-${peerId}`);
         if (el) el.remove();
         if (this.raisedHands.delete(peerId)) this._renderRaisedHands();
+        this.recordingPeers.delete(peerId);
         this._updateMemberCount();
     }
 
@@ -1542,6 +1547,7 @@ export class UIController {
         this.blockedPeerIds.clear();
         this.peerAvatars.clear();
         this.raisedHands.clear();
+        this.recordingPeers.clear();
         this._renderRaisedHands();
         this._updateMemberCount();
     }
@@ -1603,6 +1609,31 @@ export class UIController {
     }
 
     /**
+     * Live-updates the room-topic banner under the top bar — used both for
+     * the initial value (from setRoomMeta()) and every live 'topic-update'
+     * broadcast. Deliberately single-purpose like setHasPassword() above
+     * (touches only the banner's own DOM, no side effects) so a live change
+     * never re-triggers setRoomMeta()'s room-change logic. Text is set via
+     * textContent — a topic is creator-controlled but still peer-supplied,
+     * same XSS-safety rule as everything else peer-controlled.
+     * @param {string|null} topic
+     * @returns {void}
+     */
+    setTopic(topic) {
+        this.roomTopic = topic || null;
+        const isCreator = !!this.selfPeerId && this.selfPeerId === this.creatorPeerId;
+        const banner = document.getElementById('room-topic-banner');
+        const textEl = document.getElementById('room-topic-text');
+        const editBtn = document.getElementById('room-topic-edit-btn');
+        // Non-creators only ever see the banner when a topic is actually set;
+        // the creator also sees it empty (with just the pencil) so there's a
+        // way to add one in the first place.
+        if (textEl) textEl.textContent = this.roomTopic || (isCreator ? 'Add a topic for this room' : '');
+        if (banner) banner.style.display = (this.roomTopic || isCreator) ? '' : 'none';
+        if (editBtn) editBtn.style.display = isCreator ? '' : 'none';
+    }
+
+    /**
      * Renders a room's locally-persisted chat history (see `chatHistoryStore.js`)
      * above the live chat log on join/room-switch, oldest-first, read-only
      * (`isHistorical = true` — no hover action bar, never re-persisted). No-ops
@@ -1644,6 +1675,9 @@ export class UIController {
         this.creatorPeerId = creatorPeerId;
         this.moderatorPeerIds = moderatorPeerIds instanceof Set ? moderatorPeerIds : new Set(moderatorPeerIds || []);
         const iAmModerator = !!this.selfPeerId && this.moderatorPeerIds.has(this.selfPeerId);
+        // Re-derives the topic banner's creator-only affordances (edit button,
+        // visible-when-empty) now that creatorPeerId/selfPeerId are current.
+        this.setTopic(this.roomTopic);
 
         document.querySelectorAll('#participants .participant-card').forEach(card => {
             const peerId = card.id.replace('participant-', '');
@@ -1861,6 +1895,43 @@ export class UIController {
         }
 
         this._renderRaisedHands();
+    }
+
+    /**
+     * Shows/hides a peer's "recording" badge on their participant card and
+     * posts a one-line system-chat announcement on a real transition — mirrors
+     * updateParticipantHand()'s shape above. Only ever called for a mode that
+     * actually captures other peers (audio-mix/composite); 'local'-only
+     * recording never broadcasts this since nobody else is being captured.
+     * @param {string} peerId
+     * @param {boolean} recording
+     * @returns {void}
+     */
+    setPeerRecording(peerId, recording) {
+        const wasRecording = this.recordingPeers.has(peerId);
+        if (recording === wasRecording) return;
+        if (recording) this.recordingPeers.add(peerId);
+        else this.recordingPeers.delete(peerId);
+
+        const el = document.getElementById(`participant-${peerId}`);
+        if (el) {
+            const status = el.querySelector('.participant-status-icons');
+            let icon = el.querySelector('.participant-recording-icon');
+            if (recording) {
+                if (!icon && status) {
+                    icon = document.createElement('span');
+                    icon.className = 'participant-recording-icon material-symbols-rounded';
+                    icon.dataset.tip = 'Recording this call';
+                    icon.textContent = 'fiber_manual_record';
+                    status.appendChild(icon);
+                }
+            } else if (icon) {
+                icon.remove();
+            }
+        }
+
+        const nickname = this._peerNickname(peerId);
+        this.addSystemMessage(recording ? `${nickname} started recording` : `${nickname} stopped recording`, 'info');
     }
 
     /**

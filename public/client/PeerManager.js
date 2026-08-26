@@ -39,6 +39,8 @@ export class PeerManager {
         this.micPolicy = 'open'; // room mic rule ('open'|'ptt'), server-supplied via 'init'/'mic-policy-update'
         this.onMicModeForceMuted = null; // set by App.js — (enabled) when enforcePttMuteOnModeSwitch() mutes an open mic
         this.onPasswordUpdate = null; // set by App.js — (password: string|null) on every 'password-update'
+        this.onTopicUpdate = null; // set by App.js — (topic: string|null, isInitial) on 'init' and every 'topic-update'
+        this.peerRecordingConsent = new Map(); // peerId -> allowed boolean, see isRecordingAllowed()
         this.isSharing = false;
         // Placeholder until the server's 'init' supplies the real list (built
         // from the deployment's STUN_URL/TURN env config). Deliberately empty,
@@ -201,7 +203,7 @@ export class PeerManager {
      * @param {string[]} [msg.moderatorPeerIds]
      * @returns {Promise<void>}
      */
-    async handleSignal({ type, peerId, peers, from, payload, iceServers, creatorPeerId, moderatorPeerIds, bans, micPolicy }) {
+    async handleSignal({ type, peerId, peers, from, payload, iceServers, creatorPeerId, moderatorPeerIds, bans, micPolicy, topic }) {
         // console.groupCollapsed(`PeerManager.handleSignal(${type})`);
         // console.log('[SIGNAL]', type, { peerId, peers, from, payload });
 
@@ -241,6 +243,8 @@ export class PeerManager {
                 // not just server-side, since this also runs on reconnects.
                 this.micPolicy = micPolicy === 'ptt' ? 'ptt' : 'open';
                 this.onMicPolicy?.(this.micPolicy, true);
+                this.onTopicUpdate?.(topic || null, true);
+                this.peerRecordingConsent.clear();
                 setTimeout(() => {
                     this.broadcastMicStatus();
                     this.broadcastDeafenStatus();
@@ -248,6 +252,7 @@ export class PeerManager {
                     this.broadcastNickname();
                     this.broadcastStatus();
                     this.broadcastAvatar();
+                    this.broadcastRecordingConsent();
                 }, 500);
                 break;
 
@@ -286,6 +291,34 @@ export class PeerManager {
             case 'password-update': {
                 const password = typeof payload.password === 'string' ? payload.password : null;
                 this.onPasswordUpdate?.(password);
+                break;
+            }
+
+            // Server-validated (creator-only) room topic change — same single-
+            // apply-path shape as 'password-update'/'mic-policy-update' above.
+            case 'topic-update': {
+                const topicText = typeof payload.topic === 'string' ? payload.topic : null;
+                this.onTopicUpdate?.(topicText, false);
+                break;
+            }
+
+            // A peer's own local "allow others to record me" preference —
+            // unlike mic-policy/password this isn't server-validated room
+            // state, just an honor-system broadcast like hand-status/status-
+            // update. Default stays true (allowed) for any peer we haven't
+            // heard from yet — see isRecordingAllowed().
+            case 'recording-consent': {
+                if (typeof payload.allowed !== 'boolean') break;
+                this.peerRecordingConsent.set(from, payload.allowed);
+                break;
+            }
+
+            // Local-only UI cue (red badge + system message) that another peer
+            // is currently recording in a mode that captures other people —
+            // purely informational, not enforced server-side.
+            case 'recording-status': {
+                if (typeof payload.recording !== 'boolean') break;
+                this.ui.setPeerRecording(from, payload.recording);
                 break;
             }
 
@@ -2083,6 +2116,7 @@ export class PeerManager {
         delete this.peerScreenStreamIds[peerId];
         delete this.senders[peerId];
         delete this._sendQueues[peerId];
+        this.peerRecordingConsent.delete(peerId);
         // silent: this is blanket cleanup on a full disconnect — the 'peer-left'
         // handler plays the single peerLeft sound, and the 'init' reconnect sweep
         // should make no noise at all. Without it, every leave queued two phantom
@@ -2580,6 +2614,53 @@ export class PeerManager {
      */
     setPassword(password) {
         this.send('set-password', null, { password: password || null });
+    }
+
+    /**
+     * Asks the server to change (or clear, with a falsy value) the room's
+     * topic banner (creator-only — server-enforced). The new value lands
+     * back via the 'topic-update' broadcast, which is also how our own
+     * client applies it — no optimistic local flip here.
+     * @param {string|null} topic
+     * @returns {void}
+     */
+    setTopic(topic) {
+        this.send('set-topic', null, { topic: topic || null });
+    }
+
+    /**
+     * Broadcasts this peer's own "allow others to record me" preference
+     * (localStorage['allowRecording'], default allowed) so every other
+     * peer's recorder knows whether to include our audio/video. Honor-system
+     * only, same tier as hand-status/status-update — not server-validated
+     * room state like mic-policy/password.
+     * @returns {void}
+     */
+    broadcastRecordingConsent() {
+        const allowed = localStorage.getItem('allowRecording') !== '0';
+        this.send('recording-consent', null, { allowed });
+    }
+
+    /**
+     * @param {string} peerId
+     * @returns {boolean} true unless that peer has explicitly broadcast
+     *   allowed:false — defaults open, same as everyone starting off
+     *   presumed unmuted/unmoderated until told otherwise.
+     */
+    isRecordingAllowed(peerId) {
+        return this.peerRecordingConsent.get(peerId) !== false;
+    }
+
+    /**
+     * Local-only UI cue, not server-enforced: lets every other peer's client
+     * show a "recording" badge + system message while a mode that captures
+     * other people (audio-mix/composite) is active. Never sent for
+     * 'local'-only recording, which captures nobody else.
+     * @param {boolean} recording
+     * @returns {void}
+     */
+    broadcastRecordingStatus(recording) {
+        this.send('recording-status', null, { recording });
     }
 
     // All four actions are enforced server-side (WebSocketServer.js checks

@@ -63,13 +63,14 @@ document.getElementById('create-form').addEventListener('submit', async (e) => {
     createBtn.textContent = 'Creating...';
     try {
         const name = document.getElementById('create-name').value.trim();
+        const topic = document.getElementById('create-topic').value.trim();
         const password = document.getElementById('create-password').value;
         const maxPeers = maxPeersInput.value;
         const micPolicy = document.getElementById('create-ptt')?.checked ? 'ptt' : 'open';
         const res = await fetch('/api/create-room', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: name || null, password: password || null, maxPeers, micPolicy }),
+            body: JSON.stringify({ name: name || null, topic: topic || null, password: password || null, maxPeers, micPolicy }),
         });
         const { code, creatorToken } = await res.json();
         // Always set-or-clear, never leave a previous room's password
@@ -80,6 +81,14 @@ document.getElementById('create-form').addEventListener('submit', async (e) => {
             sessionStorage.setItem('roomPassword', password);
         } else {
             sessionStorage.removeItem('roomPassword');
+        }
+        // Same set-or-clear discipline for the flat, non-room-scoped
+        // roomTopic key — otherwise a later topicless room's lazy-recreate
+        // path could adopt a previous room's stale topic.
+        if (topic) {
+            sessionStorage.setItem('roomTopic', topic);
+        } else {
+            sessionStorage.removeItem('roomTopic');
         }
         sessionStorage.setItem('creatorToken', creatorToken);
         if (createSaveCheckbox.checked) {
@@ -136,6 +145,10 @@ async function attemptJoin(code, password, { onNeedsPassword, onWrongPassword, o
     } else {
         sessionStorage.removeItem('roomPassword');
     }
+    // A joiner never knows the room's topic ahead of time — always clear so
+    // a previously-visited room's topic can't leak in; the real value (if
+    // any) arrives fresh via this room's own 'init'.
+    sessionStorage.removeItem('roomTopic');
     window.location.href = '/' + code;
     return true;
 }

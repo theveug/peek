@@ -196,6 +196,14 @@
             </div>
         </div>
 
+        <div id="room-topic-banner" class="room-topic-banner" style="display:none;">
+            <span class="room-topic-icon material-symbols-rounded">campaign</span>
+            <span id="room-topic-text"></span>
+            <button type="button" id="room-topic-edit-btn" class="room-topic-edit-btn" data-tip="Edit topic" style="display:none;">
+                <span class="material-symbols-rounded">edit</span>
+            </button>
+        </div>
+
         <div class="flex-grow flex h-full min-h-0 text-foreground">
             <div class="chat-panel flex flex-col h-full border-r border-separator relative" id="chat">
                 <!-- Tab bar -->
@@ -562,6 +570,23 @@
                     <button id="raise-hand-toggle" data-tip="Raise hand" class="dock-btn">
                         <span class="material-symbols-rounded">front_hand</span>
                     </button>
+                    <div class="dock-btn-wrap relative">
+                        <button id="record-toggle" data-tip="Start recording" class="dock-btn">
+                            <span class="material-symbols-rounded">fiber_manual_record</span>
+                        </button>
+                        <button type="button" id="record-options-caret" data-tip="Recording options" class="dock-caret">
+                            <span class="material-symbols-rounded">expand_less</span>
+                        </button>
+                        <div id="record-options-popover" class="dock-quick-popover hidden">
+                            <div class="dock-quick-popover-label">Record</div>
+                            <div class="settings-segmented" id="record-mode-picker">
+                                <button type="button" data-value="composite">Video</button>
+                                <button type="button" data-value="audio">Audio only</button>
+                                <button type="button" data-value="local">My stream</button>
+                            </div>
+                            <div class="dock-popover-note">Saves a local file to your device when you stop. Nothing is sent to a server.</div>
+                        </div>
+                    </div>
                     <div class="dock-divider"></div>
                     <button id="leave-room-button" data-tip="Leave Room" class="dock-leave-btn">
                         <span class="material-symbols-rounded">call_end</span>Leave

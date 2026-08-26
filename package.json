@@ -35,6 +35,7 @@
     "test:password-hardening": "node tests/password-hardening.mjs",
     "test:mic-policy": "node tests/mic-policy.mjs",
     "test:room-password": "node tests/room-password.mjs",
+    "test:room-topic": "node tests/room-topic.mjs",
     "test:chat-history": "node tests/chat-history-retention.mjs",
     "test:keybind-combo": "node tests/keybind-combo-logic.mjs"
   },

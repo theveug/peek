@@ -2834,6 +2834,69 @@ body,
   line-height: 1;
 }
 
+/* ===== Recording badge (card icon) ===== */
+
+.participant-recording-icon {
+  color: var(--red);
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* ===== Room topic banner ===== */
+
+.room-topic-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 20px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--t2);
+}
+
+.room-topic-banner .room-topic-icon {
+  font-size: 16px;
+  color: var(--t3);
+  flex-shrink: 0;
+}
+
+#room-topic-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.room-topic-edit-btn {
+  flex-shrink: 0;
+  color: var(--t3);
+  font-size: 16px;
+  line-height: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.room-topic-edit-btn:hover {
+  color: var(--t1);
+  background: var(--bg3);
+}
+
+.room-topic-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 13px;
+  color: var(--t1);
+}
+
 .raised-hands-section {
   border-top: 1px solid var(--border);
   padding: 10px 16px;

@@ -102,12 +102,14 @@ export class RoomRail {
         this._closeMobileRail();
         if (location.pathname === '/') return;
         sessionStorage.removeItem('roomPassword');
+        sessionStorage.removeItem('roomTopic');
         this.navigate('/');
     }
 
     _handleAdd() {
         this._closeMobileRail();
         sessionStorage.removeItem('roomPassword');
+        sessionStorage.removeItem('roomTopic');
         this.navigate('/?new=1');
     }
 
@@ -229,6 +231,9 @@ export class RoomRail {
         // stale password from a previously joined room leak into this one.
         if (password) sessionStorage.setItem('roomPassword', password);
         else sessionStorage.removeItem('roomPassword');
+        // A joiner never knows the target room's topic ahead of time — same
+        // reasoning as lobby.js's attemptJoin.
+        sessionStorage.removeItem('roomTopic');
         if (password !== room.password) saveRoom({ code: room.code, label: room.label, password: password || null });
 
         this._closePopover();

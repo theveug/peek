@@ -28,12 +28,16 @@ export class SessionManager {
      *   creation; whoever presents it via `claimModerator` becomes creator.
      * @param {'open'|'ptt'} [options.micPolicy='open'] - room mic rule; anything
      *   other than the literal 'ptt' (JSON can carry any type) stores 'open'.
+     * @param {string|null} [options.topic] - optional room topic banner text,
+     *   normalized the same way as `password` (non-empty string capped at 120
+     *   chars, anything else stored as null).
      * @returns {void}
      */
-    createSession(sessionId, { name = null, password = null, maxPeers = 6, creatorToken = null, micPolicy = 'open' } = {}) {
+    createSession(sessionId, { name = null, password = null, maxPeers = 6, creatorToken = null, micPolicy = 'open', topic = null } = {}) {
         if (!this.sessions.has(sessionId)) {
             const clampedMaxPeers = Math.min(12, Math.max(2, parseInt(maxPeers, 10) || 6));
-            this.sessions.set(sessionId, { peers: new Set(), name, password, maxPeers: clampedMaxPeers, createdAt: Date.now(), creatorToken, creatorPeerId: null, moderatorPeerIds: new Set(), bannedIps: new Set(), bans: new Map(), micPolicy: micPolicy === 'ptt' ? 'ptt' : 'open' });
+            const cleanTopic = (typeof topic === 'string' && topic) ? topic.slice(0, 120) : null;
+            this.sessions.set(sessionId, { peers: new Set(), name, password, maxPeers: clampedMaxPeers, createdAt: Date.now(), creatorToken, creatorPeerId: null, moderatorPeerIds: new Set(), bannedIps: new Set(), bans: new Map(), micPolicy: micPolicy === 'ptt' ? 'ptt' : 'open', topic: cleanTopic });
         }
     }
 
@@ -62,14 +66,19 @@ export class SessionManager {
      * @param {object} [options]
      * @param {string|null} [options.password] - only applied if the session is being lazily created here.
      * @param {string|null} [options.creatorToken] - only applied if the session is being lazily created here.
+     * @param {string|null} [options.topic] - only applied if the session is being lazily created here;
+     *   same reasoning as password — a topic-having room recreated this way (e.g. its only
+     *   peer's socket drops and reconnects before anyone else joins) keeps its topic instead
+     *   of silently coming back topic-less. The client resends its last-known topic on every
+     *   join, same as password.
      * @returns {void}
      */
-    addPeer(sessionId, peerId, socket, { password = null, creatorToken = null } = {}) {
+    addPeer(sessionId, peerId, socket, { password = null, creatorToken = null, topic = null } = {}) {
         // Lazy-create goes through createSession — a second inline session
         // literal here silently drifted from createSession's shape once
         // already (missing bannedIps, crashing recordBan in lazily-created
         // rooms), so there is deliberately only one place that builds one.
-        this.createSession(sessionId, { password, creatorToken });
+        this.createSession(sessionId, { password, creatorToken, topic });
         this.sessions.get(sessionId).peers.add(peerId);
         this.peerMap.set(peerId, { sessionId, socket });
     }
@@ -214,6 +223,22 @@ export class SessionManager {
         // the new password, anything else (including a non-string) clears it.
         s.password = (typeof password === 'string' && password) ? password.slice(0, 200) : null;
         return { password: s.password };
+    }
+
+    /**
+     * Changes (or clears, with a falsy `topic`) the room's topic banner text.
+     * Creator-only, same shape/return convention as setPassword() above.
+     * @param {string} sessionId
+     * @param {string} requesterPeerId
+     * @param {string|null} topic
+     * @returns {false|{topic: string|null}} false if unauthorized; otherwise
+     *   the normalized value actually stored.
+     */
+    setTopic(sessionId, requesterPeerId, topic) {
+        const s = this.sessions.get(sessionId);
+        if (!s || s.creatorPeerId !== requesterPeerId) return false;
+        s.topic = (typeof topic === 'string' && topic) ? topic.slice(0, 120) : null;
+        return { topic: s.topic };
     }
 
     /**
@@ -365,12 +390,12 @@ export class SessionManager {
      * actual password) — used to answer lobby validation requests and to
      * populate the room-info a client sees in its own `'init'` payload.
      * @param {string} sessionId
-     * @returns {{name: string|null, hasPassword: boolean, peerCount: number, maxPeers: number, creatorPeerId: string|null, moderatorPeerIds: string[], micPolicy: 'open'|'ptt'}|null}
+     * @returns {{name: string|null, hasPassword: boolean, peerCount: number, maxPeers: number, creatorPeerId: string|null, moderatorPeerIds: string[], micPolicy: 'open'|'ptt', topic: string|null}|null}
      */
     getSessionMeta(sessionId) {
         const s = this.sessions.get(sessionId);
         if (!s) return null;
-        return { name: s.name, hasPassword: !!s.password, peerCount: s.peers.size, maxPeers: s.maxPeers ?? 6, creatorPeerId: s.creatorPeerId ?? null, moderatorPeerIds: [...s.moderatorPeerIds], micPolicy: s.micPolicy ?? 'open' };
+        return { name: s.name, hasPassword: !!s.password, peerCount: s.peers.size, maxPeers: s.maxPeers ?? 6, creatorPeerId: s.creatorPeerId ?? null, moderatorPeerIds: [...s.moderatorPeerIds], micPolicy: s.micPolicy ?? 'open', topic: s.topic ?? null };
     }
 
     /**

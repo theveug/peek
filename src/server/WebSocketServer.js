@@ -109,6 +109,10 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                     // stored by a lazy-create as a session's password.
                     const joinPassword = typeof msg.password === 'string' ? msg.password.slice(0, 200) : null;
                     const joinCreatorToken = typeof msg.creatorToken === 'string' ? msg.creatorToken : null;
+                    // Same "keep this alive through a lazy recreate" treatment as
+                    // password — the client resends its last-known topic on every
+                    // join (see App.js's roomTopic variable).
+                    const joinTopic = typeof msg.topic === 'string' ? msg.topic.slice(0, 120) : null;
 
                     // Ban gate: a banned IP stays out for the rest of the session's
                     // lifetime (the set dies with the room). The creator token bypasses
@@ -155,7 +159,7 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                         : null;
                     const presentedToken = joinCreatorToken || mintedCreatorToken;
 
-                    manager.addPeer(sessionId, peerId, ws, { password: joinPassword, creatorToken: presentedToken });
+                    manager.addPeer(sessionId, peerId, ws, { password: joinPassword, creatorToken: presentedToken, topic: joinTopic });
                     const peers = manager.getPeersInSession(sessionId).filter(p => p !== peerId);
 
                     // A claim can flip creatorPeerId/moderatorPeerIds, so this must run
@@ -164,7 +168,7 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                     const meta = manager.getSessionMeta(sessionId);
 
                     const iceServers = generateIceServers(iceConfig);
-                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, creatorPeerId: meta?.creatorPeerId || null, moderatorPeerIds: meta?.moderatorPeerIds || [], micPolicy: meta?.micPolicy || 'open', creatorToken: mintedCreatorToken || undefined, buildId }));
+                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, creatorPeerId: meta?.creatorPeerId || null, moderatorPeerIds: meta?.moderatorPeerIds || [], micPolicy: meta?.micPolicy || 'open', topic: meta?.topic || null, creatorToken: mintedCreatorToken || undefined, buildId }));
 
                     peers.forEach(pid => {
                         const socket = manager.getPeerSocket(pid);
@@ -204,7 +208,9 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                 case 'hand-status':
                 case 'nickname-update':
                 case 'status-update':
-                case 'avatar-update': {
+                case 'avatar-update':
+                case 'recording-consent':
+                case 'recording-status': {
                     const sessionId = manager.getSessionId(peerId);
                     const peers = manager.getPeersInSession(sessionId).filter(id => id !== peerId);
                     peers.forEach(pid => {
@@ -317,6 +323,21 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                         const socket = manager.getPeerSocket(pid);
                         if (socket) {
                             socket.send(JSON.stringify({ type: 'password-update', payload: { hasPassword: !!result.password, password: result.password } }));
+                        }
+                    });
+                    break;
+                }
+
+                // Room topic banner — creator-only, same broadcast-to-everyone-
+                // including-the-requester shape as set-password/set-mic-policy above.
+                case 'set-topic': {
+                    const sessionId = manager.getSessionId(peerId);
+                    const result = manager.setTopic(sessionId, peerId, payload?.topic);
+                    if (!result) break;
+                    manager.getPeersInSession(sessionId).forEach(pid => {
+                        const socket = manager.getPeerSocket(pid);
+                        if (socket) {
+                            socket.send(JSON.stringify({ type: 'topic-update', payload: { topic: result.topic } }));
                         }
                     });
                     break;

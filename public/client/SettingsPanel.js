@@ -507,6 +507,19 @@ export class SettingsPanel {
                             </div>
                             <div class="settings-toggle-row">
                                 <div>
+                                    <div class="settings-toggle-row-title">Allow others to record you</div>
+                                    <div class="settings-toggle-row-desc">Recording stays fully local to whoever starts
+                                        it — Peek never stores anything on a server. Turning this off just tells
+                                        other participants' clients to leave your audio/video out of anything they
+                                        record. Client-side cooperation only, like the room's mic mode — a modified
+                                        client could ignore it.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox"
+                                        id="settings-allow-recording" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
                                     <div class="settings-toggle-row-title">Save chat history on this device</div>
                                     <div class="settings-toggle-row-desc">Keeps a local copy of your chat text so it's
                                         here when you rejoin this room. Only ever stored in your browser — never sent
@@ -1636,6 +1649,13 @@ export class SettingsPanel {
             localStorage.setItem('autoAcceptFiles', e.target.checked ? '1' : '0');
         });
 
+        document.getElementById('settings-allow-recording')?.addEventListener('change', (e) => {
+            localStorage.setItem('allowRecording', e.target.checked ? '1' : '0');
+            // Re-broadcast immediately so any peer already recording (or about
+            // to start) picks up the change live, not just on their next join.
+            this.peerManager?.broadcastRecordingConsent();
+        });
+
         const historyToggle = document.getElementById('settings-chat-history-enabled');
         const daysField = document.getElementById('chat-history-days-field');
         historyToggle?.addEventListener('change', (e) => {
@@ -1715,6 +1735,12 @@ export class SettingsPanel {
     _refreshPrivacy() {
         const autoAccept = document.getElementById('settings-auto-accept-files');
         if (autoAccept) autoAccept.checked = localStorage.getItem('autoAcceptFiles') === '1';
+
+        // Defaults to allowed (unlike the other toggles here, which default
+        // off) — same least-friction default as Discord's own recording
+        // consent toggle.
+        const allowRecording = document.getElementById('settings-allow-recording');
+        if (allowRecording) allowRecording.checked = localStorage.getItem('allowRecording') !== '0';
 
         const historyToggle = document.getElementById('settings-chat-history-enabled');
         const historyEnabled = localStorage.getItem('chatHistoryEnabled') === '1';
