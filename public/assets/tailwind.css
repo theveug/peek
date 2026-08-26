@@ -2511,20 +2511,32 @@ body,
 }
 
 /* ===== Controls bar positioning (desktop default) ===== */
-.controls-bar {
+/* A flush bottom panel spanning the stage's own width, not a floating
+   centered pill — matches the stage-header bar at the top of the same
+   column. Being bound to the stage container (not the viewport) already
+   keeps it clear of the chat/members side panels without needing a
+   max-width clamp, and going full-width pushes the point where it'd need
+   to wrap much further out than the old narrower floating pill did — in
+   practice this stays one row at any width that isn't both side panels
+   pinned wide open on a narrow window. flex-wrap stays as a safety net
+   for that edge case (never clip buttons under the side panels or hide
+   them behind an undiscoverable scroll), and row-gap keeps a wrapped
+   pair of rows looking like a deliberate two-row panel rather than a
+   squashed stack. Targets #controls (not just .controls-bar) so these
+   overrides reliably beat .dock-bar's own border-radius/padding
+   regardless of the two rule blocks' source order. */
+#controls.controls-bar {
   position: absolute;
-  bottom: 1rem;
-  left: 50%;
+  bottom: 0;
+  left: 0;
+  right: 0;
   top: auto;
-  right: auto;
-  transform: translateX(-50%);
-  /* Never wider than the stage it lives in: with both side panels dragged
-     wide, the dock used to overflow underneath them (partially hidden and
-     unclickable). Clamping + wrapping keeps every button visible inside the
-     stage instead of overlaying the panels (which would cover the composer
-     and the raised-hands section). */
-  max-width: calc(100% - 1rem);
+  width: 100%;
+  transform: none;
+  border-radius: 1rem 1rem 0 0;
+  padding: 0.625rem 1rem;
   flex-wrap: wrap;
+  row-gap: 0.625rem;
   justify-content: center;
 }
 
