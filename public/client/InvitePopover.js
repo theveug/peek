@@ -27,10 +27,13 @@ export class InvitePopover {
         const link = `${location.origin}/${this.roomCode}`;
         if (linkField) linkField.value = link;
 
-        this._renderQrCode(link);
+        const { subject, body } = this._buildEmailContent(link);
 
         const emailLink = document.getElementById('invite-email-link');
-        if (emailLink) emailLink.href = this._buildMailtoHref(link);
+        if (emailLink) emailLink.href = this._buildMailtoHref(subject, body);
+
+        const templateField = document.getElementById('invite-email-template');
+        if (templateField) templateField.value = `Subject: ${subject}\n\n${body}`;
 
         this.popover.classList.remove('hidden');
     }
@@ -39,25 +42,20 @@ export class InvitePopover {
     // the same flat per-tab key App.js already reads/writes for joining —
     // read fresh here rather than cached at construction time, since it can
     // be set *after* the popover is built (entering a password to join).
-    _buildMailtoHref(link) {
+    // Shared by both the mailto link and the plain-text template field below
+    // it (for anyone without a mail client configured to catch mailto:) so
+    // the two can never drift out of sync with each other.
+    _buildEmailContent(link) {
         const password = sessionStorage.getItem('roomPassword');
         const subject = 'Join me on Peek';
         let body = `Hey,\n\nJoin me for a call on Peek — just click the link below, no account or install needed:\n${link}\n\nRoom code: ${this.roomCode}`;
         if (password) body += `\nPassword: ${password}`;
         body += '\n\nSee you there!';
-        return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        return { subject, body };
     }
 
-    // qrcode-generator (public/assets/vendor/qrcode-generator.min.js) — pure
-    // client-side, no server round-trip, matches the offline-first rule.
-    // typeNumber 0 = auto-pick the smallest QR version that fits the data.
-    _renderQrCode(text) {
-        const container = document.getElementById('invite-qr-code');
-        if (!container || typeof qrcode !== 'function') return;
-        const qr = qrcode(0, 'M');
-        qr.addData(text);
-        qr.make();
-        container.innerHTML = qr.createSvgTag({ scalable: true });
+    _buildMailtoHref(subject, body) {
+        return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     }
 
     close() {
@@ -91,6 +89,11 @@ export class InvitePopover {
         document.getElementById('invite-copy-link')?.addEventListener('click', () => {
             navigator.clipboard.writeText(`${location.origin}/${this.roomCode}`);
             this.ui.showToast('Invite link copied');
+        });
+        document.getElementById('invite-copy-email-template')?.addEventListener('click', () => {
+            const field = document.getElementById('invite-email-template');
+            if (field) navigator.clipboard.writeText(field.value);
+            this.ui.showToast('Email template copied');
         });
     }
 }

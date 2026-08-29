@@ -76,11 +76,21 @@
                                 message.</p>
                         </div>
                         <div class="settings-field" style="margin-bottom:0;">
-                            <div class="settings-label">Scan to join</div>
-                            <div id="invite-qr-code" class="invite-qr-code"></div>
+                            <div class="settings-label">Email template</div>
+                            <textarea id="invite-email-template" class="settings-text-input font-mono-app"
+                                style="max-width:none;width:100%;resize:vertical;min-height:6.5rem;" readonly></textarea>
+                            <button type="button" id="invite-copy-email-template" class="lobby-btn-secondary"
+                                style="width:auto;padding:0.5625rem 0.875rem;margin-top:0.5rem;">Copy</button>
+                            <p class="settings-section-subcopy" style="margin:0.375rem 0 0;font-size:0.7813rem;">Paste
+                                this into an email if "Invite by email" above didn't open a mail app.</p>
                         </div>
                     </div>
                 </div>
+
+                <button id="leave-room-button" data-tip="Leave Room" class="topbar-leave-btn">
+                    <span class="material-symbols-rounded">call_end</span>
+                    <span class="topbar-leave-label">Leave</span>
+                </button>
 
                 <div class="flex items-center relative">
                     <button id="quick-settings-button" data-tip="Room settings" class="topbar-icon-btn">
@@ -591,10 +601,6 @@
                             <div class="dock-popover-note">Saves a local file to your device when you stop. Nothing is sent to a server.</div>
                         </div>
                     </div>
-                    <div class="dock-divider"></div>
-                    <button id="leave-room-button" data-tip="Leave Room" class="dock-leave-btn">
-                        <span class="material-symbols-rounded">call_end</span>Leave
-                    </button>
                 </div>
 
                 <!-- Controls tab: overlays the stage's bottom edge, reopens the dock once it's closed -->
@@ -717,14 +723,13 @@
 
     <!-- Third-party libs — self-hosted from /assets/vendor (marked@13.0.3,
              dompurify@3.1.6, jszip@3.10.1, highlight.js@11.9.0,
-             qrcode-generator@2.0.4, @mediapipe/selfie_segmentation@0.1.1675465747),
+             @mediapipe/selfie_segmentation@0.1.1675465747),
              so the app has zero network dependencies and works on a disconnected
              LAN. Never swap these back to CDN URLs: unpinned/no-SRI CDN scripts
              were the top finding of two security reviews. -->
     <script src="/assets/vendor/marked.min.js"></script>
     <script src="/assets/vendor/purify.min.js"></script>
     <script src="/assets/vendor/jszip.min.js"></script>
-    <script src="/assets/vendor/qrcode-generator.min.js"></script>
     <!-- Wrapper JS only (~44KB) — the multi-MB WASM/model files in
              /assets/vendor/mediapipe/ are only fetched if/when background
              blur is actually turned on (see VirtualBackground.js), so this

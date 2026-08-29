@@ -2885,9 +2885,8 @@ body,
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem;
-  border-radius: 1rem;
   background: var(--bg3);
-  border: 1px solid var(--border);
+  border-top: 1px solid var(--border);
 }
 
 /* Discord-style: icon-only buttons with no chrome at rest — the bar itself
@@ -3233,30 +3232,6 @@ body,
   width: 2rem;
   text-align: right;
   flex-shrink: 0;
-}
-
-.dock-leave-btn {
-  height: 3rem;
-  border: none;
-  border-radius: 0.75rem;
-  background: var(--red);
-  color: #fff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 700;
-}
-
-.dock-leave-btn:hover {
-  opacity: 0.9;
-}
-
-.dock-leave-btn .material-symbols-rounded {
-  font-size: 1.375rem;
-  line-height: 1;
 }
 
 /* ===== Settings panel (redesign, Phase 3) ===== */
@@ -4921,6 +4896,30 @@ body,
   font-size: 1.0625rem;
 }
 
+.topbar-leave-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: 0.625rem;
+  border: none;
+  background: var(--red);
+  color: #fff;
+  font-size: 0.8438rem;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+.topbar-leave-btn:hover {
+  opacity: 0.9;
+}
+
+.topbar-leave-btn .material-symbols-rounded {
+  font-size: 1.0625rem;
+}
+
 .topbar-icon-btn {
   width: 2.375rem;
   height: 2.375rem;
@@ -5073,23 +5072,6 @@ body,
   min-width: 0;
 }
 
-/* White background regardless of theme — the QR module colors are baked in
-   as black-on-white by the generator, and a dark surface behind them would
-   ruin contrast/scannability. */
-.invite-qr-code {
-  display: flex;
-  justify-content: center;
-  padding: 0.75rem;
-  background: #fff;
-  border-radius: 0.625rem;
-}
-
-.invite-qr-code svg {
-  display: block;
-  width: 8.25rem;
-  height: 8.25rem;
-}
-
 @media (max-width: 767px) {
   .topbar {
     padding: 0 0.5rem;
@@ -5103,6 +5085,7 @@ body,
 
   .topbar-brand-name,
   .topbar-invite-label,
+  .topbar-leave-label,
   .topbar-identity-name {
     display: none;
   }
@@ -5130,7 +5113,8 @@ body,
     display: none;
   }
 
-  .topbar-invite-btn {
+  .topbar-invite-btn,
+  .topbar-leave-btn {
     padding: 0.5rem 0.625rem;
   }
 
