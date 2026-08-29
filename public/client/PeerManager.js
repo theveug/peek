@@ -552,12 +552,102 @@ export class PeerManager {
         await track.applyConstraints(this._resolveQuality('screen'));
     }
 
-    /** Re-applies the current webcam track's resolved quality constraints. */
+    /**
+     * Re-applies the current webcam resolution/fps settings live, without
+     * requiring the user to toggle the camera off/on. A plain
+     * `track.applyConstraints()` isn't reliable enough for this on its own —
+     * many real UVC webcam drivers (notably on Windows) accept the call
+     * without throwing but silently keep the old capture resolution, since
+     * the hardware can't renegotiate its format mid-stream (confirmed against
+     * a real Logitech C922; Chromium's synthetic fake-device capture in tests
+     * *does* honor applyConstraints live, which is why this gap doesn't show
+     * up there). Reacquiring a fresh `getUserMedia()` stream at the new
+     * constraints and hot-swapping it in is the same known-reliable technique
+     * `switchCamera()` already uses for a device change — safe to do without
+     * a fresh user gesture, unlike `getDisplayMedia()` (see
+     * `mediaStateStore.js`'s restore-after-refresh note), so screen-share
+     * quality (`applyQualitySettings()` above) can't use this same approach
+     * and stays on `applyConstraints()`.
+     *
+     * Unlike `switchCamera()` (which hands off between two *different*
+     * capture sessions — a different physical device, or the same device at
+     * a different facing direction — and deliberately acquires the new
+     * stream before stopping the old one to avoid a flicker), this always
+     * re-opens the *same* device it's already holding open. A webcam can't
+     * usually be opened twice concurrently at two different resolutions —
+     * confirmed here (both against a real Logitech C922 and against
+     * Chromium's own fake test device): a second `getUserMedia()` for a
+     * still-open device silently reuses whatever format the first capture
+     * session already negotiated instead of renegotiating, so the resolution
+     * change would silently no-op. The old hardware track is stopped first
+     * to force a real re-negotiation; `_hotSwapCamStream()`'s own old-stream
+     * cleanup becomes a harmless no-op on an already-stopped track.
+     * @returns {Promise<void>}
+     */
     async applyCamQualitySettings() {
-        if (!this.camStream) return;
-        const track = this.camStream.getVideoTracks()[0];
-        if (!track) return;
-        await track.applyConstraints(this._resolveQuality('cam'));
+        if (!this.camEnabled || !this._rawCamStream) return;
+        const rawTrack = this._rawCamStream.getVideoTracks()[0];
+        const deviceId = rawTrack.getSettings().deviceId;
+        try {
+            rawTrack.stop();
+            const newRawStream = await navigator.mediaDevices.getUserMedia({
+                video: { ...this._resolveQuality('cam'), ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
+                audio: false,
+            });
+            await this._hotSwapCamStream(newRawStream);
+        } catch (err) {
+            // The old hardware track is already stopped above with no way to
+            // silently recover it — leaving camEnabled/camStream in their old
+            // state here would strand the UI showing "camera on" against a
+            // stream that no longer exists, so this fully tears down instead
+            // of just logging, same as toggleCam()'s own acquisition-failure path.
+            console.warn('Live webcam quality change failed:', err);
+            this.ui.showToast('Lost the camera while changing quality — turn it back on to continue');
+            this.stopCam();
+        }
+    }
+
+    /**
+     * Swaps `newRawStream` in as the outgoing camera stream without
+     * renegotiating SDP — reuses each peer connection's existing `cam-video`
+     * `RTCRtpSender` via `replaceTrack()`, the same mechanism `switchCamera()`'s
+     * device-change path and `applyCamQualitySettings()` above both rely on.
+     * Records capabilities off the new track, re-applies background blur if
+     * it's on, updates the self-view PiP, and stops whatever streams it
+     * replaces. Callers own acquiring `newRawStream` and any device/facing-mode
+     * bookkeeping — this only ever swaps, never decides what to swap to.
+     * @param {MediaStream} newRawStream
+     * @returns {Promise<void>}
+     */
+    async _hotSwapCamStream(newRawStream) {
+        const newRawTrack = newRawStream.getVideoTracks()[0];
+        this._recordCamCapabilities(newRawTrack);
+        newRawTrack.onended = () => {
+            this.stopCam();
+            document.getElementById('cam-on-icon')?.classList.add('hidden');
+            document.getElementById('cam-off-icon')?.classList.remove('hidden');
+        };
+
+        const oldRawStream = this._rawCamStream;
+        const oldProcessedStream = this.camStream;
+        this._virtualBackground?.stop();
+        this._virtualBackground = null;
+
+        this._rawCamStream = newRawStream;
+        this.camStream = await this._applyBackgroundProcessing(newRawStream);
+        const newTrack = this.camStream.getVideoTracks()[0];
+
+        for (const [peerId, pc] of Object.entries(this.peers)) {
+            const sender = this.senders[peerId]?.['cam-video'];
+            if (sender) await sender.replaceTrack(newTrack);
+        }
+
+        this.ui.addStream('me-cam', this.camStream);
+
+        oldRawStream?.getTracks().forEach(t => t.stop());
+        if (oldProcessedStream && oldProcessedStream !== oldRawStream) {
+            oldProcessedStream.getTracks().forEach(t => t.stop());
+        }
     }
 
     /**
@@ -2545,35 +2635,8 @@ export class PeerManager {
                 newRawStream = acquired.stream;
                 resolvedFacing = acquired.facingMode;
             }
-            const newRawTrack = newRawStream.getVideoTracks()[0];
-            this._recordCamCapabilities(newRawTrack);
-            newRawTrack.onended = () => {
-                this.stopCam();
-                document.getElementById('cam-on-icon')?.classList.add('hidden');
-                document.getElementById('cam-off-icon')?.classList.remove('hidden');
-            };
-
-            const oldRawStream = this._rawCamStream;
-            const oldProcessedStream = this.camStream;
-            this._virtualBackground?.stop();
-            this._virtualBackground = null;
-
-            this._rawCamStream = newRawStream;
             this._camFacingMode = resolvedFacing;
-            this.camStream = await this._applyBackgroundProcessing(newRawStream);
-            const newTrack = this.camStream.getVideoTracks()[0];
-
-            for (const [peerId, pc] of Object.entries(this.peers)) {
-                const sender = this.senders[peerId]?.['cam-video'];
-                if (sender) await sender.replaceTrack(newTrack);
-            }
-
-            this.ui.addStream('me-cam', this.camStream);
-
-            oldRawStream?.getTracks().forEach(t => t.stop());
-            if (oldProcessedStream && oldProcessedStream !== oldRawStream) {
-                oldProcessedStream.getTracks().forEach(t => t.stop());
-            }
+            await this._hotSwapCamStream(newRawStream);
         } catch (err) {
             console.warn('Switch camera failed:', err);
             this.ui.showToast('Could not switch camera');
