@@ -639,6 +639,14 @@ export class UIController {
         };
         updateCaption();
         video.onloadedmetadata = updateCaption;
+        // A peer changing quality live (webcam picker's applyCamQualitySettings
+        // hot-swap, screen-share's applyConstraints) doesn't hand this video
+        // element a new track/stream — the existing RTCRtpSender is
+        // replaceTrack()'d or constrained in place — so `loadedmetadata` never
+        // fires again and the caption goes stale. `resize` is the event that
+        // actually fires on an HTMLVideoElement when its intrinsic dimensions
+        // change mid-playback; without it this only ever updated on first focus.
+        video.onresize = updateCaption;
     }
 
     /**
@@ -877,6 +885,11 @@ export class UIController {
                 };
                 updateBadge();
                 video.addEventListener('loadedmetadata', updateBadge);
+                // See _updateFocusMeta's comment on the same pair of listeners — a
+                // live screen-share quality change re-constrains the existing
+                // track in place rather than handing this tile a new one, so
+                // `resize` (not `loadedmetadata`) is what actually fires.
+                video.addEventListener('resize', updateBadge);
                 cell.appendChild(badge);
             }
 
