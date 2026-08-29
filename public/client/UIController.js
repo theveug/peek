@@ -605,14 +605,19 @@ export class UIController {
     /**
      * Switches to focus view on the given stream: marks it watched, resets
      * zoom/pan, and updates the focus caption/watch-state overlay.
-     * @param {string} peerId
+     * @param {string} peerId - a stream key; `'me'`/`'me-cam'` focuses your own
+     *   preview fullscreen (2026-08-29 — see "Self-view unified into grid/focus"
+     *   in CLAUDE.md).
      * @returns {void}
      */
     focusStream(peerId) {
         const stream = this.streams[peerId];
         if (!stream) return;
 
-        this._watchTile(peerId);
+        // Watch-tile tracking exists to tell the *owning peer* to pause/resume
+        // their sender — your own stream is already local, there's no sender to
+        // pause and no peerId to signal, so 'me'/'me-cam' never go through it.
+        if (peerId !== 'me' && peerId !== 'me-cam') this._watchTile(peerId);
         this.focusedPeerId = peerId;
         this.focusedVideo.srcObject = stream;
         this.zoom = 1;
@@ -626,9 +631,12 @@ export class UIController {
 
     /** Updates the focus view's bottom-left caption (nickname · resolution) for `peerId`. */
     _updateFocusMeta(peerId) {
+        const isSelf = peerId === 'me' || peerId === 'me-cam';
         const isCam = peerId.endsWith('-cam');
-        const actualPeerId = isCam ? peerId.slice(0, -4) : peerId;
-        const nickname = this._peerNickname(actualPeerId);
+        // 'me'/'me-cam' aren't real peerIds — no `#participant-me` card exists —
+        // so _peerNickname needs the actual selfPeerId to resolve your real name.
+        const actualPeerId = isSelf ? (this.selfPeerId || peerId) : (isCam ? peerId.slice(0, -4) : peerId);
+        const nickname = isSelf ? `${this._peerNickname(actualPeerId)} (you)` : this._peerNickname(actualPeerId);
 
         const captionText = document.getElementById('focus-caption-text');
         const video = this.focusedVideo;
@@ -658,7 +666,10 @@ export class UIController {
      * @returns {void}
      */
     _renderFocusWatchState() {
-        const paused = !!this.focusedPeerId && !this.watchedTiles.has(this.focusedPeerId);
+        const isSelf = this.focusedPeerId === 'me' || this.focusedPeerId === 'me-cam';
+        // Self is never watch-tracked (see focusStream's comment) — it can't be
+        // "paused" for bandwidth, since it never left the local machine.
+        const paused = !!this.focusedPeerId && !isSelf && !this.watchedTiles.has(this.focusedPeerId);
         const overlay = document.getElementById('focus-paused-overlay');
         if (overlay) overlay.style.display = paused ? 'flex' : 'none';
         this.focusedVideo.style.visibility = paused ? 'hidden' : 'visible';
@@ -666,6 +677,10 @@ export class UIController {
         if (caption) caption.style.display = paused ? 'none' : 'flex';
         const btnGroup = document.getElementById('focus-icon-btn-group');
         if (btnGroup) btnGroup.style.display = paused ? 'none' : 'flex';
+        // "Stop watching" has nothing to do for self — hide just that one
+        // button, leaving the rest of the group (e.g. native PiP) usable.
+        const stopBtn = document.getElementById('focus-stop-button');
+        if (stopBtn) stopBtn.style.display = isSelf ? 'none' : 'flex';
     }
 
     /**
@@ -677,7 +692,7 @@ export class UIController {
     setupFocusControls() {
         document.getElementById('focus-stop-button')?.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (!this.focusedPeerId) return;
+            if (!this.focusedPeerId || this.focusedPeerId === 'me' || this.focusedPeerId === 'me-cam') return;
             this._unwatchTile(this.focusedPeerId);
             this._renderFocusWatchState();
         });
@@ -794,18 +809,26 @@ export class UIController {
     // --- Stream grid ---
 
     /**
-     * Rebuilds the entire grid view from `this.streams`: excludes self-views
-     * and blocked peers, auto-watches the sole stream when there's only one,
-     * and lays out a 1 or 2-column grid.
+     * Rebuilds the entire grid view from `this.streams`: excludes blocked
+     * peers, auto-watches the sole remote stream when there's only one, and
+     * lays out a 1 or 2-column grid. Your own stream(s) join the grid as
+     * normal tiles too (2026-08-29, unless "Hide my own preview" is on) —
+     * see "Self-view unified into grid/focus" in CLAUDE.md — appended after
+     * the remote tiles so the grid's column/row count never depends on
+     * whether self happens to be sharing/on-camera. Only ever called while
+     * `remoteIds.length > 0` (updateLayout's grid branch already returns
+     * early via the spinner otherwise), so self alone never triggers a
+     * grid render — it stays the floating PiP until someone else is here.
      * @returns {void}
      */
     buildGrid() {
         this.gridView.innerHTML = '';
         const remoteIds = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam' && !this.isBlocked(id));
-        const count = remoteIds.length;
-        if (count === 0) return;
+        if (remoteIds.length === 0) return;
 
-        if (count <= 1) {
+        // Bandwidth watch bookkeeping only applies to remote streams — your own
+        // camera/screen has no RTCRtpSender to pause, it's already local.
+        if (remoteIds.length <= 1) {
             // Only decide once per stream key, not on every rebuild — buildGrid()
             // re-runs on any addStream() call, including a peer switching their
             // share source mid-call (a new renegotiated MediaStream for the same
@@ -824,12 +847,17 @@ export class UIController {
             });
         }
 
+        const hideSelf = localStorage.getItem('hideSelfView') === '1';
+        const selfIds = hideSelf ? [] : ['me', 'me-cam'].filter(id => this.streams[id]);
+        const allIds = [...remoteIds, ...selfIds];
+        const count = allIds.length;
+
         const cols = count <= 1 ? 1 : 2;
         const rows = Math.ceil(count / cols);
         this.gridView.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
         this.gridView.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
 
-        remoteIds.forEach(peerId => {
+        allIds.forEach(peerId => {
             this.gridView.appendChild(this._buildGridCell(peerId));
         });
     }
@@ -837,15 +865,24 @@ export class UIController {
     /**
      * Builds one grid tile: either the live video (with mic icon, resolution
      * badge, and stop-watching button, if this stream is currently watched)
-     * or a "paused · click to watch" placeholder otherwise.
-     * @param {string} peerId - a stream key: bare peerId for screen share, `${peerId}-cam` for webcam.
+     * or a "paused · click to watch" placeholder otherwise. Also handles your
+     * own stream(s) (`'me'`/`'me-cam'`, 2026-08-29) as a tile like any other —
+     * always rendered live (never paused, no stop-watching button, since
+     * there's nothing to pause on a local stream) and labeled with your own
+     * real nickname instead of the literal `'me'` key.
+     * @param {string} peerId - a stream key: bare peerId for screen share, `${peerId}-cam` for webcam, or `'me'`/`'me-cam'` for self.
      * @returns {HTMLElement}
      */
     _buildGridCell(peerId) {
+        const isSelf = peerId === 'me' || peerId === 'me-cam';
         const isCam = peerId.endsWith('-cam');
-        const actualPeerId = isCam ? peerId.slice(0, -4) : peerId;
-        const nickname = this._peerNickname(actualPeerId);
+        // 'me'/'me-cam' aren't real peerIds — no `#participant-me` card, no
+        // `_micEnabled['me']` entry — so both lookups need the real selfPeerId.
+        const actualPeerId = isSelf ? (this.selfPeerId || peerId) : (isCam ? peerId.slice(0, -4) : peerId);
+        const nickname = isSelf ? `${this._peerNickname(actualPeerId)} (you)` : this._peerNickname(actualPeerId);
         const micEnabled = this._micEnabled?.[actualPeerId] ?? false;
+        // Self has no RTCRtpSender to pause/resume — always render live.
+        const isWatched = isSelf || this.watchedTiles.has(peerId);
 
         const cell = document.createElement('div');
         cell.className = 'grid-tile relative overflow-hidden cursor-pointer bg-black flex items-center justify-center min-h-0 min-w-0';
@@ -864,7 +901,7 @@ export class UIController {
         labelText.textContent = nickname + (isCam ? ' · Cam' : '');
         label.appendChild(labelText);
 
-        if (this.watchedTiles.has(peerId)) {
+        if (isWatched) {
             const video = document.createElement('video');
             video.muted = true;
             video.autoplay = true;
@@ -893,17 +930,19 @@ export class UIController {
                 cell.appendChild(badge);
             }
 
-            const stopBtn = document.createElement('button');
-            stopBtn.type = 'button';
-            stopBtn.dataset.tip = 'Stop watching';
-            stopBtn.className = 'grid-tile-stop-btn';
-            stopBtn.innerHTML = '<span class="material-symbols-rounded">close</span>';
-            stopBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this._unwatchTile(peerId);
-                cell.replaceWith(this._buildGridCell(peerId));
-            });
-            cell.appendChild(stopBtn);
+            if (!isSelf) {
+                const stopBtn = document.createElement('button');
+                stopBtn.type = 'button';
+                stopBtn.dataset.tip = 'Stop watching';
+                stopBtn.className = 'grid-tile-stop-btn';
+                stopBtn.innerHTML = '<span class="material-symbols-rounded">close</span>';
+                stopBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this._unwatchTile(peerId);
+                    cell.replaceWith(this._buildGridCell(peerId));
+                });
+                cell.appendChild(stopBtn);
+            }
 
             cell.addEventListener('click', () => {
                 this.autoFocusPaused = true;
@@ -1784,7 +1823,11 @@ export class UIController {
 
     /** Updates the mic icon on any grid tile(s) matching this peer. */
     _updateGridMicIcon(peerId, enabled) {
-        [peerId, `${peerId}-cam`].forEach(key => {
+        // Your own grid tile(s) are keyed 'me'/'me-cam', not selfPeerId (see
+        // "Self-view unified into grid/focus" in CLAUDE.md) — without this,
+        // muting yourself never live-updated your own tile's mic icon.
+        const keys = peerId === this.selfPeerId ? [peerId, `${peerId}-cam`, 'me', 'me-cam'] : [peerId, `${peerId}-cam`];
+        keys.forEach(key => {
             const tile = this.gridView?.querySelector(`[data-peer-id="${key}"]`);
             const icon = tile?.querySelector('.grid-tile-mic');
             if (!icon) return;
@@ -2195,20 +2238,75 @@ export class UIController {
 
     // --- Self-view PiPs ---
 
-    /** Auto-stacks the screen/cam self-view PiPs against the right edge (skips any that's been manually dragged). */
+    /** Auto-stacks the screen/cam self-view PiPs against the right edge (skips any that's been manually dragged, or currently hidden — see `_updateSelfViewVisibility`). */
     _updateSelfViewPositions() {
         const screenView = document.getElementById('self-view');
         const camView = document.getElementById('self-cam-view');
+        const screenVisible = !!screenView && screenView.style.display !== 'none';
+        const camVisible = !!camView && camView.style.display !== 'none';
         // A manually-dragged PiP (dataset.dragged) keeps its own explicit
-        // left/top — don't snap it back into the auto right-edge stacking.
-        if (screenView && camView) {
+        // left/top — don't snap it back into the auto right-edge stacking. A
+        // hidden PiP is skipped too, so it doesn't leave a reserved gap next
+        // to the one that's actually showing.
+        if (screenVisible && camVisible) {
             if (!screenView.dataset.dragged) screenView.style.right = '10.625rem';
             if (!camView.dataset.dragged) camView.style.right = '0.625rem';
-        } else if (screenView && !screenView.dataset.dragged) {
+        } else if (screenVisible && !screenView.dataset.dragged) {
             screenView.style.right = '0.625rem';
-        } else if (camView && !camView.dataset.dragged) {
+        } else if (camVisible && !camView.dataset.dragged) {
             camView.style.right = '0.625rem';
         }
+    }
+
+    /**
+     * Decides whether each self-view PiP should float as a visible draggable
+     * overlay, or fold away because it's now shown some other way — a normal
+     * grid tile, or fullscreen in the focus view itself (2026-08-29, see
+     * "Self-view unified into grid/focus" in CLAUDE.md) — or because "Hide my
+     * own preview" (Settings > Screen & Video) is on. Re-stacks whatever's
+     * left visible against the right edge afterward. Called from every
+     * `updateLayout()` pass so it can't drift out of sync with viewMode/focus.
+     * @returns {void}
+     */
+    _updateSelfViewVisibility() {
+        const hideSelf = localStorage.getItem('hideSelfView') === '1';
+        const remoteCount = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam' && !this.isBlocked(id)).length;
+        // Once someone else is in the room, self joins the grid/focus system —
+        // the floating PiP is only still needed while focused on someone/
+        // something else. Alone in the room, grid/focus don't render at all
+        // (the spinner shows instead — see updateLayout), so the PiP remains
+        // the only way to see yourself regardless of viewMode.
+        const gridEligible = remoteCount > 0;
+        ['me', 'me-cam'].forEach(key => {
+            const el = document.getElementById(key === 'me' ? 'self-view' : 'self-cam-view');
+            if (!el) return;
+            const focusedElsewhere = this.viewMode === 'focus' && !!this.focusedPeerId && this.focusedPeerId !== key;
+            const shouldFloat = !hideSelf && (!gridEligible || focusedElsewhere);
+            el.style.display = shouldFloat ? 'block' : 'none';
+        });
+        this._updateSelfViewPositions();
+    }
+
+    /**
+     * Toggles "Hide my own preview" (Settings > Screen & Video, 2026-08-29) —
+     * you still transmit normally to peers, this only ever affects what you
+     * see of yourself. Persisted (`localStorage['hideSelfView']`), unlike
+     * Discord's equivalent toggle which resets every call. If you were
+     * focused on your own stream when this turns on, un-focuses first —
+     * `this.streams['me'/'me-cam']` still technically exists (media isn't
+     * stopped), so `updateLayout()`'s auto-pick condition
+     * (`!this.streams[this.focusedPeerId]`) wouldn't otherwise notice
+     * anything needs to change.
+     * @param {boolean} hidden
+     * @returns {void}
+     */
+    setHideSelfView(hidden) {
+        localStorage.setItem('hideSelfView', hidden ? '1' : '0');
+        if (hidden && (this.focusedPeerId === 'me' || this.focusedPeerId === 'me-cam')) {
+            this.focusedPeerId = null;
+            this.focusedVideo.srcObject = null;
+        }
+        this.updateLayout(); // also runs _updateSelfViewVisibility()
     }
 
     /** Re-clamps a manually-dragged PiP back on-screen (e.g. after a window resize) and persists the new position. */
@@ -2227,7 +2325,14 @@ export class UIController {
      * Events so mouse and touch share one code path. Position is
      * remembered per PiP (`pipPosition:${storageKey}`) across stream stop/start
      * and page reloads, since it's a personal layout preference, not tied to any
-     * one stream instance.
+     * one stream instance. A plain click/tap (pointerdown+up with negligible
+     * movement) toggles `.self-view-pip-large` instead of counting as a drag
+     * (2026-08-29) — the fixed 150px PiP exists to let you check what a
+     * peer actually sees of your own camera/screen, which is hard to judge at
+     * that size; enlarging is a deliberate, occasional zoom-in rather than a
+     * new default size, so it toggles back down on a second click. Persisted
+     * separately (`pipEnlarged:${storageKey}`) from position for the same
+     * "personal layout preference" reason.
      * @param {HTMLElement} el
      * @param {string} storageKey
      * @returns {void}
@@ -2237,6 +2342,9 @@ export class UIController {
         el.style.touchAction = 'none'; // prevent touch-drag from also scrolling the page
         let offsetX = 0;
         let offsetY = 0;
+        let downX = 0;
+        let downY = 0;
+        let moved = false;
 
         const clamp = (left, top) => {
             const maxLeft = Math.max(0, window.innerWidth - el.offsetWidth);
@@ -2253,6 +2361,24 @@ export class UIController {
             el.dataset.dragged = 'true';
         };
 
+        const setEnlarged = (enlarged) => {
+            el.classList.toggle('self-view-pip-large', enlarged);
+            el.dataset.tip = enlarged ? 'Click to shrink' : 'Click to enlarge';
+            localStorage.setItem(`pipEnlarged:${storageKey}`, enlarged ? 'true' : 'false');
+            // Growing/shrinking can push a manually-positioned PiP partway
+            // off-screen (e.g. enlarging near the right/bottom edge) — but the
+            // width change animates via `.self-view-pip`'s CSS transition, so
+            // `offsetWidth` right after the class toggle is still the OLD
+            // size, not the new one. Re-clamping immediately would compute
+            // `maxLeft` from that stale (small) width and let a `left` through
+            // that's only valid pre-transition — once the box actually
+            // finishes growing, it ends up genuinely off-screen. Wait for the
+            // transition to actually finish before clamping.
+            if (el.dataset.dragged) {
+                el.addEventListener('transitionend', () => this._reclampDraggedPip(el, storageKey), { once: true });
+            }
+        };
+
         const saved = localStorage.getItem(`pipPosition:${storageKey}`);
         if (saved) {
             try {
@@ -2261,11 +2387,18 @@ export class UIController {
             } catch {}
         }
 
+        const savedEnlarged = localStorage.getItem(`pipEnlarged:${storageKey}`) === 'true';
+        el.classList.toggle('self-view-pip-large', savedEnlarged);
+        el.dataset.tip = savedEnlarged ? 'Click to shrink' : 'Click to enlarge';
+
         el.addEventListener('pointerdown', (e) => {
             e.preventDefault();
             const rect = el.getBoundingClientRect();
             offsetX = e.clientX - rect.left;
             offsetY = e.clientY - rect.top;
+            downX = e.clientX;
+            downY = e.clientY;
+            moved = false;
             applyPosition(rect.left, rect.top);
             el.setPointerCapture(e.pointerId);
             el.style.cursor = 'grabbing';
@@ -2273,6 +2406,7 @@ export class UIController {
 
         el.addEventListener('pointermove', (e) => {
             if (!el.hasPointerCapture?.(e.pointerId)) return;
+            if (Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) moved = true;
             applyPosition(e.clientX - offsetX, e.clientY - offsetY);
         });
 
@@ -2280,14 +2414,22 @@ export class UIController {
             if (!el.hasPointerCapture?.(e.pointerId)) return;
             el.releasePointerCapture(e.pointerId);
             el.style.cursor = 'grab';
-            const rect = el.getBoundingClientRect();
-            localStorage.setItem(`pipPosition:${storageKey}`, JSON.stringify({ left: rect.left, top: rect.top }));
+            if (moved) {
+                const rect = el.getBoundingClientRect();
+                localStorage.setItem(`pipPosition:${storageKey}`, JSON.stringify({ left: rect.left, top: rect.top }));
+            } else {
+                setEnlarged(!el.classList.contains('self-view-pip-large'));
+            }
         });
     }
 
     /**
      * Records an incoming (or local self-) stream and renders it: self-views
-     * become a draggable PiP, a blocked peer's stream is recorded but never
+     * create/update the draggable floating-PiP `<video>` element (its actual
+     * on-screen visibility, and whether self also appears as a grid tile /
+     * fullscreen focus target, is decided by `updateLayout()` →
+     * `_updateSelfViewVisibility()`, not here — see "Self-view unified into
+     * grid/focus" in CLAUDE.md), a blocked peer's stream is recorded but never
      * shown, and a new remote stream auto-focuses if nothing else is
      * currently focused.
      * @param {string} peerId - a stream key: `'me'`/`'me-cam'` for local self-views, else a remote stream key.
@@ -2313,9 +2455,8 @@ export class UIController {
                 this.container.appendChild(selfView);
                 this._makeDraggable(selfView, viewId);
             }
-            this._updateSelfViewPositions();
             if (peerId === 'me') playSound('streamUp');
-            this.updateLayout();
+            this.updateLayout(); // also runs _updateSelfViewVisibility()
             return;
         }
 
@@ -2351,7 +2492,11 @@ export class UIController {
 
     /**
      * Removes a recorded stream and its rendering, re-focusing another
-     * stream if the removed one was currently focused.
+     * stream if the removed one was currently focused. Since self can now be
+     * a focus target too (2026-08-29, see "Self-view unified into grid/focus"
+     * in CLAUDE.md — e.g. turning off your camera while focused on it), the
+     * re-focus logic is shared between self and peer removal rather than the
+     * self branch returning early before ever touching `focusedPeerId`.
      * @param {string} peerId - a stream key (see `addStream`).
      * @param {boolean} [silent=false] - suppress the streamDown sound (blanket cleanup on full disconnect already plays its own sound).
      * @returns {void}
@@ -2362,36 +2507,37 @@ export class UIController {
         // own 'peerLeft' sound — hence the silent flag and the hadStream guard,
         // so one leave can't queue phantom streamDown sounds on top.
         const hadStream = !!this.streams[peerId];
+        const isSelf = peerId === 'me' || peerId === 'me-cam';
         delete this.streams[peerId];
         this.watchedTiles.delete(peerId);
         this._watchSentState.delete(peerId);
         const orderIdx = this._watchOrder.indexOf(peerId);
         if (orderIdx !== -1) this._watchOrder.splice(orderIdx, 1);
 
-        if (peerId === 'me' || peerId === 'me-cam') {
+        if (isSelf) {
             const viewId = peerId === 'me' ? 'self-view' : 'self-cam-view';
             const selfView = document.getElementById(viewId);
             if (selfView) {
                 if (peerId === 'me' && !silent) playSound('streamDown');
                 selfView.remove();
             }
-            this._updateSelfViewPositions();
-            const placeholder = document.getElementById('stream-placeholder');
-            if (placeholder) placeholder.remove();
-            if (peerId === 'me') this.updateLayout();
-            return;
-        } else {
-            if (hadStream && !silent) playSound('streamDown');
+        } else if (hadStream && !silent) {
+            playSound('streamDown');
+        }
 
-            if (this.focusedPeerId === peerId) {
-                this.focusedPeerId = null;
-                this.focusedVideo.srcObject = null;
-                const remaining = Object.keys(this.streams).filter(id => id !== 'me' && id !== 'me-cam' && !this.isBlocked(id));
-                if (remaining.length > 0) {
-                    this._autoWatchOrSkip(remaining[0]);
-                    this.focusedPeerId = remaining[0];
-                    this.focusedVideo.srcObject = this.streams[remaining[0]];
-                }
+        if (this.focusedPeerId === peerId) {
+            this.focusedPeerId = null;
+            this.focusedVideo.srcObject = null;
+            // Prefer a remaining remote peer over a remaining self stream —
+            // stopping your camera/share while focused on it shouldn't leave
+            // the view stuck on your *other* self stream if a peer is right there.
+            const remaining = Object.keys(this.streams).filter(id => !this.isBlocked(id));
+            const remoteRemaining = remaining.filter(id => id !== 'me' && id !== 'me-cam');
+            const next = remoteRemaining[0] ?? remaining.find(id => id === 'me' || id === 'me-cam');
+            if (next) {
+                if (next !== 'me' && next !== 'me-cam') this._autoWatchOrSkip(next);
+                this.focusedPeerId = next;
+                this.focusedVideo.srcObject = this.streams[next];
             }
         }
 
@@ -2420,6 +2566,7 @@ export class UIController {
             this.focusedView.style.display = 'none';
             this.gridView.style.display = 'none';
             if (stageHeader) stageHeader.style.display = 'none';
+            this._updateSelfViewVisibility();
             return;
         }
 
@@ -2450,6 +2597,12 @@ export class UIController {
             this._updateFocusMeta(this.focusedPeerId);
             this._renderFocusWatchState();
         }
+
+        // Must run after focusedPeerId is finalized above (including the
+        // auto-pick just above it) — deciding PiP visibility off a stale
+        // focusedPeerId would fold self away for the render where a peer
+        // first gets auto-focused, not just the one after.
+        this._updateSelfViewVisibility();
     }
 
     /** Updates the stage header's grid/focus toggle active state and the watched-stream count. */

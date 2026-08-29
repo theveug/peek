@@ -266,6 +266,17 @@ export class SettingsPanel {
                                         id="settings-audio-only-mode" /><span
                                         class="settings-switch-track"></span></label>
                             </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Hide my own preview</div>
+                                    <div class="settings-toggle-row-desc">Don't show your own camera/screen to
+                                        yourself at all — you still send it to everyone else normally. Unlike some
+                                        apps, this stays on for future calls until you turn it back off.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox"
+                                        id="settings-hide-self-view" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
                             <div class="settings-field">
                                 <div class="settings-label">Screen share resolution</div>
                                 <div class="settings-segmented" id="settings-res-picker">
@@ -1280,6 +1291,14 @@ export class SettingsPanel {
             localStorage.setItem('audioOnlyMode', e.target.checked ? '1' : '0');
         });
 
+        document.getElementById('settings-hide-self-view')?.addEventListener('change', (e) => {
+            // this.ui is unset on the lobby (pre-room) — still persist there so
+            // the setting is already correct on the next room joined, same as
+            // every other localStorage-backed field in this shared markup.
+            if (this.ui) this.ui.setHideSelfView(e.target.checked);
+            else localStorage.setItem('hideSelfView', e.target.checked ? '1' : '0');
+        });
+
         // setBackgroundBlur() itself persists the localStorage value and, if the
         // camera is already on, live-swaps the processing pipeline — see PeerManager.js.
         document.getElementById('settings-background-blur')?.addEventListener('change', (e) => {
@@ -1309,6 +1328,9 @@ export class SettingsPanel {
 
         const audioOnlyMode = document.getElementById('settings-audio-only-mode');
         if (audioOnlyMode) audioOnlyMode.checked = localStorage.getItem('audioOnlyMode') === '1';
+
+        const hideSelfView = document.getElementById('settings-hide-self-view');
+        if (hideSelfView) hideSelfView.checked = localStorage.getItem('hideSelfView') === '1';
 
         const backgroundBlur = document.getElementById('settings-background-blur');
         if (backgroundBlur) backgroundBlur.checked = localStorage.getItem('backgroundBlur') === '1';
