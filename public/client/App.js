@@ -1256,6 +1256,24 @@ if (membersToggle && membersSidebar) {
     });
 })();
 
+// Controls dock toggle (2026-08-29) — mirrors the chat/members panels'
+// hidden+edge-tab pattern above instead of the old hover-to-reveal behavior
+// (see CLAUDE.md's "Controls bar toggle" convention). Desktop only: the CSS
+// keeps both new buttons hidden on mobile, so these handlers are inert
+// there — mobile's dock stays the existing always-visible fixed bottom bar.
+const controlsBar = document.getElementById('controls');
+document.getElementById('controls-close-btn')?.addEventListener('click', () => {
+    controlsBar?.classList.add('hidden');
+    localStorage.setItem('controlsHidden', '1');
+});
+document.getElementById('controls-tab')?.addEventListener('click', () => {
+    controlsBar?.classList.remove('hidden');
+    localStorage.setItem('controlsHidden', '0');
+});
+if (!isMobile() && localStorage.getItem('controlsHidden') === '1') {
+    controlsBar?.classList.add('hidden');
+}
+
 // Close mobile panels on resize to desktop
 window.addEventListener('resize', () => {
     if (!isMobile()) {

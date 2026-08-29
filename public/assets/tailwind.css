@@ -236,14 +236,9 @@ body {
   font-family: "Fira Code", ui-monospace, monospace;
 }
 
-body:hover #controls,
-body:focus-within #controls {
-  display: flex;
-}
-
-#controls {
-  display: none;
-}
+/* Controls dock visibility (open/closed) is handled below in "Controls bar
+   toggle" — it used to be hover-to-reveal here, replaced 2026-08-29 with an
+   explicit toggle matching the chat/members side panels. */
 
 /* ===== Typing indicator ===== */
 .typing-indicator {
@@ -1801,12 +1796,26 @@ body:focus-within #controls {
   background: var(--bg2);
 }
 
+/* Absolutely positioned inside #videos (2026-08-29, moved from being a flex
+   sibling between #chat and #videos) rather than its own flex column — a
+   dedicated layout column for a 4px drag strip left #videos's actual edge
+   (and everything positioned relative to it, like #controls or the panel
+   tabs) sitting 4px short of the chat panel it was supposed to be flush
+   against, which is what actually caused the "gap" the panel-tabs already
+   had to pull 4px back over (see .chat-tab's comment) and #controls'
+   corner/background fix earlier the same day still didn't close. Full height
+   via top:0/bottom:0, sits exactly at #videos's left edge (no negative
+   offset needed — it's genuinely #videos's own edge now, not a
+   compensating overlap). Hidden together with the chat panel via the
+   body:has() rule below, same mechanism .chat-tab's visibility already uses. */
 .chat-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
   width: 0.25rem;
   cursor: col-resize;
   background: transparent;
-  flex-shrink: 0;
-  position: relative;
   z-index: 60;
   transition: background 0.2s;
 }
@@ -1814,6 +1823,10 @@ body:focus-within #controls {
 .chat-resize-handle:hover,
 .chat-resize-handle.active {
   background: var(--accent);
+}
+
+body:has(#chat.hidden) .chat-resize-handle {
+  display: none;
 }
 
 /* ===== Members sidebar ===== */
@@ -1833,17 +1846,16 @@ body:focus-within #controls {
   padding: 0;
 }
 
-.members-panel.collapsed + .members-resize-handle,
-.members-resize-handle:has(+ .members-panel.collapsed) {
-  display: none;
-}
-
+/* Same "lives inside #videos" move as .chat-resize-handle above, mirrored to
+   the right edge — see that rule's comment for the full reasoning. */
 .members-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
   width: 0.25rem;
   cursor: col-resize;
   background: transparent;
-  flex-shrink: 0;
-  position: relative;
   z-index: 60;
   transition: background 0.2s;
 }
@@ -1851,6 +1863,10 @@ body:focus-within #controls {
 .members-resize-handle:hover,
 .members-resize-handle.active {
   background: var(--accent);
+}
+
+body:has(#members-sidebar.collapsed) .members-resize-handle {
+  display: none;
 }
 
 /* ===== Panel toggle tabs ===== */
@@ -1889,21 +1905,22 @@ body.light .panel-tab:hover {
   background: rgba(0, 0, 0, 0.06);
 }
 
-/* left:0/right:0 sits flush against #videos's own edge, but #videos's actual
-   edge starts 4px in from the panel it's supposedly attached to — the
-   4px-wide .chat-resize-handle/.members-resize-handle sibling sits in between,
-   pushing #videos over and leaving a visible gap. Pull the tab that same 4px
-   back over the handle so it reads as attached to the panel, not floating
-   next to it. Requires #videos to out-stack the handle (see its z-index rule
-   below) or the handle would win pointer events in the now-overlapping strip. */
+/* left:0/right:0 sits flush against #videos's own edge, which (2026-08-29)
+   is now genuinely the same edge the chat/members panel sits against too —
+   .chat-resize-handle/.members-resize-handle moved from their own 4px-wide
+   flex column between the panel and #videos to living *inside* #videos
+   instead (see those rules' comments), so there's no gap width left to pull
+   back over here. A tab and its handle are also never visible at the same
+   time (the handle hides exactly when its panel does, exactly when the tab
+   shows), so there's no overlap needing z-index arbitration either. */
 .chat-tab {
-  left: -0.25rem;
+  left: 0;
   border-radius: 0 0.625rem 0.625rem 0;
   border-left: none !important;
 }
 
 .members-tab {
-  right: -0.25rem;
+  right: 0;
   border-radius: 0.625rem 0 0 0.625rem;
   border-right: none !important;
 }
@@ -1931,22 +1948,17 @@ body.light .panel-tab:hover {
   }
 }
 
-/* The resize handle itself disappears (display:none) once its panel is
-   hidden/collapsed, so #videos's edge moves back out flush with no gap left
-   to compensate for — zero the offset back out in that state. */
-body:has(#chat.hidden) .chat-tab {
-  left: 0;
-}
-
-body:has(#members-sidebar.collapsed) .members-tab {
-  right: 0;
-}
-
 /* #videos has no z-index of its own (position:relative via a Tailwind
-   utility class, not this stylesheet), so its children — including the tabs
-   above, now intentionally overlapping the resize handles by 4px — would
-   otherwise lose the resize handles' own higher z-index:60 and never receive
-   the tab's click. */
+   utility class, not this stylesheet). Originally added so the panel tabs
+   (children of #videos) would out-stack .chat-resize-handle/
+   .members-resize-handle, which used to live *outside* #videos as separate
+   flex siblings with their own higher z-index:60 — without it the tabs lost
+   that stacking fight and never received clicks in the strip they overlapped.
+   The handles moved inside #videos on 2026-08-29 (see their own rules'
+   comments) and are never visible at the same time as their tab anymore, so
+   that specific conflict is gone, but this is left in place as a general
+   "children of #videos predictably stack above the room-shell's other flex
+   items" guarantee rather than removed on the assumption nothing else needs it. */
 #videos {
   z-index: 61;
 }
@@ -2446,9 +2458,9 @@ body:has(#members-sidebar.collapsed) .members-tab {
 }
 
 /* ===== Chat hidden state ===== */
-#chat.hidden + .chat-resize-handle {
-  display: none;
-}
+/* .chat-resize-handle's own body:has() rule (near its definition) covers
+   hiding the handle now that it's no longer a sibling of #chat to target
+   with a direct + combinator. */
 
 /* ===== Spinner ===== */
 .spinner_6KQt {
@@ -2533,11 +2545,92 @@ body,
   top: auto;
   width: 100%;
   transform: none;
-  border-radius: 1rem 1rem 0 0;
+  /* Square, not rounded (2026-08-29) — a rounded top corner left a triangle
+     of the stage's own background showing through right where the dock
+     should read as flush against the chat/members side panels (their own
+     resize handles are transparent, so nothing else was visually bridging
+     that gap). Squaring it off butts the dock directly against #videos's
+     edges, matching the panels' own square corners. */
+  border-radius: 0;
   padding: 0.625rem 1rem;
   flex-wrap: wrap;
   row-gap: 0.625rem;
   justify-content: center;
+  /* .dock-bar's own background (--bg3, the lightest/most "elevated" surface
+     tone) is right for a floating pill, but reads as a mismatched separate
+     card once flush against the chat/members panels, which sit one shade
+     down at --bg2 — the actual source of the "gap" look (the transparent
+     resize handles and the stage's own --bg1 background between them were
+     never the real culprit, just where the shade mismatch happened to show).
+     Matching the panels' own --bg2 here is what makes the corner read as one
+     continuous surface instead of a box dropped on top of it. Scoped to this
+     instance rather than changing .dock-bar's own background, since that
+     class is the general "elevated toolbar" look and nothing else currently
+     uses it, but it's not this component's job to redefine it globally. */
+  background: var(--bg2);
+}
+
+/* ===== Controls bar toggle (2026-08-29) ===== */
+/* Was hover-to-reveal (any mouse movement over the page showed it, and it
+   vanished the instant the cursor left) — replaced with an explicit
+   open/close toggle so it behaves like the chat/members side panels: stays
+   open until deliberately closed via .controls-close-btn (reuses
+   .panel-close-btn's look), and reopens via .controls-tab (reuses
+   .panel-tab's look/behavior, positioned along the stage's bottom edge
+   instead of a side edge). #controls.hidden is the same .hidden utility
+   chat/members already toggle — safe here now that the old unlayered
+   `#controls { display: none }` default above is gone, since that's what the
+   cascade-layers standing rule actually warns about (an unlayered display
+   rule beating the layered .hidden utility), not .hidden itself.
+   Desktop only — mobile has no hover concept to replace and screen space to
+   reopen a hidden dock is scarce there, so mobile keeps the existing
+   always-visible fixed bottom bar untouched (see "Mobile responsive" below).
+   Both new buttons default to hidden here (overriding .panel-close-btn's/
+   .panel-tab's own unconditional `display: flex`) and are only ever turned
+   back on inside the desktop media query below — the same "hidden unless
+   the desktop query re-enables it" shape .chat-tab/.members-tab already use,
+   just with mobile as the excluded side instead of "closed" as the excluded
+   state. */
+.controls-close-btn,
+.controls-tab {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  /* Sits just above the dock's own top edge as a small centered "handle" —
+     the dock buttons themselves fill the whole row beneath it, so a
+     top-right corner placement would sit on top of whichever button ends up
+     there (currently Leave). Roughly mirrors .controls-tab's position/shape
+     one row up, so the two read as the same handle flipping direction. */
+  .controls-close-btn {
+    display: flex;
+    position: absolute;
+    top: -1.75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 3.5rem;
+    height: 1.75rem;
+    border-radius: 0.625rem 0.625rem 0 0;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    background: var(--bg2);
+  }
+
+  .controls-tab {
+    top: auto;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 3.5rem;
+    height: 1.75rem;
+    border-radius: 0.625rem 0.625rem 0 0;
+    border-bottom: none !important;
+    display: none;
+  }
+
+  body:has(#controls.hidden) .controls-tab {
+    display: flex;
+  }
 }
 
 /* ===== Stage + controls dock (redesign, Phase 2d) ===== */
@@ -2986,34 +3079,74 @@ body,
   margin: 0 0.125rem;
 }
 
+/* Discord-style grouped buttons (2026-08-29) — a wrap holding more than one
+   control (a main action plus its quality/options caret, or an alternate
+   button like Switch Camera) now reads as one bordered "chip" distinct from
+   the bar around it, instead of the caret being an easy-to-miss corner badge
+   floating over an otherwise-unmarked icon. Single-button controls with
+   nothing to group (raise hand, Leave) are deliberately left bare/borderless
+   — the outline is there to mark "this cluster has sub-options," not to
+   decorate every icon, same restraint Discord's own dock uses.
+   Corners: the outer two buttons get rounded via :first-of-type/:last-of-type
+   below rather than `overflow: hidden` clipping the wrap — this wrap is also
+   the positioned ancestor .dock-quick-popover/.dock-volume-popover anchor
+   themselves against (`bottom: calc(100% + ...)`, well above the wrap's own
+   button-height box), and overflow:hidden here was silently clipping those
+   popovers to nothing the moment they opened (found via a genuinely confusing
+   debugging session: classList/computed-style all looked correct, but
+   elementFromPoint inside the popover's own rect kept resolving to #videos
+   underneath it — that's the fingerprint of a clipped-but-still-laid-out
+   absolutely positioned descendant, not a z-index or stacking bug). */
 .dock-btn-wrap {
   display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--bg1);
 }
 
+.dock-btn-wrap .dock-btn {
+  border-radius: 0;
+}
+
+.dock-btn-wrap > button:first-of-type {
+  border-top-left-radius: 0.75rem;
+  border-bottom-left-radius: 0.75rem;
+}
+
+.dock-btn-wrap > button:last-of-type {
+  border-top-right-radius: 0.75rem;
+  border-bottom-right-radius: 0.75rem;
+}
+
+/* Was an absolutely-positioned 1rem corner badge overlapping the main
+   button; now a proper inline segment of the group, full height, separated
+   by its own left border rather than needing the group to add a divider. */
 .dock-caret {
-  position: absolute;
-  top: -0.25rem;
-  right: -0.25rem;
-  width: 1rem;
-  height: 1rem;
+  position: static;
+  width: 1.375rem;
+  height: 3rem;
   border: none;
-  border-radius: 0.375rem;
-  background: var(--bg2);
-  border: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
   color: var(--t2);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
 }
 
 .dock-caret .material-symbols-rounded {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1;
 }
 
 .dock-caret:hover {
   color: var(--t1);
+  background: var(--bg4);
 }
 
 .dock-volume-popover {
