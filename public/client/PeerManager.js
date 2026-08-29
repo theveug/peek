@@ -96,6 +96,11 @@ export class PeerManager {
         // the physical camera. Equal to `camStream` when blur is off.
         this._rawCamStream = null;
         this._virtualBackground = null;
+        // Set once an actual camera track has been opened this session (or
+        // read back from the last session's cache) — see _recordCamCapabilities.
+        // SettingsPanel reads this to offer real resolution options instead of
+        // a hardcoded guess.
+        this.camCapabilities = null;
         this.peerCamStreamIds = {};
         this._lastQualityTierKey = null;
         this.peerScreenStreamIds = {};
@@ -2144,6 +2149,31 @@ export class PeerManager {
 
 
     /**
+     * Reads the real hardware ceiling off a just-opened camera track via
+     * `getCapabilities()` (Chrome/Edge/Firefox all report `width.max`/
+     * `height.max` for a live video track) — this is how a Logitech C922
+     * doing 1080p gets recognized as such instead of being stuck behind a
+     * generic 720p guess. Persisted to `localStorage` (flat key, same
+     * "remember the last one" tier as `camDeviceId`) so `SettingsPanel` can
+     * offer real options even before the camera's been turned on again this
+     * session. Silently no-ops on a track/browser that doesn't support
+     * `getCapabilities()` — the resolution picker just falls back to its
+     * pre-detection default list.
+     * @param {MediaStreamTrack} track
+     * @returns {void}
+     */
+    _recordCamCapabilities(track) {
+        if (typeof track.getCapabilities !== 'function') return;
+        const caps = track.getCapabilities();
+        const maxWidth = caps.width?.max;
+        const maxHeight = caps.height?.max;
+        if (!maxWidth || !maxHeight) return;
+        this.camCapabilities = { maxWidth, maxHeight };
+        localStorage.setItem('camCapabilities', JSON.stringify(this.camCapabilities));
+        this.onCamCapabilities?.(this.camCapabilities);
+    }
+
+    /**
      * Requests camera permission on first use, then stops it on subsequent
      * calls. Attaches the new stream to every existing connection and
      * renegotiates.
@@ -2176,7 +2206,9 @@ export class PeerManager {
                 this._rawCamStream = acquired.stream;
                 this._camFacingMode = acquired.facingMode;
             }
-            this._rawCamStream.getVideoTracks()[0].onended = () => {
+            const camTrack = this._rawCamStream.getVideoTracks()[0];
+            this._recordCamCapabilities(camTrack);
+            camTrack.onended = () => {
                 this.stopCam();
                 document.getElementById('cam-on-icon')?.classList.add('hidden');
                 document.getElementById('cam-off-icon')?.classList.remove('hidden');
@@ -2513,7 +2545,9 @@ export class PeerManager {
                 newRawStream = acquired.stream;
                 resolvedFacing = acquired.facingMode;
             }
-            newRawStream.getVideoTracks()[0].onended = () => {
+            const newRawTrack = newRawStream.getVideoTracks()[0];
+            this._recordCamCapabilities(newRawTrack);
+            newRawTrack.onended = () => {
                 this.stopCam();
                 document.getElementById('cam-on-icon')?.classList.add('hidden');
                 document.getElementById('cam-off-icon')?.classList.remove('hidden');

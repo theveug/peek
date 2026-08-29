@@ -92,7 +92,48 @@ export class QuickRoomSettings {
 
     _wireQuality() {
         this._wireSegmented('quick-screen-res-picker', 'screenShareRes', () => this.peerManager?.applyQualitySettings());
+        this._renderCamResOptions();
+    }
+
+    // Same candidate list/detection as SettingsPanel.js's cam-resolution picker
+    // — see that file's _renderCamResOptions for the full rationale. Kept as a
+    // second copy rather than a shared import since this file already
+    // duplicates _wireSegmented/_highlightSegmented for the same "second UI
+    // surface, not a second data model" reason documented at the top of this file.
+    static _CAM_RES_CANDIDATES = [
+        ['640x360', '360p'], ['640x480', '480p'], ['1280x720', '720p'],
+        ['1920x1080', '1080p'], ['2560x1440', '1440p'],
+    ];
+
+    _camCapabilities() {
+        if (this.peerManager?.camCapabilities) return this.peerManager.camCapabilities;
+        try {
+            const raw = localStorage.getItem('camCapabilities');
+            if (!raw) return null;
+            const { maxWidth, maxHeight } = JSON.parse(raw);
+            return maxWidth && maxHeight ? { maxWidth, maxHeight } : null;
+        } catch {
+            return null;
+        }
+    }
+
+    /** Rebuilds the webcam resolution buttons from detected capabilities — see SettingsPanel.js. */
+    _renderCamResOptions() {
+        const container = document.getElementById('quick-cam-res-picker');
+        if (!container) return;
+        const caps = this._camCapabilities();
+        const fitting = caps
+            ? QuickRoomSettings._CAM_RES_CANDIDATES.filter(([v]) => {
+                const [w, h] = v.split('x').map(Number);
+                return w <= caps.maxWidth && h <= caps.maxHeight;
+            })
+            : QuickRoomSettings._CAM_RES_CANDIDATES.slice(0, 3);
+        const options = [...fitting, ['source', 'Source']];
+        container.innerHTML = options
+            .map(([value, label]) => `<button type="button" data-value="${value}">${label}</button>`)
+            .join('');
         this._wireSegmented('quick-cam-res-picker', 'camRes', () => this.peerManager?.applyCamQualitySettings());
+        this._highlightSegmented('quick-cam-res-picker', 'camRes', '640x480');
     }
 
     _refresh() {
@@ -103,7 +144,7 @@ export class QuickRoomSettings {
         if (followSpeaker) followSpeaker.checked = localStorage.getItem('followActiveSpeaker') === '1';
 
         this._highlightSegmented('quick-screen-res-picker', 'screenShareRes', '1280x720');
-        this._highlightSegmented('quick-cam-res-picker', 'camRes', '640x480');
+        this._renderCamResOptions();
     }
 
     /**

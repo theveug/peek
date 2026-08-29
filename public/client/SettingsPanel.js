@@ -297,12 +297,10 @@ export class SettingsPanel {
                             </div>
                             <div class="settings-field">
                                 <div class="settings-label">Webcam resolution</div>
-                                <div class="settings-segmented" id="settings-cam-res-picker">
-                                    <button type="button" data-value="640x360">360p</button>
-                                    <button type="button" data-value="640x480">480p</button>
-                                    <button type="button" data-value="1280x720">720p</button>
-                                    <button type="button" data-value="source">Source</button>
-                                </div>
+                                <!-- Populated by _renderCamResOptions() — real options detected off
+                                     the camera's own getCapabilities() once it's been opened, not a
+                                     fixed guess. Empty until first render. -->
+                                <div class="settings-segmented" id="settings-cam-res-picker"></div>
                             </div>
                             <div class="settings-field">
                                 <div class="settings-label">Webcam frame rate</div>
@@ -1207,6 +1205,52 @@ export class SettingsPanel {
         });
     }
 
+    // Ascending width x height, matched against PeerManager.camCapabilities'
+    // maxWidth/maxHeight to filter out anything the camera can't actually do.
+    static _CAM_RES_CANDIDATES = [
+        ['640x360', '360p'], ['640x480', '480p'], ['1280x720', '720p'],
+        ['1920x1080', '1080p'], ['2560x1440', '1440p'],
+    ];
+
+    /** @returns {{maxWidth: number, maxHeight: number}|null} last-known capabilities, live session or cached. */
+    _camCapabilities() {
+        if (this.peerManager?.camCapabilities) return this.peerManager.camCapabilities;
+        try {
+            const raw = localStorage.getItem('camCapabilities');
+            if (!raw) return null;
+            const { maxWidth, maxHeight } = JSON.parse(raw);
+            return maxWidth && maxHeight ? { maxWidth, maxHeight } : null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Rebuilds the webcam resolution segmented picker's buttons from the
+     * camera's actual detected ceiling instead of a fixed guess — before any
+     * camera has ever been opened (this session or a cached one), falls back
+     * to the same 360p/480p/720p set the picker always used to hardcode, so
+     * behavior is unchanged until real detection has something to say.
+     * @returns {void}
+     */
+    _renderCamResOptions() {
+        const container = document.getElementById('settings-cam-res-picker');
+        if (!container) return;
+        const caps = this._camCapabilities();
+        const fitting = caps
+            ? SettingsPanel._CAM_RES_CANDIDATES.filter(([v]) => {
+                const [w, h] = v.split('x').map(Number);
+                return w <= caps.maxWidth && h <= caps.maxHeight;
+            })
+            : SettingsPanel._CAM_RES_CANDIDATES.slice(0, 3);
+        const options = [...fitting, ['source', 'Source']];
+        container.innerHTML = options
+            .map(([value, label]) => `<button type="button" data-value="${value}">${label}</button>`)
+            .join('');
+        this._wireSegmented('settings-cam-res-picker', 'camRes', () => this.peerManager?.applyCamQualitySettings());
+        this._highlightSegmented('settings-cam-res-picker', 'camRes', '640x480');
+    }
+
     _highlightSegmented(containerId, storageKey, fallback) {
         const container = document.getElementById(containerId);
         if (!container) return;
@@ -1219,8 +1263,12 @@ export class SettingsPanel {
     _wireVideo() {
         this._wireSegmented('settings-res-picker', 'screenShareRes', () => this.peerManager?.applyQualitySettings());
         this._wireSegmented('settings-fps-picker', 'screenShareFps', () => this.peerManager?.applyQualitySettings());
-        this._wireSegmented('settings-cam-res-picker', 'camRes', () => this.peerManager?.applyCamQualitySettings());
+        this._renderCamResOptions();
         this._wireSegmented('settings-cam-fps-picker', 'camFps', () => this.peerManager?.applyCamQualitySettings());
+        // Live-refreshes the resolution picker the moment the camera's real
+        // capabilities come in (e.g. Settings was already open when the user
+        // first turned their cam on) — see PeerManager._recordCamCapabilities.
+        if (this.peerManager) this.peerManager.onCamCapabilities = () => this._renderCamResOptions();
 
         document.getElementById('settings-follow-speaker')?.addEventListener('change', (e) => {
             const checked = e.target.checked;
@@ -1253,7 +1301,7 @@ export class SettingsPanel {
     _refreshVideo() {
         this._highlightSegmented('settings-res-picker', 'screenShareRes', '1280x720');
         this._highlightSegmented('settings-fps-picker', 'screenShareFps', '30');
-        this._highlightSegmented('settings-cam-res-picker', 'camRes', '640x480');
+        this._renderCamResOptions();
         this._highlightSegmented('settings-cam-fps-picker', 'camFps', '30');
 
         const followSpeaker = document.getElementById('settings-follow-speaker');
