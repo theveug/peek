@@ -550,6 +550,12 @@ export class PeerManager {
         const track = this.stream.getVideoTracks()[0];
         if (!track) return;
         await track.applyConstraints(this._resolveQuality('screen'));
+        // Without this, the stage header's "Auto · WxH · Nfps" readout only
+        // ever refreshed on a fresh startSharing() (new share / switched
+        // source) — a live quality-only change went through applyConstraints()
+        // alone and left the header showing the pre-change values until the
+        // user stopped and restarted sharing.
+        this.ui.updateStageQuality?.(this.getScreenQualityLabel());
     }
 
     /**

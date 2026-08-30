@@ -25,6 +25,12 @@ export class UIController {
         this._watchOrder = [];
         this._watchSentState = new Map();
         this.maxWatchedTiles = 6;
+        // Last-known "WxH"/"<H>p" resolution per stream key, so a grid-tile
+        // rebuild (buildGrid() tears down and recreates every <video> element
+        // on any updateLayout() pass, not just when that particular stream
+        // changed) can seed the badge/caption immediately instead of showing
+        // blank until the fresh element's own loadedmetadata/resize fires.
+        this._lastKnownRes = new Map();
         this.onWatchChange = null;
         this.onPipExit = null;
         this.onModeratorAction = null; // set by App.js — (action, peerId)
@@ -643,7 +649,19 @@ export class UIController {
         const updateCaption = () => {
             if (!captionText) return;
             const { videoWidth: w, videoHeight: h } = video;
-            captionText.textContent = w && h ? `${nickname} · ${w}x${h}` : nickname;
+            if (w && h) {
+                const res = `${w}x${h}`;
+                captionText.textContent = `${nickname} · ${res}`;
+                this._lastKnownRes.set(`${peerId}:wh`, res);
+            } else {
+                // The shared focusedVideo element briefly still reports the
+                // previous peer's dimensions right after refocusing (new
+                // srcObject, metadata not loaded yet) — fall back to this
+                // stream's own last-known size instead of dropping the
+                // resolution from the caption entirely.
+                const cached = this._lastKnownRes.get(`${peerId}:wh`);
+                captionText.textContent = cached ? `${nickname} · ${cached}` : nickname;
+            }
         };
         updateCaption();
         video.onloadedmetadata = updateCaption;
@@ -787,6 +805,12 @@ export class UIController {
     _setWatched(streamKey, watched) {
         if (watched) this.watchedTiles.add(streamKey);
         else this.watchedTiles.delete(streamKey);
+        // watchedTiles.size drives the stage header's "X / 6 streams active"
+        // readout — this is the single chokepoint every watch/unwatch path
+        // (grid-tile clicks included, which don't otherwise trigger a full
+        // updateLayout()) funnels through, so refresh it here rather than
+        // leaving it to go stale until some unrelated updateLayout() pass.
+        this._updateStageHeader();
 
         if (this._watchSentState.get(streamKey) === watched) return;
         this._watchSentState.set(streamKey, watched);
@@ -911,21 +935,34 @@ export class UIController {
             cell.appendChild(video);
             cell.appendChild(label);
 
-            if (!isCam) {
+            {
                 const badge = document.createElement('div');
                 badge.className = 'grid-tile-badge';
-                badge.innerHTML = '<span class="material-symbols-rounded">screen_share</span>';
+                badge.innerHTML = `<span class="material-symbols-rounded">${isCam ? 'videocam' : 'screen_share'}</span>`;
                 const badgeText = document.createElement('span');
+                // Seed from the last resolution we saw for this stream key —
+                // buildGrid() tears down and recreates every tile's <video> on
+                // any updateLayout() pass (e.g. a different peer joining/leaving),
+                // not just when this stream itself changed, so without this the
+                // badge goes blank and waits on a fresh loadedmetadata/resize
+                // even though the resolution hasn't actually changed.
+                const cached = this._lastKnownRes.get(peerId);
+                if (cached) badgeText.textContent = cached;
                 badge.appendChild(badgeText);
                 const updateBadge = () => {
-                    if (video.videoWidth && video.videoHeight) badgeText.textContent = `${video.videoHeight}p`;
+                    if (video.videoWidth && video.videoHeight) {
+                        const text = `${video.videoHeight}p`;
+                        badgeText.textContent = text;
+                        this._lastKnownRes.set(peerId, text);
+                    }
                 };
                 updateBadge();
                 video.addEventListener('loadedmetadata', updateBadge);
                 // See _updateFocusMeta's comment on the same pair of listeners — a
-                // live screen-share quality change re-constrains the existing
-                // track in place rather than handing this tile a new one, so
-                // `resize` (not `loadedmetadata`) is what actually fires.
+                // live quality change (webcam picker's hot-swap, screen-share's
+                // applyConstraints) re-uses the existing track/sender rather than
+                // handing this tile a new one, so `resize` (not `loadedmetadata`)
+                // is what actually fires.
                 video.addEventListener('resize', updateBadge);
                 cell.appendChild(badge);
             }
