@@ -1,0 +1,267 @@
+/**
+ * Discord-style @mention autocomplete for the chat composer (2026-08-31,
+ * owner-reported: typing an exact nickname by hand is error-prone — and
+ * nicknames can contain spaces/unicode, so `ChatUI._processMentions()`'s
+ * highlight regex only ever recognizes an `@` immediately followed by one of
+ * the room's *exact* current nicknames anyway, see CLAUDE.md). Deliberately
+ * anchored at the caret (not a fixed dropup) — the owner specifically didn't
+ * want another "click a button first" affordance like the composer's "+"
+ * emoji menu.
+ *
+ * `attachMentionAutocomplete()` wires directly onto the composer
+ * `<textarea>` — a different shape than EmojiPicker.js/Tooltip.js's
+ * click-to-open singleton popovers, since a mention popover has to
+ * intercept keystrokes (arrow keys, Enter/Tab, Escape) while open rather
+ * than being toggled by a single click, and there's only ever one composer
+ * to attach to, so module-level state (not a class) is fine here too.
+ *
+ * Caret pixel position has no textarea API of its own — `caretRect()` uses
+ * the standard hidden "mirror div" trick: an off-screen div styled to match
+ * the textarea's text metrics (font/padding/border/wrapping) holds the text
+ * up to the caret plus a marker span; the marker's rect within that div is
+ * the caret's rect within the textarea.
+ */
+
+const GAP_PX = 4;
+const EDGE_PX = 8;
+const MAX_RESULTS = 6;
+const MAX_QUERY_LEN = 40;
+
+// Only properties that affect text layout/wrapping need mirroring — colors
+// and backgrounds are irrelevant since the mirror is never actually shown.
+const MIRRORED_PROPS = [
+    'boxSizing', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+    'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight',
+    'letterSpacing', 'textTransform', 'wordSpacing', 'tabSize',
+];
+
+let mirrorEl = null;
+function ensureMirror() {
+    if (mirrorEl) return mirrorEl;
+    mirrorEl = document.createElement('div');
+    const s = mirrorEl.style;
+    s.position = 'absolute';
+    s.visibility = 'hidden';
+    s.top = '0';
+    s.left = '-9999px';
+    s.whiteSpace = 'pre-wrap';
+    s.wordWrap = 'break-word';
+    s.overflowWrap = 'break-word';
+    s.borderStyle = 'solid';
+    s.borderColor = 'transparent';
+    document.body.appendChild(mirrorEl);
+    return mirrorEl;
+}
+
+/**
+ * @param {HTMLTextAreaElement} textarea
+ * @returns {{left: number, bottom: number}} viewport-relative coords just below the caret.
+ */
+function caretRect(textarea) {
+    const mirror = ensureMirror();
+    const computed = getComputedStyle(textarea);
+    MIRRORED_PROPS.forEach((p) => { mirror.style[p] = computed[p]; });
+    mirror.style.width = `${textarea.clientWidth}px`;
+
+    mirror.textContent = textarea.value.slice(0, textarea.selectionStart);
+    const marker = document.createElement('span');
+    marker.textContent = '​'; // zero-width — gives an empty/trailing line real height to measure
+    mirror.appendChild(marker);
+
+    const taRect = textarea.getBoundingClientRect();
+    const mirrorRect = mirror.getBoundingClientRect();
+    const markerRect = marker.getBoundingClientRect();
+
+    return {
+        left: taRect.left + (markerRect.left - mirrorRect.left) - textarea.scrollLeft,
+        bottom: taRect.top + (markerRect.bottom - mirrorRect.top) - textarea.scrollTop,
+    };
+}
+
+/**
+ * Finds the in-progress `@query` ending at the caret, or null if the caret
+ * isn't inside one. The `@` must start the text or follow whitespace (so
+ * `foo@bar` mid-word never triggers); the query itself may contain spaces,
+ * since nicknames can — it's only capped in length and can't cross a newline.
+ * @param {string} text
+ * @param {number} caretPos
+ * @returns {{atIndex: number, query: string}|null}
+ */
+function findMentionQuery(text, caretPos) {
+    const uptoCaret = text.slice(0, caretPos);
+    const atIndex = uptoCaret.lastIndexOf('@');
+    if (atIndex === -1) return null;
+    const charBefore = atIndex === 0 ? '' : uptoCaret[atIndex - 1];
+    if (charBefore && !/\s/.test(charBefore)) return null;
+    const query = uptoCaret.slice(atIndex + 1);
+    if (query.includes('\n') || query.length > MAX_QUERY_LEN) return null;
+    return { atIndex, query };
+}
+
+/**
+ * Wires @mention autocomplete onto `textarea`. Self-contained — owns its
+ * own popover, keyboard handling, and dismissal; the caller just needs to
+ * attach it early (see the ordering note on the keydown listener below).
+ * @param {HTMLTextAreaElement} textarea
+ * @param {() => string[]} getNicknames - every current participant's display nickname.
+ * @returns {void}
+ */
+export function attachMentionAutocomplete(textarea, getNicknames) {
+    let popover = null;
+    let listEl = null;
+    let matches = [];
+    let activeIndex = 0;
+    let mentionStart = -1; // index of '@' in textarea.value for the query currently shown
+    let isOpen = false;
+    let suppressNextInput = false;
+
+    function ensurePopover() {
+        if (popover) return;
+        popover = document.createElement('div');
+        popover.className = 'mention-autocomplete-popover';
+        popover.style.display = 'none';
+        // mousedown (not click) + preventDefault so picking a suggestion never
+        // blurs the textarea first — a blur would close the popover before the
+        // click's own handler got a chance to run.
+        popover.addEventListener('mousedown', (e) => e.preventDefault());
+        listEl = document.createElement('div');
+        listEl.className = 'mention-autocomplete-list';
+        popover.appendChild(listEl);
+        document.body.appendChild(popover);
+    }
+
+    function renderList() {
+        listEl.innerHTML = '';
+        matches.forEach((name, i) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'mention-autocomplete-item' + (i === activeIndex ? ' active' : '');
+            item.textContent = name;
+            item.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                pick(name);
+            });
+            item.addEventListener('mouseenter', () => {
+                activeIndex = i;
+                renderList();
+            });
+            listEl.appendChild(item);
+        });
+    }
+
+    function position() {
+        const { left, bottom } = caretRect(textarea);
+        const p = popover.getBoundingClientRect();
+        let top = bottom + GAP_PX;
+        if (top + p.height > window.innerHeight - EDGE_PX) {
+            // Not enough room below the caret line — flip above it instead.
+            top = bottom - p.height - GAP_PX - 20;
+        }
+        top = Math.max(EDGE_PX, Math.min(top, window.innerHeight - p.height - EDGE_PX));
+        const leftPos = Math.max(EDGE_PX, Math.min(left, window.innerWidth - p.width - EDGE_PX));
+        popover.style.top = `${top}px`;
+        popover.style.left = `${leftPos}px`;
+    }
+
+    function close() {
+        if (!isOpen) return;
+        isOpen = false;
+        if (popover) popover.style.display = 'none';
+    }
+
+    function open() {
+        ensurePopover();
+        isOpen = true;
+        popover.style.display = '';
+        renderList();
+        // Deferred a frame so this always measures *after* any other 'input'
+        // listener on the same textarea (App.js's auto-grow resize) has run,
+        // regardless of listener registration order — otherwise the popover
+        // could position itself off the textarea's pre-grow height.
+        requestAnimationFrame(() => { if (isOpen) position(); });
+    }
+
+    function refresh() {
+        if (textarea.selectionStart !== textarea.selectionEnd) { close(); return; }
+        const found = findMentionQuery(textarea.value, textarea.selectionStart);
+        if (!found) { close(); return; }
+
+        const q = found.query.trim().toLowerCase();
+        const pool = [...new Set(getNicknames().map((n) => n.trim()).filter(Boolean))];
+        const filtered = q
+            ? pool.filter((n) => n.toLowerCase().includes(q))
+                .sort((a, b) => a.toLowerCase().indexOf(q) - b.toLowerCase().indexOf(q) || a.length - b.length)
+            : pool;
+
+        if (!filtered.length) { close(); return; }
+
+        mentionStart = found.atIndex;
+        matches = filtered.slice(0, MAX_RESULTS);
+        activeIndex = 0;
+        open();
+    }
+
+    function pick(name) {
+        const value = textarea.value;
+        const caretPos = textarea.selectionStart;
+        const before = value.slice(0, mentionStart);
+        const after = value.slice(caretPos);
+        const insertion = `@${name} `;
+        textarea.value = before + insertion + after;
+        const newCaret = before.length + insertion.length;
+        textarea.setSelectionRange(newCaret, newCaret);
+
+        // A real 'input' event so App.js's own listener (auto-grow, typing
+        // status) reacts exactly like a manually-typed change would — but
+        // suppressed on our own end so it doesn't immediately re-open the
+        // popover (the inserted text still starts with '@name', which can
+        // itself be a substring match for a longer nickname).
+        suppressNextInput = true;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        close();
+        textarea.focus();
+    }
+
+    textarea.addEventListener('input', () => {
+        if (suppressNextInput) { suppressNextInput = false; return; }
+        requestAnimationFrame(refresh);
+    });
+
+    // Must be attached before App.js's own Enter-to-send keydown listener so
+    // stopImmediatePropagation() below can actually pre-empt it — see the
+    // ordering note where this is called from App.js.
+    textarea.addEventListener('keydown', (e) => {
+        if (!isOpen) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIndex = (activeIndex + 1) % matches.length;
+            renderList();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIndex = (activeIndex - 1 + matches.length) % matches.length;
+            renderList();
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            pick(matches[activeIndex]);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            close();
+        }
+    });
+
+    // A suggestion click's own mousedown already preventDefault()s the blur
+    // that would otherwise beat it, so this only ever fires for a genuine
+    // focus-away (click elsewhere on the page, tab switch, etc).
+    textarea.addEventListener('blur', () => close());
+
+    window.addEventListener('resize', () => { if (isOpen) position(); });
+    // capture:true to also see scrolls on the chat log (scroll doesn't
+    // bubble) — excludes scrolls inside the popover itself and the textarea
+    // (its own internal caret-scroll on a long wrapped composer).
+    document.addEventListener('scroll', (e) => {
+        if (isOpen && !popover.contains(e.target) && e.target !== textarea) close();
+    }, true);
+}

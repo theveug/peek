@@ -1103,6 +1103,50 @@ body {
   font-size: 0.75rem;
 }
 
+/* ===== @mention autocomplete (see client/MentionAutocomplete.js) =====
+   Anchored at the composer's caret position, not a fixed dropup — same
+   fixed-position-singleton shape as .emoji-picker-popover otherwise. */
+.mention-autocomplete-popover {
+  position: fixed;
+  z-index: 90;
+  min-width: 10rem;
+  max-width: 16rem;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.mention-autocomplete-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 12rem;
+  overflow-y: auto;
+  padding: 0.25rem;
+}
+
+.mention-autocomplete-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--t1);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mention-autocomplete-item.active {
+  background: var(--accentSoft);
+  color: var(--accentText);
+}
+
 /* ===== Link previews =====
    Non-image links render as plain inline text (see ChatUI._processLinkPreviews
    for why there's no rich embed card) — this rule just keeps a long unbroken

@@ -9,6 +9,7 @@ import { InvitePopover } from './InvitePopover.js';
 import { TopbarIdentity } from './TopbarIdentity.js';
 import { initTooltips } from './Tooltip.js';
 import { openEmojiPicker } from './EmojiPicker.js';
+import { attachMentionAutocomplete } from './MentionAutocomplete.js';
 import { getOwnerToken, setOwnerToken } from './ownerTokens.js';
 import { getMediaState, saveMediaState, clearMediaState } from './mediaStateStore.js';
 import { playSound } from './SoundPlayer.js';
@@ -407,6 +408,13 @@ ui._onReaction = (messageId, emoji) => {
 
 // Chat UI interactions
 const input = document.getElementById('message');
+
+// Wired here, immediately after grabbing the composer, so its keydown
+// listener (Enter/Tab/arrows while a suggestion list is open) registers
+// before the plain Enter-to-send listener further below — listeners on the
+// same element fire in registration order, and stopImmediatePropagation()
+// in MentionAutocomplete.js relies on that to pre-empt sendMessage().
+attachMentionAutocomplete(input, () => ui._allNicknames());
 
 // Clicking anywhere in the composer bar (its padding, the gap between the
 // +/send buttons and the textarea, etc.) focuses the message input — not
