@@ -15,69 +15,16 @@
  * than being toggled by a single click, and there's only ever one composer
  * to attach to, so module-level state (not a class) is fine here too.
  *
- * Caret pixel position has no textarea API of its own — `caretRect()` uses
- * the standard hidden "mirror div" trick: an off-screen div styled to match
- * the textarea's text metrics (font/padding/border/wrapping) holds the text
- * up to the caret plus a marker span; the marker's rect within that div is
- * the caret's rect within the textarea.
+ * Caret pixel positioning (`caretRect()`) is shared with `EmojiAutocomplete.js`
+ * via `composerCaret.js` — see that file for how it works.
  */
+
+import { caretRect } from './composerCaret.js';
 
 const GAP_PX = 4;
 const EDGE_PX = 8;
 const MAX_RESULTS = 6;
 const MAX_QUERY_LEN = 40;
-
-// Only properties that affect text layout/wrapping need mirroring — colors
-// and backgrounds are irrelevant since the mirror is never actually shown.
-const MIRRORED_PROPS = [
-    'boxSizing', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
-    'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight',
-    'letterSpacing', 'textTransform', 'wordSpacing', 'tabSize',
-];
-
-let mirrorEl = null;
-function ensureMirror() {
-    if (mirrorEl) return mirrorEl;
-    mirrorEl = document.createElement('div');
-    const s = mirrorEl.style;
-    s.position = 'absolute';
-    s.visibility = 'hidden';
-    s.top = '0';
-    s.left = '-9999px';
-    s.whiteSpace = 'pre-wrap';
-    s.wordWrap = 'break-word';
-    s.overflowWrap = 'break-word';
-    s.borderStyle = 'solid';
-    s.borderColor = 'transparent';
-    document.body.appendChild(mirrorEl);
-    return mirrorEl;
-}
-
-/**
- * @param {HTMLTextAreaElement} textarea
- * @returns {{left: number, bottom: number}} viewport-relative coords just below the caret.
- */
-function caretRect(textarea) {
-    const mirror = ensureMirror();
-    const computed = getComputedStyle(textarea);
-    MIRRORED_PROPS.forEach((p) => { mirror.style[p] = computed[p]; });
-    mirror.style.width = `${textarea.clientWidth}px`;
-
-    mirror.textContent = textarea.value.slice(0, textarea.selectionStart);
-    const marker = document.createElement('span');
-    marker.textContent = '​'; // zero-width — gives an empty/trailing line real height to measure
-    mirror.appendChild(marker);
-
-    const taRect = textarea.getBoundingClientRect();
-    const mirrorRect = mirror.getBoundingClientRect();
-    const markerRect = marker.getBoundingClientRect();
-
-    return {
-        left: taRect.left + (markerRect.left - mirrorRect.left) - textarea.scrollLeft,
-        bottom: taRect.top + (markerRect.bottom - mirrorRect.top) - textarea.scrollTop,
-    };
-}
 
 /**
  * Finds the in-progress `@query` ending at the caret, or null if the caret

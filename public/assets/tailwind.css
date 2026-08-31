@@ -1147,6 +1147,39 @@ body {
   color: var(--accentText);
 }
 
+.mention-autocomplete-empty {
+  padding: 0.5rem 0.625rem;
+  color: var(--t3);
+  font-size: 0.75rem;
+}
+
+/* ===== :emoji autocomplete (see client/EmojiAutocomplete.js) =====
+   Shares .mention-autocomplete-popover/-list/-item's box/list/keyboard-nav
+   styling (both classes are applied together on the same elements) — these
+   just add the glyph+name row layout and a bit more width for the name text. */
+.emoji-autocomplete-popover {
+  min-width: 12rem;
+  max-width: 18rem;
+}
+
+.emoji-autocomplete-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.emoji-autocomplete-glyph {
+  font-size: 1.125rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.emoji-autocomplete-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ===== Link previews =====
    Non-image links render as plain inline text (see ChatUI._processLinkPreviews
    for why there's no rich embed card) — this rule just keeps a long unbroken

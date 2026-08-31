@@ -312,3 +312,8 @@ export function openEmojiPicker(anchorEl, onPick) {
 export function closeEmojiPicker() {
     close();
 }
+
+// Shared with EmojiAutocomplete.js (composer ":" shortcuts), so typing a
+// colon-triggered query doesn't refetch/re-cache a second independent copy
+// of the same dataset the click-to-open picker already loaded (or will).
+export { loadData as ensureEmojiData, getRecent as getRecentEmoji, recordRecent as recordRecentEmoji };

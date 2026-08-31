@@ -10,6 +10,7 @@ import { TopbarIdentity } from './TopbarIdentity.js';
 import { initTooltips } from './Tooltip.js';
 import { openEmojiPicker } from './EmojiPicker.js';
 import { attachMentionAutocomplete } from './MentionAutocomplete.js';
+import { attachEmojiAutocomplete } from './EmojiAutocomplete.js';
 import { getOwnerToken, setOwnerToken } from './ownerTokens.js';
 import { getMediaState, saveMediaState, clearMediaState } from './mediaStateStore.js';
 import { playSound } from './SoundPlayer.js';
@@ -409,12 +410,16 @@ ui._onReaction = (messageId, emoji) => {
 // Chat UI interactions
 const input = document.getElementById('message');
 
-// Wired here, immediately after grabbing the composer, so its keydown
-// listener (Enter/Tab/arrows while a suggestion list is open) registers
+// Wired here, immediately after grabbing the composer, so their keydown
+// listeners (Enter/Tab/arrows while a suggestion list is open) register
 // before the plain Enter-to-send listener further below — listeners on the
 // same element fire in registration order, and stopImmediatePropagation()
-// in MentionAutocomplete.js relies on that to pre-empt sendMessage().
+// in MentionAutocomplete.js/EmojiAutocomplete.js relies on that to pre-empt
+// sendMessage(). The two are independent (different trigger characters,
+// each only acts while its own popover is open), so wiring order between
+// them doesn't matter — only that both precede the Enter-to-send listener.
 attachMentionAutocomplete(input, () => ui._allNicknames());
+attachEmojiAutocomplete(input);
 
 // Clicking anywhere in the composer bar (its padding, the gap between the
 // +/send buttons and the textarea, etc.) focuses the message input — not
