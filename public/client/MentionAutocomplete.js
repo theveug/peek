@@ -58,6 +58,7 @@ export function attachMentionAutocomplete(textarea, getNicknames) {
     let popover = null;
     let listEl = null;
     let matches = [];
+    let itemEls = [];
     let activeIndex = 0;
     let mentionStart = -1; // index of '@' in textarea.value for the query currently shown
     let isOpen = false;
@@ -78,9 +79,17 @@ export function attachMentionAutocomplete(textarea, getNicknames) {
         document.body.appendChild(popover);
     }
 
+    // Rebuilds the DOM (only called when the match set itself changes, i.e.
+    // from open()). Hover/keyboard nav must NOT go through this — replacing
+    // the element currently under the mouse pointer retriggers a fresh
+    // 'mouseenter' on its replacement (same screen position, new node), which
+    // would call this again and loop, endlessly swapping the item out from
+    // under the cursor before a click could ever land on a stable element
+    // (reported 2026-08-31: hover worked, click did nothing). setActive()
+    // below is the hover/keyboard-safe path — it only ever toggles a class.
     function renderList() {
         listEl.innerHTML = '';
-        matches.forEach((name, i) => {
+        itemEls = matches.map((name, i) => {
             const item = document.createElement('button');
             item.type = 'button';
             item.className = 'mention-autocomplete-item' + (i === activeIndex ? ' active' : '');
@@ -89,12 +98,17 @@ export function attachMentionAutocomplete(textarea, getNicknames) {
                 e.preventDefault();
                 pick(name);
             });
-            item.addEventListener('mouseenter', () => {
-                activeIndex = i;
-                renderList();
-            });
+            item.addEventListener('mouseenter', () => setActive(i));
             listEl.appendChild(item);
+            return item;
         });
+    }
+
+    function setActive(i) {
+        if (i === activeIndex && itemEls[i]?.classList.contains('active')) return;
+        itemEls[activeIndex]?.classList.remove('active');
+        activeIndex = i;
+        itemEls[activeIndex]?.classList.add('active');
     }
 
     function position() {
@@ -182,12 +196,12 @@ export function attachMentionAutocomplete(textarea, getNicknames) {
         if (!isOpen) return;
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            activeIndex = (activeIndex + 1) % matches.length;
-            renderList();
+            setActive((activeIndex + 1) % matches.length);
+            itemEls[activeIndex]?.scrollIntoView({ block: 'nearest' });
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            activeIndex = (activeIndex - 1 + matches.length) % matches.length;
-            renderList();
+            setActive((activeIndex - 1 + matches.length) % matches.length);
+            itemEls[activeIndex]?.scrollIntoView({ block: 'nearest' });
         } else if (e.key === 'Enter' || e.key === 'Tab') {
             e.preventDefault();
             e.stopImmediatePropagation();
