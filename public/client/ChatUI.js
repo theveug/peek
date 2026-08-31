@@ -57,6 +57,30 @@ export class ChatUI {
         this.onUnpinMessage = null; // (messageId) — wired to PeerManager.broadcastUnpin
         this._wirePinnedPanel();
         this._wireSearchPanel();
+        this._wireAutoScrollResize();
+    }
+
+    /**
+     * Keeps the log pinned to its bottom across a chat-panel drag-resize or a
+     * window resize — both reflow message text (word-wrap changes) and shift
+     * scrollHeight without firing a 'scroll' event, so a user who was reading
+     * live traffic at the bottom would otherwise drift away from it purely
+     * from the reflow. `_wasAtBottom` is updated only by real user scrolling
+     * (via the 'scroll' listener) and left untouched by our own corrective
+     * jumps below, so a user who'd deliberately scrolled up to read history
+     * is never yanked back down by a resize.
+     * @returns {void}
+     */
+    _wireAutoScrollResize() {
+        const chatLog = document.getElementById('chat-log');
+        if (!chatLog || typeof ResizeObserver === 'undefined') return;
+        this._wasAtBottom = true;
+        chatLog.addEventListener('scroll', () => {
+            this._wasAtBottom = this._isAtBottom(chatLog);
+        });
+        new ResizeObserver(() => {
+            if (this._wasAtBottom) chatLog.scrollTop = chatLog.scrollHeight;
+        }).observe(chatLog);
     }
 
     /**
@@ -522,6 +546,7 @@ export class ChatUI {
         }
 
         this._renderReactionBar(bar, messageId);
+        this._scrollIfAtBottom(document.getElementById('chat-log'));
     }
 
     /** Repaints one message's reaction-badge bar from `_reactions`. */
@@ -578,7 +603,7 @@ export class ChatUI {
         this._renderPollOptions(container, pollId);
         chatLog.appendChild(container);
         while (chatLog.children.length > this.maxMessages) chatLog.removeChild(chatLog.firstChild);
-        requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' }));
+        this._scrollToBottom(chatLog);
     }
 
     /**
@@ -916,7 +941,7 @@ export class ChatUI {
             chatLog.removeChild(chatLog.firstChild);
         }
 
-        requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' }));
+        this._scrollToBottom(chatLog);
 
         if (!document.hasFocus() || this._isChatViewClosed()) {
             const indicator = document.getElementById('new-message-indicator');
@@ -1393,10 +1418,12 @@ export class ChatUI {
 
         const mentionedMe = this._finalizeMarkdownBody(msgContainer);
 
-        if (isHistorical) {
-            this._scrollIfAtBottom(chatLog);
-            return;
-        }
+        // No per-message scroll here — a bulk history load calls this once per
+        // entry in a tight loop, and each smooth-scrollTo() would restart the
+        // previous one's animation before it finished (the "not very responsive"
+        // jank reported 2026-08-31). UIController._loadChatHistory does one
+        // instant scroll-to-bottom itself after the whole batch is in the DOM.
+        if (isHistorical) return;
 
         const newMessageIndicator = document.getElementById('new-message-indicator');
         const tabFocused = document.hasFocus();
@@ -1813,19 +1840,35 @@ export class ChatUI {
         return mentionedMe;
     }
 
+    /** @param {HTMLElement} chatLog @returns {boolean} */
+    _isAtBottom(chatLog) {
+        const chatInput = document.getElementById('chat-input');
+        const threshold = (chatInput?.scrollHeight || 0) + 50;
+        return (chatLog.scrollTop + chatLog.clientHeight) >= (chatLog.scrollHeight - threshold);
+    }
+
     /**
-     * Shared by addChatMessage and the grouped file-message renderers — only
-     * auto-scrolls if the user was already at (or near) the bottom, so a message
-     * arriving while they've scrolled up to read history doesn't yank them back down.
+     * Scrolls chatLog to its current bottom. Downgrades to an instant jump
+     * (no 'smooth' behavior) when the OS/browser has reduced-motion enabled —
+     * an animated scrollTo() left mid-flight by a system-level "disable
+     * animations" setting is what made this feel unresponsive/stuck.
+     * @param {HTMLElement} chatLog
+     * @returns {void}
+     */
+    _scrollToBottom(chatLog) {
+        const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' }));
+    }
+
+    /**
+     * Shared by addChatMessage, addReaction, and the grouped file-message
+     * renderers — only auto-scrolls if the user was already at (or near) the
+     * bottom, so a message (or a reaction badge) arriving while they've
+     * scrolled up to read history doesn't yank them back down.
      * @param {HTMLElement} chatLog
      * @returns {void}
      */
     _scrollIfAtBottom(chatLog) {
-        const chatInput = document.getElementById('chat-input');
-        const threshold = chatInput.scrollHeight + 50;
-        const isAtBottom = (chatLog.scrollTop + chatLog.clientHeight) >= (chatLog.scrollHeight - threshold);
-        if (isAtBottom) {
-            requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' }));
-        }
+        if (this._isAtBottom(chatLog)) this._scrollToBottom(chatLog);
     }
 }

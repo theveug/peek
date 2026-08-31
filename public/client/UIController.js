@@ -1750,6 +1750,11 @@ export class UIController {
             divider.className = 'chat-history-divider';
             divider.textContent = 'Today';
             chatLog.appendChild(divider);
+            // One instant jump after the whole batch (divider included) is in the
+            // DOM — a fresh room join is always scrolled to the top with nothing
+            // else in the log yet, so there's no "was the user already reading
+            // scrollback" question to answer here, unlike a live message arriving.
+            chatLog.scrollTop = chatLog.scrollHeight;
         }
     }
 
