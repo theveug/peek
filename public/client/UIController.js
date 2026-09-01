@@ -1983,16 +1983,22 @@ export class UIController {
      * applied to the two other devices a peer can broadcast. Called from
      * `addStream()`/`removeStream()`, which already know the real peerId
      * (not a stream key) once self's `'me'`/`'me-cam'` has been resolved.
+     * Your own streams are still recorded under the literal `'me'`/`'me-cam'`
+     * keys though (not your peerId — see `addStream()`'s doc comment), so
+     * the `this.streams` lookup itself has to re-derive the right key for self.
      * @param {string} peerId - a real peerId, not a stream key.
      * @returns {void}
      */
     _updateParticipantStreamIcons(peerId) {
         const el = document.getElementById(`participant-${peerId}`);
         if (!el) return;
+        const isSelf = peerId === this.selfPeerId;
+        const screenKey = isSelf ? 'me' : peerId;
+        const camKey = isSelf ? 'me-cam' : `${peerId}-cam`;
         const screenIcon = el.querySelector('.participant-screen-icon');
         const camIcon = el.querySelector('.participant-cam-icon');
-        if (screenIcon) screenIcon.style.display = this.streams[peerId] ? '' : 'none';
-        if (camIcon) camIcon.style.display = this.streams[`${peerId}-cam`] ? '' : 'none';
+        if (screenIcon) screenIcon.style.display = this.streams[screenKey] ? '' : 'none';
+        if (camIcon) camIcon.style.display = this.streams[camKey] ? '' : 'none';
     }
 
     /**
