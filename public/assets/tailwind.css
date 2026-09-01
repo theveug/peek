@@ -2625,15 +2625,25 @@ body,
    pair of rows looking like a deliberate two-row panel rather than a
    squashed stack. Targets #controls (not just .controls-bar) so these
    overrides reliably beat .dock-bar's own border-radius/padding
-   regardless of the two rule blocks' source order. */
+   regardless of the two rule blocks' source order.
+   In-flow, not an overlay (2026-09-02, owner-reported: the dock used to be
+   `position: absolute` over #videos, so in grid view it visually covered
+   the bottom row of tiles instead of the grid ever knowing the dock was
+   there). #controls is now a normal (non-growing) flex child of #videos'
+   flex column, same as #stage-header — #grid-view/#focused-view's own
+   `flex-grow` sizes them against the space actually left over once the
+   dock's real height is accounted for, so the bottom row is never tucked
+   underneath it. `position: relative` is kept (not removed outright) since
+   .controls-close-btn's "handle" above the dock is `position: absolute;
+   top: -1.75rem` and needs a positioned ancestor to anchor against — without
+   it the handle would jump to anchor against #videos instead. Mobile is
+   untouched (still `position: fixed` in the max-width:767px block below) —
+   deliberately kept as a viewport overlay there, screen space is too scarce
+   to also reserve a permanent dock-height gap on a phone. */
 #controls.controls-bar {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  top: auto;
+  position: relative;
+  flex: none;
   width: 100%;
-  transform: none;
   /* Square, not rounded (2026-08-29) — a rounded top corner left a triangle
      of the stage's own background showing through right where the dock
      should read as flush against the chat/members side panels (their own
