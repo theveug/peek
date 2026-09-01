@@ -2431,15 +2431,24 @@ export class UIController {
         this.updateLayout(); // also runs _updateSelfViewVisibility()
     }
 
-    /** Re-clamps a manually-dragged PiP back on-screen (e.g. after a window resize) and persists the new position. */
+    /**
+     * Re-clamps a manually-dragged PiP back on-screen (e.g. after a window
+     * resize) and re-persists it — corner-relative (see `_makeDraggable`'s
+     * doc comment), so this only ever has to clamp the offset from whichever
+     * corner it's already anchored to, never re-derive the corner itself.
+     */
     _reclampDraggedPip(el, storageKey) {
-        const maxLeft = Math.max(0, window.innerWidth - el.offsetWidth);
-        const maxTop = Math.max(0, window.innerHeight - el.offsetHeight);
-        const left = Math.min(Math.max(parseFloat(el.style.left) || 0, 0), maxLeft);
-        const top = Math.min(Math.max(parseFloat(el.style.top) || 0, 0), maxTop);
-        el.style.left = `${left}px`;
-        el.style.top = `${top}px`;
-        localStorage.setItem(`pipPosition:${storageKey}`, JSON.stringify({ left, top }));
+        const anchorRight = el.dataset.pipAnchorRight === 'true';
+        const anchorBottom = el.dataset.pipAnchorBottom === 'true';
+        const maxX = Math.max(0, window.innerWidth - el.offsetWidth);
+        const maxY = Math.max(0, window.innerHeight - el.offsetHeight);
+        const curX = parseFloat(anchorRight ? el.style.right : el.style.left) || 0;
+        const curY = parseFloat(anchorBottom ? el.style.bottom : el.style.top) || 0;
+        const x = Math.min(Math.max(curX, 0), maxX);
+        const y = Math.min(Math.max(curY, 0), maxY);
+        el.style[anchorRight ? 'right' : 'left'] = `${x}px`;
+        el.style[anchorBottom ? 'bottom' : 'top'] = `${y}px`;
+        localStorage.setItem(`pipPosition:${storageKey}`, JSON.stringify({ x, y, anchorRight, anchorBottom }));
     }
 
     /**
@@ -2447,7 +2456,26 @@ export class UIController {
      * Events so mouse and touch share one code path. Position is
      * remembered per PiP (`pipPosition:${storageKey}`) across stream stop/start
      * and page reloads, since it's a personal layout preference, not tied to any
-     * one stream instance. A plain click/tap (pointerdown+up with negligible
+     * one stream instance.
+     *
+     * **Corner-relative, not top-left-relative (2026-09-02, owner-reported)**:
+     * a drop is pinned to whichever corner its center ends up nearest to
+     * (`el.dataset.pipAnchorRight`/`pipAnchorBottom`), storing its offset from
+     * THAT corner (`right`/`bottom` CSS, not `left`/`top`) rather than always
+     * from the top-left. A PiP dropped bottom-right used to store raw
+     * `{left, top}` px from the top-left corner — enlarging the window later
+     * left it sitting the same fixed distance from top-left, i.e. drifting
+     * away from the bottom-right corner it was actually placed against
+     * instead of staying pinned there. Anchoring via `right`/`bottom` needs
+     * no resize-listener math to "follow" the corner at all — that's just
+     * what those CSS properties already do relative to the (fixed-positioned,
+     * viewport-relative) containing block; `_reclampDraggedPip` only has to
+     * clamp the stored offset back on-screen if the window later shrinks
+     * smaller than that offset, never re-derive which corner it was. During
+     * an active drag this still tracks the cursor via plain `left`/`top`
+     * (simplest math for "follow the pointer") — the corner is only decided
+     * once, from the final dropped position, on pointerup.
+     * A plain click/tap (pointerdown+up with negligible
      * movement) toggles `.self-view-pip-large` instead of counting as a drag
      * (2026-08-29) — the fixed 150px PiP exists to let you check what a
      * peer actually sees of your own camera/screen, which is hard to judge at
@@ -2475,12 +2503,38 @@ export class UIController {
         };
 
         const applyPosition = (left, top) => {
+            // Cursor-tracking only, during an active drag — always left/top,
+            // since that's the simplest math for "follow the pointer". The
+            // corner isn't decided (or persisted) until pointerup; see
+            // `pinToCorner`.
             const [clampedLeft, clampedTop] = clamp(left, top);
             el.style.left = `${clampedLeft}px`;
             el.style.top = `${clampedTop}px`;
             el.style.right = 'auto';
             el.style.bottom = 'auto';
             el.dataset.dragged = 'true';
+        };
+
+        // Pins the PiP to whichever corner its center is nearest to right now,
+        // expressing its position as an offset from THAT corner (right/bottom
+        // CSS instead of left/top when nearer the right/bottom edge) so a
+        // later window resize keeps it visually anchored there — see the
+        // "Corner-relative" doc comment above.
+        const pinToCorner = (rect) => {
+            const anchorRight = (rect.left + rect.width / 2) > window.innerWidth / 2;
+            const anchorBottom = (rect.top + rect.height / 2) > window.innerHeight / 2;
+            const maxX = Math.max(0, window.innerWidth - el.offsetWidth);
+            const maxY = Math.max(0, window.innerHeight - el.offsetHeight);
+            const x = Math.min(Math.max(anchorRight ? window.innerWidth - rect.right : rect.left, 0), maxX);
+            const y = Math.min(Math.max(anchorBottom ? window.innerHeight - rect.bottom : rect.top, 0), maxY);
+            el.style.left = anchorRight ? 'auto' : `${x}px`;
+            el.style.right = anchorRight ? `${x}px` : 'auto';
+            el.style.top = anchorBottom ? 'auto' : `${y}px`;
+            el.style.bottom = anchorBottom ? `${y}px` : 'auto';
+            el.dataset.dragged = 'true';
+            el.dataset.pipAnchorRight = String(anchorRight);
+            el.dataset.pipAnchorBottom = String(anchorBottom);
+            localStorage.setItem(`pipPosition:${storageKey}`, JSON.stringify({ x, y, anchorRight, anchorBottom }));
         };
 
         const setEnlarged = (enlarged) => {
@@ -2504,8 +2558,16 @@ export class UIController {
         const saved = localStorage.getItem(`pipPosition:${storageKey}`);
         if (saved) {
             try {
-                const { left, top } = JSON.parse(saved);
-                if (Number.isFinite(left) && Number.isFinite(top)) applyPosition(left, top);
+                const { x, y, anchorRight, anchorBottom } = JSON.parse(saved);
+                if (Number.isFinite(x) && Number.isFinite(y)) {
+                    el.style.left = anchorRight ? 'auto' : `${x}px`;
+                    el.style.right = anchorRight ? `${x}px` : 'auto';
+                    el.style.top = anchorBottom ? 'auto' : `${y}px`;
+                    el.style.bottom = anchorBottom ? `${y}px` : 'auto';
+                    el.dataset.dragged = 'true';
+                    el.dataset.pipAnchorRight = String(!!anchorRight);
+                    el.dataset.pipAnchorBottom = String(!!anchorBottom);
+                }
             } catch {}
         }
 
@@ -2537,8 +2599,7 @@ export class UIController {
             el.releasePointerCapture(e.pointerId);
             el.style.cursor = 'grab';
             if (moved) {
-                const rect = el.getBoundingClientRect();
-                localStorage.setItem(`pipPosition:${storageKey}`, JSON.stringify({ left: rect.left, top: rect.top }));
+                pinToCorner(el.getBoundingClientRect());
             } else {
                 setEnlarged(!el.classList.contains('self-view-pip-large'));
             }

@@ -2639,10 +2639,23 @@ body,
    it the handle would jump to anchor against #videos instead. Mobile is
    untouched (still `position: fixed` in the max-width:767px block below) —
    deliberately kept as a viewport overlay there, screen space is too scarce
-   to also reserve a permanent dock-height gap on a phone. */
+   to also reserve a permanent dock-height gap on a phone.
+   `margin-top: auto` (2026-09-02 follow-up, owner-reported: going in-flow
+   left the dock floating mid-column instead of flush against the real
+   bottom edge) — #videos' `justify-content: center` centers its flex items
+   as a group whenever nothing else in the column is growing (e.g. alone in
+   the room, only the spinner is showing, and the spinner itself doesn't
+   flex-grow), which left the dock vertically centered alongside it instead
+   of pinned to the bottom. A flex item's own `margin-top: auto` claims all
+   leftover main-axis space above itself regardless of the container's
+   `justify-content`, which is exactly "flush to the end" — when
+   #grid-view/#focused-view ARE flex-growing there's no leftover space left
+   for this margin to claim, so it's a no-op there, same visual result as
+   before. */
 #controls.controls-bar {
   position: relative;
   flex: none;
+  margin-top: auto;
   width: 100%;
   /* Square, not rounded (2026-08-29) — a rounded top corner left a triangle
      of the stage's own background showing through right where the dock
@@ -2700,7 +2713,15 @@ body,
      the dock buttons themselves fill the whole row beneath it, so a
      top-right corner placement would sit on top of whichever button ends up
      there (currently Leave). Roughly mirrors .controls-tab's position/shape
-     one row up, so the two read as the same handle flipping direction. */
+     one row up, so the two read as the same handle flipping direction.
+     Hover-revealed (2026-09-02, owner-reported: an always-visible handle sat
+     permanently poking up above the dock even when nobody wanted to close
+     it) — invisible/non-interactive at rest, faded in only while the
+     pointer is over the dock itself (or, for keyboard users, while focus is
+     anywhere inside it) via the `#controls:hover`/`:focus-within` rule
+     below. `pointer-events: none` at rest means hovering the handle's own
+     (otherwise-empty) strip above the dock can't reveal it on its own —
+     the reveal has to start from hovering the always-visible button row. */
   .controls-close-btn {
     display: flex;
     position: absolute;
@@ -2713,6 +2734,15 @@ body,
     border: 1px solid var(--border);
     border-bottom: none;
     background: var(--bg2);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+  }
+
+  #controls:hover .controls-close-btn,
+  #controls:focus-within .controls-close-btn {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .controls-tab {
