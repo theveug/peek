@@ -51,6 +51,11 @@ export class PeerManager {
         this._rawMicStream = null;
         this._noiseSuppressor = null;
         this.micEnabled = false;
+        // True only after an explicit releaseMicWhenOff-driven hardware release
+        // (see toggleMic()/_releaseMicHardware()) — distinct from simply never
+        // having turned the mic on, so re-enabling knows to reattach via
+        // replaceTrack() on the existing sender rather than pc.addTrack()+renegotiate.
+        this.micReleased = false;
         // Momentary hold-to-force-mute override (PTM) — independent of
         // micEnabled/the toggle preference, so releasing the key restores
         // exactly whatever micEnabled already was. See App.js's keydown/keyup
@@ -416,7 +421,7 @@ export class PeerManager {
                 break;
 
             case 'mic-status':
-                this.ui.updateParticipantMic(from, payload.enabled);
+                this.ui.updateParticipantMic(from, payload.enabled, !payload.active);
                 break;
 
             case 'deafen-status':
@@ -1143,7 +1148,7 @@ export class PeerManager {
      */
     async enforcePttMuteOnModeSwitch(mode) {
         if (mode !== 'push-to-talk' || !this.micEnabled || this.ptmHeld) return;
-        const enabled = await this.toggleMic();
+        const enabled = await this.toggleMic({ allowRelease: false });
         this.onMicModeForceMuted?.(enabled);
     }
 
@@ -1172,10 +1177,26 @@ export class PeerManager {
     /**
      * Requests mic permission on first use, then toggles enabled/disabled on
      * subsequent calls. Broadcasts the new state to peers either way.
+     *
+     * If the "release mic when off" setting (`localStorage['releaseMicWhenOff']`)
+     * is on and this call is turning an already-open mic off, the underlying
+     * hardware capture is fully stopped instead of just disabling the track —
+     * see `_releaseMicHardware()`'s doc comment for why this can't be the
+     * unconditional default behavior. Re-enabling after a release reattaches
+     * via `_reacquireMic()` (replaceTrack on the existing sender), not this
+     * method's first-grant addTrack+renegotiate path — the sender/transceiver
+     * already exists from the original grant.
+     * @param {{allowRelease?: boolean}} [opts] - `allowRelease: false` forces
+     *   the plain track.enabled flip even if the release-when-off setting is
+     *   on — used by `enforcePttMuteOnModeSwitch()`, which calls this to gate
+     *   the mic closed as PTT's starting state, not because the user asked
+     *   for the mic off; releasing hardware there would make the very next
+     *   push-to-talk press pay for a real device re-acquire.
      * @returns {Promise<boolean>} the resulting `micEnabled` state.
      */
-    async toggleMic() {
+    async toggleMic({ allowRelease = true } = {}) {
         if (!this.micStream) {
+            if (this.micReleased) return this._reacquireMic();
             try {
                 const micDeviceId = localStorage.getItem('micDeviceId');
                 this._rawMicStream = await navigator.mediaDevices.getUserMedia({
@@ -1195,6 +1216,8 @@ export class PeerManager {
                 console.warn('Mic access denied:', err);
                 return false;
             }
+        } else if (allowRelease && this.micEnabled && localStorage.getItem('releaseMicWhenOff') === '1') {
+            this._releaseMicHardware();
         } else {
             this.micEnabled = !this.micEnabled;
             this.micStream.getAudioTracks().forEach(t => { t.enabled = this.micEnabled; });
@@ -1204,9 +1227,89 @@ export class PeerManager {
         return this.micEnabled;
     }
 
-    /** Sends the current effective mic state (micEnabled, minus any active PTM hold) to every peer. */
+    /**
+     * Fully stops the mic hardware capture (raw stream, any noise-suppression
+     * pipeline built on top of it, and the presence-detection clone) instead
+     * of just disabling the track, and clears the sender to `null` on every
+     * connection. This is what actually lets a Bluetooth headset renegotiate
+     * back to its stereo A2DP profile — a plain `track.enabled = false` (the
+     * ordinary mute path) keeps the OS-level mic capture open for the whole
+     * session, which is exactly why HFP/mono stays pinned even while muted.
+     *
+     * Deliberately opt-in (`releaseMicWhenOff`) rather than toggleMic()'s
+     * unconditional default: `pollMicPresence()`'s mute-proof idle-reset
+     * depends on the hardware staying open while muted (it taps a clone of
+     * the raw track to detect ambient speech even with the mic silenced) —
+     * releasing the device kills that detection for as long as it's released,
+     * which is an acceptable, expected tradeoff for someone who deliberately
+     * asked for the device back, but not one every muted user should eat by
+     * default. See CLAUDE.md's "Voice/sound also resets the idle timer,
+     * mute-proof" entry.
+     * @returns {void}
+     */
+    _releaseMicHardware() {
+        for (const peerId of Object.keys(this.peers)) {
+            this.senders[peerId]?.['mic-audio']?.replaceTrack(null).catch(() => {});
+        }
+        this._noiseSuppressor?.stop();
+        this._noiseSuppressor = null;
+        if (this.micStream && this.micStream !== this._rawMicStream) {
+            this.micStream.getTracks().forEach(t => t.stop());
+        }
+        this._rawMicStream?.getTracks().forEach(t => t.stop());
+        this._refreshPresenceMicStream(null);
+        this._rawMicStream = null;
+        this.micStream = null;
+        this.micEnabled = false;
+        this.micReleased = true;
+    }
+
+    /**
+     * Re-acquires the mic after `_releaseMicHardware()` released it, reusing
+     * each connection's existing 'mic-audio' sender via `replaceTrack()`
+     * (same technique as `setNoiseSuppression()`/`switchMicrophone()`) rather
+     * than `pc.addTrack()` + a fresh offer wherever that sender already
+     * exists. One case still needs the slow path: a peer who joined *while*
+     * the mic was released never got a 'mic-audio' sender in the first place
+     * (`receiveOffer()`'s `if (this.micStream && ...)` guard skips adding one
+     * when there's no stream to add) — for them this falls back to
+     * `_addTrackedStream()` + a real renegotiated offer, same as the original
+     * first-ever grant in `toggleMic()`.
+     * @returns {Promise<boolean>} the resulting `micEnabled` state.
+     */
+    async _reacquireMic() {
+        try {
+            const micDeviceId = localStorage.getItem('micDeviceId');
+            this._rawMicStream = await navigator.mediaDevices.getUserMedia({
+                audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true,
+            });
+            this._refreshPresenceMicStream(this._rawMicStream);
+            this.micStream = await this._applyNoiseSuppression(this._rawMicStream);
+            const newTrack = this.micStream.getAudioTracks()[0];
+            for (const [peerId, pc] of Object.entries(this.peers)) {
+                const sender = this.senders[peerId]?.['mic-audio'];
+                if (sender) {
+                    await sender.replaceTrack(newTrack).catch(() => {});
+                } else {
+                    this._addTrackedStream(pc, peerId, this.micStream, 'mic');
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    this.send('offer', peerId, offer);
+                }
+            }
+            this.micEnabled = true;
+            this.micReleased = false;
+        } catch (err) {
+            console.warn('Mic re-acquire denied:', err);
+            return false;
+        }
+        this.broadcastMicStatus();
+        return this.micEnabled;
+    }
+
+    /** Sends the current effective mic state (micEnabled, minus any active PTM hold) to every peer, plus whether the hardware is actively held open (false once released — see `_releaseMicHardware()`). */
     broadcastMicStatus() {
-        this.send('mic-status', null, { enabled: this.micEnabled && !this.ptmHeld });
+        this.send('mic-status', null, { enabled: this.micEnabled && !this.ptmHeld, active: !!this.micStream });
     }
 
     /** Sends the current deafen state to every peer. */

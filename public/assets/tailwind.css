@@ -2185,6 +2185,18 @@ body.light .panel-tab:hover {
   gap: 0.25rem;
 }
 
+/* Screen-share/webcam "in use" icons — only shown while that device is
+   actually active (see UIController._updateParticipantStreamIcons), so
+   there's no idle/neutral state to style, just a plain accent-colored glyph
+   sized to match the mic icon's 16px SVG next to it. */
+.participant-device-icon {
+  display: inline-flex;
+  align-items: center;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--accent);
+}
+
 /* While the action cluster is shown, the passive icons swap out instead of
    stacking alongside it — keeps the width jump small so the name doesn't get
    crushed. Conditions mirror the reveal rules above exactly. */
@@ -3893,6 +3905,22 @@ body,
 
 .quick-settings-popover .settings-toggle-row-title {
   font-size: 0.8125rem;
+}
+
+/* Same narrowing as .quick-settings-popover above, tuned further for the
+   dock-quick-popover's tighter 14rem width (e.g. the mic options popover's
+   "Release mic when off" row). */
+.dock-quick-popover .settings-toggle-row {
+  padding: 0.625rem 0.75rem;
+  margin-bottom: 0;
+  gap: 0.625rem;
+}
+
+.dock-quick-popover .settings-toggle-row-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .quick-settings-popover .settings-segmented {

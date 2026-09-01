@@ -553,6 +553,13 @@
                                 </div>
                                 <input id="mic-options-threshold" type="range" min="0.01" max="0.1" step="0.01" class="w-full" />
                             </div>
+                            <div class="settings-toggle-row" style="margin-top:0.5rem;">
+                                <div>
+                                    <div class="settings-toggle-row-title" data-tip="Fully releases the mic device while off, so a Bluetooth headset can switch back to stereo audio instead of staying pinned to mono. Trade-off: re-enabling has to re-request the mic (a brief delay, occasionally a permission prompt again), and idle/away detection can't hear you while released.">Release mic when off</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="mic-options-release-when-off" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
                         </div>
                     </div>
                     <div class="dock-btn-wrap relative">

@@ -905,6 +905,9 @@ export class UIController {
         const actualPeerId = isSelf ? (this.selfPeerId || peerId) : (isCam ? peerId.slice(0, -4) : peerId);
         const nickname = isSelf ? `${this._peerNickname(actualPeerId)} (you)` : this._peerNickname(actualPeerId);
         const micEnabled = this._micEnabled?.[actualPeerId] ?? false;
+        // Unknown-until-told-otherwise defaults to hidden, same as a freshly
+        // created participant card — see updateParticipantMic()'s hardwareOff param.
+        const micHardwareOff = this._micHardwareOff?.[actualPeerId] ?? true;
         // Self has no RTCRtpSender to pause/resume — always render live.
         const isWatched = isSelf || this.watchedTiles.has(peerId);
 
@@ -917,8 +920,11 @@ export class UIController {
 
         const micIcon = document.createElement('span');
         micIcon.className = 'grid-tile-mic inline-flex items-center';
-        micIcon.style.color = micEnabled ? '#22c55e' : '#ef4444';
-        micIcon.innerHTML = micEnabled ? this._micOnSvg() : this._micOffSvg();
+        micIcon.style.display = micHardwareOff ? 'none' : '';
+        if (!micHardwareOff) {
+            micIcon.style.color = micEnabled ? '#22c55e' : '#ef4444';
+            micIcon.innerHTML = micEnabled ? this._micOnSvg() : this._micOffSvg();
+        }
         label.appendChild(micIcon);
 
         const labelText = document.createElement('span');
@@ -1375,15 +1381,33 @@ export class UIController {
             passiveIcons.appendChild(sigIcon);
         }
 
+        // Device-in-use icons (screen share / webcam / mic) — deliberately
+        // absent, not a dim/neutral placeholder, until each device is actually
+        // known to be active: showing a "mic off"/"cam off" icon for every
+        // participant regardless of whether they've ever touched that device
+        // is just noise. _updateParticipantStreamIcons() reveals the first two
+        // from addStream()/removeStream(); updateParticipantMic() reveals the
+        // mic one once a real mic-status broadcast (or, for the local card, an
+        // actual toggle) arrives.
+        const screenIcon = document.createElement('span');
+        screenIcon.className = 'participant-screen-icon participant-device-icon material-symbols-rounded';
+        screenIcon.textContent = 'screen_share';
+        screenIcon.dataset.tip = 'Sharing screen';
+        screenIcon.style.display = 'none';
+        passiveIcons.appendChild(screenIcon);
+
+        const camIcon = document.createElement('span');
+        camIcon.className = 'participant-cam-icon participant-device-icon material-symbols-rounded';
+        camIcon.textContent = 'videocam';
+        camIcon.dataset.tip = 'Camera on';
+        camIcon.style.display = 'none';
+        passiveIcons.appendChild(camIcon);
+
         const micIcon = document.createElement('span');
         micIcon.className = 'participant-mic inline-flex items-center';
-        // Neutral grey, not the alarming "muted" red — nothing is actually known
-        // about this peer's mic yet (same "unknown until told otherwise" treatment
-        // the signal-strength icon just above already uses). updateParticipantMic()
-        // repaints this for real once a mic-status broadcast (or, for the local
-        // card, an actual toggle) arrives.
-        micIcon.style.color = '#6b7280';
-        micIcon.innerHTML = this._micOffSvg();
+        micIcon.style.color = '#22c55e';
+        micIcon.innerHTML = this._micOnSvg();
+        micIcon.style.display = 'none';
         passiveIcons.appendChild(micIcon);
         rightCol.appendChild(passiveIcons);
 
@@ -1863,8 +1887,15 @@ export class UIController {
         }
     }
 
-    /** Updates the mic icon on any grid tile(s) matching this peer. */
-    _updateGridMicIcon(peerId, enabled) {
+    /**
+     * Updates the mic icon on any grid tile(s) matching this peer — hidden
+     * entirely while the hardware isn't actually in use, same "nothing shown
+     * = nothing active" treatment as `updateParticipantMic()` on the card.
+     * @param {string} peerId
+     * @param {boolean} enabled
+     * @param {boolean} [hardwareOff=false]
+     */
+    _updateGridMicIcon(peerId, enabled, hardwareOff = false) {
         // Your own grid tile(s) are keyed 'me'/'me-cam', not selfPeerId (see
         // "Self-view unified into grid/focus" in CLAUDE.md) — without this,
         // muting yourself never live-updated your own tile's mic icon.
@@ -1873,6 +1904,8 @@ export class UIController {
             const tile = this.gridView?.querySelector(`[data-peer-id="${key}"]`);
             const icon = tile?.querySelector('.grid-tile-mic');
             if (!icon) return;
+            icon.style.display = hardwareOff ? 'none' : '';
+            if (hardwareOff) return;
             icon.style.color = enabled ? '#22c55e' : '#ef4444';
             icon.innerHTML = enabled ? this._micOnSvg() : this._micOffSvg();
         });
@@ -1885,13 +1918,16 @@ export class UIController {
      * the next speaking-poll tick.
      * @param {string} peerId
      * @param {boolean} enabled
-     * @param {boolean} [neverEnabled=false] - the mic has never been turned on
-     *   this session (as opposed to turned on then off) — renders as a neutral
-     *   "not connected" grey instead of an active "muted" red, since nothing
-     *   has actually been silenced. See App.js's `_micEverEnabled`.
+     * @param {boolean} [hardwareOff=false] - the mic device isn't actually
+     *   held open right now — either it's never been turned on this session,
+     *   or (see `PeerManager._releaseMicHardware()`) it was on and has since
+     *   been deliberately released. Hides the icon entirely rather than
+     *   showing a grey/neutral placeholder: nothing is "muted" if there's no
+     *   device capturing anything, so showing a mic icon at all would be
+     *   feedback about a device the peer isn't currently using.
      * @returns {void}
      */
-    updateParticipantMic(peerId, enabled, neverEnabled = false) {
+    updateParticipantMic(peerId, enabled, hardwareOff = false) {
         let el = document.getElementById(`participant-${peerId}`);
         if (!el) {
             this.addParticipant(peerId);
@@ -1899,26 +1935,64 @@ export class UIController {
         }
         this._micEnabled = this._micEnabled || {};
         this._micEnabled[peerId] = enabled;
-        this._updateGridMicIcon(peerId, enabled);
+        this._micHardwareOff = this._micHardwareOff || {};
+        this._micHardwareOff[peerId] = hardwareOff;
+        this._updateGridMicIcon(peerId, enabled, hardwareOff);
         const dot = el.querySelector('.participant-mic');
         const label = el.querySelector('.participant-mic-label');
+        if (hardwareOff) {
+            dot.style.display = 'none';
+            this.setSpeaking(peerId, false);
+            return;
+        }
+        dot.style.display = '';
         if (enabled) {
             dot.style.color = '#22c55e';
             dot.innerHTML = this._micOnSvg();
+            dot.dataset.tip = 'Unmuted';
             if (label) label.textContent = 'Unmuted';
-        } else if (neverEnabled) {
-            dot.style.color = '#6b7280';
-            dot.innerHTML = this._micOffSvg();
-            if (label) label.textContent = 'Mic off';
-            this.setSpeaking(peerId, false);
         } else {
             dot.style.color = '#ef4444';
             dot.innerHTML = this._micOffSvg();
+            dot.dataset.tip = 'Muted';
             if (label) label.textContent = 'Muted';
             // A muted mic can't be producing real audio levels, but clear the ring
             // immediately rather than waiting on the next speaking-poll tick.
             this.setSpeaking(peerId, false);
         }
+    }
+
+    /**
+     * Resolves a stream key (bare peerId for screen share, `${peerId}-cam`
+     * for webcam, `'me'`/`'me-cam'` for self) to the real peerId whose
+     * participant card it belongs to — same resolution `_buildGridCell()`
+     * already does inline, factored out so `addStream()`/`removeStream()`
+     * can share it for the card device-icon update below.
+     * @param {string} streamKey
+     * @returns {string|null}
+     */
+    _realPeerIdForStreamKey(streamKey) {
+        if (streamKey === 'me' || streamKey === 'me-cam') return this.selfPeerId || null;
+        return streamKey.endsWith('-cam') ? streamKey.slice(0, -4) : streamKey;
+    }
+
+    /**
+     * Shows/hides a participant card's screen-share/webcam icons based on
+     * whether `this.streams` actually holds a live stream for that device
+     * right now — same "only show what's in use" treatment as the mic icon,
+     * applied to the two other devices a peer can broadcast. Called from
+     * `addStream()`/`removeStream()`, which already know the real peerId
+     * (not a stream key) once self's `'me'`/`'me-cam'` has been resolved.
+     * @param {string} peerId - a real peerId, not a stream key.
+     * @returns {void}
+     */
+    _updateParticipantStreamIcons(peerId) {
+        const el = document.getElementById(`participant-${peerId}`);
+        if (!el) return;
+        const screenIcon = el.querySelector('.participant-screen-icon');
+        const camIcon = el.querySelector('.participant-cam-icon');
+        if (screenIcon) screenIcon.style.display = this.streams[peerId] ? '' : 'none';
+        if (camIcon) camIcon.style.display = this.streams[`${peerId}-cam`] ? '' : 'none';
     }
 
     /**
@@ -2480,6 +2554,7 @@ export class UIController {
      */
     addStream(peerId, stream) {
         this.streams[peerId] = stream;
+        this._updateParticipantStreamIcons(this._realPeerIdForStreamKey(peerId));
 
         if (peerId === 'me' || peerId === 'me-cam') {
             const viewId = peerId === 'me' ? 'self-view' : 'self-cam-view';
@@ -2551,6 +2626,7 @@ export class UIController {
         const hadStream = !!this.streams[peerId];
         const isSelf = peerId === 'me' || peerId === 'me-cam';
         delete this.streams[peerId];
+        this._updateParticipantStreamIcons(this._realPeerIdForStreamKey(peerId));
         this.watchedTiles.delete(peerId);
         this._watchSentState.delete(peerId);
         const orderIdx = this._watchOrder.indexOf(peerId);

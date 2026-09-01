@@ -826,7 +826,14 @@ function refreshMicOptionsRows() {
     const thresholdInput = document.getElementById('mic-options-threshold');
     if (thresholdInput) thresholdInput.value = String(threshold);
     updateMicOptionsThresholdLabel(threshold);
+
+    const releaseToggle = document.getElementById('mic-options-release-when-off');
+    if (releaseToggle) releaseToggle.checked = localStorage.getItem('releaseMicWhenOff') === '1';
 }
+
+document.getElementById('mic-options-release-when-off')?.addEventListener('change', (e) => {
+    localStorage.setItem('releaseMicWhenOff', e.target.checked ? '1' : '0');
+});
 
 function updateMicOptionsThresholdLabel(threshold) {
     const label = document.getElementById('mic-options-threshold-value');
@@ -1342,7 +1349,11 @@ function updateMicUI(enabled, silent = false) {
         playSound(enabled ? 'unmuted' : 'muted');
     }
     _lastMicUIEnabled = enabled;
-    if (peerManager.peerId) ui.updateParticipantMic(peerManager.peerId, enabled, !_micEverEnabled);
+    // The card's third param is "is the hardware actually held open right
+    // now" (hides the icon entirely when not — see UIController.updateParticipantMic),
+    // which is `!peerManager.micStream`, not `!_micEverEnabled` — a released
+    // mic (see releaseMicWhenOff) has been on before, but isn't right now.
+    if (peerManager.peerId) ui.updateParticipantMic(peerManager.peerId, enabled, !peerManager.micStream);
 }
 
 // Physical non-modifier keys currently held, tracked independently of any
@@ -1386,10 +1397,15 @@ window.addEventListener('keydown', (e) => {
     _micHoldEngaged = true;
 
     if (micMode === 'push-to-talk') {
+        // allowRelease: false — a PTT press/release is a rapid, expected,
+        // per-utterance flip, not the user asking for the mic off. Letting
+        // the release-when-off setting apply here would make every single
+        // press pay for a real getUserMedia() re-acquire (and, on some
+        // permission grants, a fresh prompt) instead of an instant flip.
         if (!peerManager.micStream) {
-            peerManager.toggleMic().then(enabled => updateMicUI(enabled, true));
+            peerManager.toggleMic({ allowRelease: false }).then(enabled => updateMicUI(enabled, true));
         } else if (!peerManager.micEnabled) {
-            peerManager.toggleMic().then(enabled => updateMicUI(enabled, true));
+            peerManager.toggleMic({ allowRelease: false }).then(enabled => updateMicUI(enabled, true));
         }
     } else {
         // Toggle or voice-activity: hold to force-mute. Doesn't touch
@@ -1415,8 +1431,9 @@ window.addEventListener('keyup', (e) => {
     if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
 
     if (micMode === 'push-to-talk') {
+        // allowRelease: false — see the matching keydown handler above.
         if (peerManager.micEnabled) {
-            peerManager.toggleMic().then(enabled => updateMicUI(enabled, true));
+            peerManager.toggleMic({ allowRelease: false }).then(enabled => updateMicUI(enabled, true));
         }
     } else {
         peerManager.ptmHeld = false;
