@@ -2652,14 +2652,31 @@ body,
    #grid-view/#focused-view ARE flex-growing there's no leftover space left
    for this margin to claim, so it's a no-op there, same visual result as
    before.
-   Follow-up bug (2026-09-02, owner-reported: the alone-in-the-room pulsing
-   spinner drifted off-center once this landed): `#spinner` didn't flex-grow
-   either, so exactly like the "alone in the room" case described above, this
-   margin claimed all the leftover space and shoved the spinner to the very
-   top of the column instead of centering it. Fixed in index.html by making
-   `#spinner` a `flex-grow` wrapper div (styled like #grid-view/#focused-view)
-   around the actual `<svg>`, so it gets the same "no-op" treatment those two
-   already get and centers itself within its own claimed space. */
+   Follow-up bug #1 (2026-09-02, owner-reported: the "waiting for a stream"
+   pulsing spinner drifted off-center once this landed — and not just while
+   alone: it also shows with peers already in the room but nobody streaming
+   video/screen yet, see `UIController.updateLayout()`'s `remoteStreams.length
+   === 0` branch): `#spinner` didn't flex-grow either, so this margin claimed
+   all the leftover space above it and shoved it to the very top of the
+   column instead of centering it. Fixed in index.html by making `#spinner`
+   a `flex-grow` wrapper div (styled like #grid-view/#focused-view) around
+   the actual `<svg>`, so it gets the same "no-op" treatment those two
+   already get and centers itself within its own claimed space.
+   Follow-up bug #2 (same fix, caught immediately after): giving that wrapper
+   an inline `style="display:none"` default (mirroring #grid-view/#focused-view's
+   own markup) made the spinner vanish entirely for the "peers present, no
+   stream yet" case above — `updateLayout()` is only ever invoked from an
+   actual stream/view-mode change (`addStream`/`removeStream`/`setViewMode`/
+   etc.), never from a bare peer-joined signal, so with no stream ever having
+   started there's nothing to flip that inline style back to visible. The
+   *original* unwrapped `<svg>` had no default-hidden styling at all (it
+   relied on being visible from initial page load, before any peer had even
+   joined, and just stayed that way through an audio-only call) — the fix
+   preserves that by leaving no inline `display` on `#spinner` at all, so its
+   own `flex` utility class is what shows it by default; `updateLayout()`'s
+   inline `style.display = 'none'`/`'flex'` toggle (overriding the class only
+   when it actually runs) is the sole thing that ever hides it once a real
+   stream starts. */
 #controls.controls-bar {
   position: relative;
   flex: none;
