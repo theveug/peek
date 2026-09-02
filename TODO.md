@@ -37,5 +37,4 @@ Not yet scoped/estimated — captured here so they don't get lost; move into a p
 
 ## Bigger features (post-Electron)
 
-- [ ] **Recording** — record the session locally.
 - [ ] **Multiple rooms/channels (Discord-style)** — basic multi-room already works (`SessionManager.js` keys sessions by room code, anyone can create any number). What's missing for a real "server" feel is a *persistent* list of named channels you can browse and return to — today everything's in-memory and disappears on server restart. Would need an actual storage layer (even lightweight like SQLite) before this is worth building.
