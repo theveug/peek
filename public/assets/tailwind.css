@@ -2651,7 +2651,15 @@ body,
    `justify-content`, which is exactly "flush to the end" — when
    #grid-view/#focused-view ARE flex-growing there's no leftover space left
    for this margin to claim, so it's a no-op there, same visual result as
-   before. */
+   before.
+   Follow-up bug (2026-09-02, owner-reported: the alone-in-the-room pulsing
+   spinner drifted off-center once this landed): `#spinner` didn't flex-grow
+   either, so exactly like the "alone in the room" case described above, this
+   margin claimed all the leftover space and shoved the spinner to the very
+   top of the column instead of centering it. Fixed in index.html by making
+   `#spinner` a `flex-grow` wrapper div (styled like #grid-view/#focused-view)
+   around the actual `<svg>`, so it gets the same "no-op" treatment those two
+   already get and centers itself within its own claimed space. */
 #controls.controls-bar {
   position: relative;
   flex: none;

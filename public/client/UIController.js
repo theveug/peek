@@ -2747,7 +2747,7 @@ export class UIController {
         const stageHeader = document.getElementById('stage-header');
 
         if (remoteStreams.length === 0) {
-            spinner.classList.remove('hidden');
+            spinner.style.display = 'flex';
             this.focusedView.style.display = 'none';
             this.gridView.style.display = 'none';
             if (stageHeader) stageHeader.style.display = 'none';
@@ -2755,7 +2755,7 @@ export class UIController {
             return;
         }
 
-        spinner.classList.add('hidden');
+        spinner.style.display = 'none';
 
         if (stageHeader) stageHeader.style.display = 'flex';
         this._updateStageHeader();
