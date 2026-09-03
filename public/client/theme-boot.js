@@ -54,6 +54,8 @@
         var THEME_PACKS = {
             default: { radiusSm: '0.5rem', radiusMd: '0.625rem', radiusLg: '0.75rem', shadowSm: '0 4px 20px rgba(0, 0, 0, 0.25)', shadowMd: '0 8px 20px rgba(0, 0, 0, 0.35)', shadowLg: '0 12px 32px rgba(0, 0, 0, 0.4)', densityScale: '1' },
             compact: { radiusSm: '0.25rem', radiusMd: '0.3125rem', radiusLg: '0.375rem', shadowSm: '0 2px 10px rgba(0, 0, 0, 0.3)', shadowMd: '0 4px 14px rgba(0, 0, 0, 0.4)', shadowLg: '0 6px 20px rgba(0, 0, 0, 0.45)', densityScale: '0.88' },
+            soft: { radiusSm: '0.75rem', radiusMd: '0.875rem', radiusLg: '1.125rem', shadowSm: '0 6px 24px rgba(0, 0, 0, 0.22)', shadowMd: '0 10px 28px rgba(0, 0, 0, 0.3)', shadowLg: '0 16px 40px rgba(0, 0, 0, 0.35)', densityScale: '1.05' },
+            sharp: { radiusSm: '0.125rem', radiusMd: '0.1875rem', radiusLg: '0.25rem', shadowSm: '0 2px 6px rgba(0, 0, 0, 0.35)', shadowMd: '0 3px 10px rgba(0, 0, 0, 0.4)', shadowLg: '0 4px 14px rgba(0, 0, 0, 0.45)', densityScale: '0.95' },
         };
         var packName = localStorage.getItem('themePack');
         if (!THEME_PACKS.hasOwnProperty(packName)) packName = 'default';

@@ -48,6 +48,32 @@ const THEME_PACKS = {
             densityScale: '0.88',
         },
     },
+    soft: {
+        label: 'Soft',
+        previewSwatch: ['1.125rem', '0.875rem', '0.75rem'],
+        tokens: {
+            radiusSm: '0.75rem',
+            radiusMd: '0.875rem',
+            radiusLg: '1.125rem',
+            shadowSm: '0 6px 24px rgba(0, 0, 0, 0.22)',
+            shadowMd: '0 10px 28px rgba(0, 0, 0, 0.3)',
+            shadowLg: '0 16px 40px rgba(0, 0, 0, 0.35)',
+            densityScale: '1.05',
+        },
+    },
+    sharp: {
+        label: 'Sharp',
+        previewSwatch: ['0.25rem', '0.1875rem', '0.125rem'],
+        tokens: {
+            radiusSm: '0.125rem',
+            radiusMd: '0.1875rem',
+            radiusLg: '0.25rem',
+            shadowSm: '0 2px 6px rgba(0, 0, 0, 0.35)',
+            shadowMd: '0 3px 10px rgba(0, 0, 0, 0.4)',
+            shadowLg: '0 4px 14px rgba(0, 0, 0, 0.45)',
+            densityScale: '0.95',
+        },
+    },
 };
 
 const DEFAULT_PACK = 'default';
