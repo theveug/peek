@@ -19,8 +19,8 @@
 // "violet" pick both resolve to the same DEFAULT_* fallback) — not worth
 // that surgery just to ship the shape/density dimension.
 const THEME_PACKS = {
-    default: {
-        label: 'Default',
+    classic: {
+        label: 'Classic',
         // Swatch preview: a small radius/shadow/density "fingerprint" shown
         // as 3 stacked bars in the Settings picker, not a color — packs
         // don't carry color, see the scope note above.
@@ -88,7 +88,7 @@ const THEME_PACKS = {
     },
 };
 
-const DEFAULT_PACK = 'default';
+const DEFAULT_PACK = 'classic';
 
 const TOKEN_PROPS = {
     radius2xs: '--radius-2xs',
