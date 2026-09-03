@@ -8,10 +8,11 @@
 // tint before the browser has painted anything from body at all.
 //
 // Deliberately duplicates the preset tables from AccentManager.js/
-// BackgroundManager.js/FontScaleManager.js rather than importing them:
-// `import`/`export` require `type="module"`, and module scripts can't run
-// synchronously ahead of paint. If those preset tables (or FontScaleManager's
-// min/max clamp range) change, update both here and in the real modules.
+// BackgroundManager.js/FontScaleManager.js/ThemePackManager.js rather than
+// importing them: `import`/`export` require `type="module"`, and module
+// scripts can't run synchronously ahead of paint. If those preset tables (or
+// FontScaleManager's min/max clamp range) change, update both here and in
+// the real modules.
 (function () {
     try {
         var theme = localStorage.getItem('theme');
@@ -49,6 +50,21 @@
         var fontScale = parseFloat(localStorage.getItem('fontScale'));
         if (!isFinite(fontScale) || fontScale < 0.85 || fontScale > 1.3) fontScale = 1;
         htmlStyle.setProperty('--font-scale', String(fontScale));
+
+        var THEME_PACKS = {
+            default: { radiusSm: '0.5rem', radiusMd: '0.625rem', radiusLg: '0.75rem', shadowSm: '0 4px 20px rgba(0, 0, 0, 0.25)', shadowMd: '0 8px 20px rgba(0, 0, 0, 0.35)', shadowLg: '0 12px 32px rgba(0, 0, 0, 0.4)', densityScale: '1' },
+            compact: { radiusSm: '0.25rem', radiusMd: '0.3125rem', radiusLg: '0.375rem', shadowSm: '0 2px 10px rgba(0, 0, 0, 0.3)', shadowMd: '0 4px 14px rgba(0, 0, 0, 0.4)', shadowLg: '0 6px 20px rgba(0, 0, 0, 0.45)', densityScale: '0.88' },
+        };
+        var packName = localStorage.getItem('themePack');
+        if (!THEME_PACKS.hasOwnProperty(packName)) packName = 'default';
+        var pack = THEME_PACKS[packName];
+        htmlStyle.setProperty('--radius-sm', pack.radiusSm);
+        htmlStyle.setProperty('--radius-md', pack.radiusMd);
+        htmlStyle.setProperty('--radius-lg', pack.radiusLg);
+        htmlStyle.setProperty('--shadow-sm', pack.shadowSm);
+        htmlStyle.setProperty('--shadow-md', pack.shadowMd);
+        htmlStyle.setProperty('--shadow-lg', pack.shadowLg);
+        htmlStyle.setProperty('--density-scale', pack.densityScale);
     } catch (e) {
         // localStorage may be unavailable (privacy mode); fall back silently
         // to the hardcoded defaults already in the HTML/CSS.

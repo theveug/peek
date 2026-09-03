@@ -6,6 +6,7 @@ import { setTheme, getEffectiveTheme } from './ThemeManager.js';
 import { setAccent, getStoredAccent, accentPresetNames, presetColor } from './AccentManager.js';
 import { setBackgroundTint, getStoredBackgroundTint, bgTintPresetNames, presetBgColor } from './BackgroundManager.js';
 import { setFontScale, getStoredFontScale, fontScaleLabel } from './FontScaleManager.js';
+import { setThemePack, getStoredThemePack, themePackPresetNames, themePackLabel, themePackPreviewSwatch } from './ThemePackManager.js';
 import { trapFocus } from './focusTrap.js';
 import { getCustomStatuses, getCustomStatus, upsertCustomStatus, deleteCustomStatus, SWATCHES } from './CustomStatuses.js';
 import * as chatHistoryStore from './chatHistoryStore.js';
@@ -62,6 +63,7 @@ export class SettingsPanel {
         // and reused by both pages instead.
         this.modal = document.getElementById('settings-modal') || this._buildModal();
 
+        this._buildThemePackSwatches();
         this._buildAccentSwatches();
         this._buildBackgroundSwatches();
         this._wireNav();
@@ -195,6 +197,12 @@ export class SettingsPanel {
                         <div class="settings-section" data-settings-panel="appearance">
                             <p class="settings-section-subcopy">Make Peek yours. Changes apply instantly and save to this
                                 device.</p>
+                            <div class="settings-label">Look</div>
+                            <p class="text-[10px] text-muted" style="margin-top:-0.5rem;margin-bottom:0.625rem;">Sets
+                                the starting shape and depth of the interface — Accent color and Background tint
+                                below still let you fine-tune it.</p>
+                            <div class="settings-accent-swatches" id="settings-theme-pack-picker"
+                                style="margin-bottom:1.875rem;"></div>
                             <div class="settings-label">Theme</div>
                             <div class="settings-segmented" id="settings-theme-picker" style="margin-bottom:1.875rem;">
                                 <button type="button" data-theme="system"><span
@@ -1109,6 +1117,24 @@ export class SettingsPanel {
 
     // --- Appearance ---
 
+    _buildThemePackSwatches() {
+        const container = document.getElementById('settings-theme-pack-picker');
+        if (!container) return;
+        themePackPresetNames().forEach(id => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'settings-theme-pack-swatch';
+            btn.dataset.themePack = id;
+            const [radiusLg] = themePackPreviewSwatch(id);
+            btn.innerHTML = `<span class="settings-theme-pack-shape" style="border-radius:${radiusLg}"></span>${themePackLabel(id)}`;
+            btn.addEventListener('click', () => {
+                setThemePack(id);
+                this._refreshAppearance();
+            });
+            container.appendChild(btn);
+        });
+    }
+
     _buildAccentSwatches() {
         const container = document.getElementById('settings-accent-picker');
         if (!container) return;
@@ -1157,6 +1183,11 @@ export class SettingsPanel {
     }
 
     _refreshAppearance() {
+        const currentThemePack = getStoredThemePack();
+        this.modal.querySelectorAll('#settings-theme-pack-picker button').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.themePack === currentThemePack);
+        });
+
         // getEffectiveTheme() always resolves to 'dark'/'light' (it's what
         // actually gets painted) — but the picker also needs to distinguish
         // "explicitly light" from "currently resolves to light via the OS,"
