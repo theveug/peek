@@ -2432,6 +2432,23 @@ export class UIController {
     }
 
     /**
+     * The room rail (`#room-rail`, RoomRail.js) is a `position: fixed` strip
+     * pinned to the left edge of the room page. The drag clamp below only
+     * ever bounded the PiP to the window edges, so it could be dragged with
+     * its left edge past the rail's own edge, ending up overlapping it —
+     * reported as the PiP landing "behind" the rail. `getBoundingClientRect()`
+     * (not `offsetWidth`) so the mobile slide-in rail — same element,
+     * `transform: translateX(-100%)` when closed — correctly reports 0
+     * reserved width while off-screen instead of always reporting its full
+     * closed-state box width.
+     * @returns {number} px reserved on the left the PiP must not be dragged under
+     */
+    _roomRailReservedLeft() {
+        const rail = document.getElementById('room-rail');
+        return rail ? Math.max(0, rail.getBoundingClientRect().right) : 0;
+    }
+
+    /**
      * Re-clamps a manually-dragged PiP back on-screen (e.g. after a window
      * resize) and re-persists it — corner-relative (see `_makeDraggable`'s
      * doc comment), so this only ever has to clamp the offset from whichever
@@ -2440,11 +2457,14 @@ export class UIController {
     _reclampDraggedPip(el, storageKey) {
         const anchorRight = el.dataset.pipAnchorRight === 'true';
         const anchorBottom = el.dataset.pipAnchorBottom === 'true';
-        const maxX = Math.max(0, window.innerWidth - el.offsetWidth);
+        const minLeft = this._roomRailReservedLeft();
+        const maxX = anchorRight
+            ? Math.max(0, window.innerWidth - el.offsetWidth - minLeft)
+            : Math.max(0, window.innerWidth - el.offsetWidth);
         const maxY = Math.max(0, window.innerHeight - el.offsetHeight);
         const curX = parseFloat(anchorRight ? el.style.right : el.style.left) || 0;
         const curY = parseFloat(anchorBottom ? el.style.bottom : el.style.top) || 0;
-        const x = Math.min(Math.max(curX, 0), maxX);
+        const x = Math.min(Math.max(curX, anchorRight ? 0 : minLeft), maxX);
         const y = Math.min(Math.max(curY, 0), maxY);
         el.style[anchorRight ? 'right' : 'left'] = `${x}px`;
         el.style[anchorBottom ? 'bottom' : 'top'] = `${y}px`;
@@ -2497,9 +2517,10 @@ export class UIController {
         let moved = false;
 
         const clamp = (left, top) => {
-            const maxLeft = Math.max(0, window.innerWidth - el.offsetWidth);
+            const minLeft = this._roomRailReservedLeft();
+            const maxLeft = Math.max(minLeft, window.innerWidth - el.offsetWidth);
             const maxTop = Math.max(0, window.innerHeight - el.offsetHeight);
-            return [Math.min(Math.max(left, 0), maxLeft), Math.min(Math.max(top, 0), maxTop)];
+            return [Math.min(Math.max(left, minLeft), maxLeft), Math.min(Math.max(top, 0), maxTop)];
         };
 
         const applyPosition = (left, top) => {
@@ -2567,6 +2588,9 @@ export class UIController {
                     el.dataset.dragged = 'true';
                     el.dataset.pipAnchorRight = String(!!anchorRight);
                     el.dataset.pipAnchorBottom = String(!!anchorBottom);
+                    // A position saved before the room-rail clamp existed (or from a
+                    // wider window) can still sit under the rail — pull it back on load.
+                    this._reclampDraggedPip(el, storageKey);
                 }
             } catch {}
         }
