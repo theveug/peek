@@ -132,4 +132,33 @@ export function mountAuthRoutes(app, authManager) {
         }
         res.status(200).json(result.settings);
     });
+
+    // Accounts Phase 1d: camera/mic/speaker selection is per-(user,device),
+    // not account-wide — see AccountSettingsSync.js for why (a synced device
+    // ID is meaningless on a different physical machine).
+    app.get('/api/auth/device-settings', (req, res) => {
+        const token = readCookie(req, COOKIE_NAME);
+        const session = token ? authManager.validateSessionToken(token) : null;
+        if (!session) {
+            return res.status(401).json({ error: 'Not logged in' });
+        }
+        const deviceId = req.query.deviceId;
+        if (typeof deviceId !== 'string' || !deviceId) {
+            return res.status(400).json({ error: 'Missing deviceId' });
+        }
+        res.status(200).json(authManager.getDeviceSettings(session.userId, deviceId) || {});
+    });
+
+    app.put('/api/auth/device-settings', rateLimit(60_000, 30), (req, res) => {
+        const token = readCookie(req, COOKIE_NAME);
+        const session = token ? authManager.validateSessionToken(token) : null;
+        if (!session) {
+            return res.status(401).json({ error: 'Not logged in' });
+        }
+        const result = authManager.saveDeviceSettings(session.userId, req.body?.deviceId, req.body?.settings);
+        if (!result) {
+            return res.status(400).json({ error: 'Invalid device-settings payload' });
+        }
+        res.status(200).json(result.settings);
+    });
 }

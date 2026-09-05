@@ -10,11 +10,15 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 // which usernames are registered.
 let DUMMY_HASH = null;
 
-// Accounts Phase 1c: the only keys ever persisted to/read from a user's
-// settings blob — a client-sent PUT is never trusted verbatim, same
-// "validate on receive" discipline as WebSocketServer.js's join-message
-// handling elsewhere in this codebase.
-const SETTINGS_KEYS = ['theme', 'accentHue', 'bgTint', 'camDeviceId', 'micDeviceId', 'speakerDeviceId'];
+// Accounts Phase 1c/1d: the only keys ever persisted to/read from a user's
+// settings — a client-sent PUT is never trusted verbatim, same "validate on
+// receive" discipline as WebSocketServer.js's join-message handling
+// elsewhere in this codebase. Split in two: SETTINGS_KEYS is account-wide
+// (meaningful on every device), DEVICE_SETTINGS_KEYS is per-(user,device) —
+// see the device_settings table and Key conventions' "Accounts, Phase 1d"
+// entry for why device selection specifically can't be a single shared value.
+const SETTINGS_KEYS = ['theme', 'accentHue', 'bgTint'];
+const DEVICE_SETTINGS_KEYS = ['camDeviceId', 'micDeviceId', 'speakerDeviceId'];
 
 // Mirrors SessionManager.js's method style: every mutator re-checks its own
 // invariants and returns falsy on failure, a small result object on success
@@ -145,6 +149,45 @@ class AuthManager {
         }
         this.db.prepare('UPDATE users SET settings = ?, updated_at = ? WHERE id = ?')
             .run(JSON.stringify(clean), Date.now(), userId);
+        return { settings: clean };
+    }
+
+    /**
+     * @param {number} userId
+     * @param {string} deviceId a random per-browser id (AccountSettingsSync.js's
+     *   `peekDeviceId`), not a credential — just a grouping key
+     * @returns {object|null} the saved device-settings blob, or null if nothing's ever been saved for this device
+     */
+    getDeviceSettings(userId, deviceId) {
+        const row = this.db.prepare(
+            'SELECT settings FROM device_settings WHERE user_id = ? AND device_id = ?'
+        ).get(userId, deviceId);
+        if (!row?.settings) return null;
+        try {
+            return JSON.parse(row.settings);
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * @param {number} userId
+     * @param {unknown} deviceId client-supplied, never trusted verbatim
+     * @param {unknown} settings client-supplied, never trusted verbatim
+     * @returns {{settings: object}|false}
+     */
+    saveDeviceSettings(userId, deviceId, settings) {
+        if (typeof deviceId !== 'string' || !deviceId || deviceId.length > 100) return false;
+        if (!settings || typeof settings !== 'object') return false;
+        const clean = {};
+        for (const key of DEVICE_SETTINGS_KEYS) {
+            if (typeof settings[key] === 'string') clean[key] = settings[key].slice(0, 200);
+        }
+        const now = Date.now();
+        this.db.prepare(`
+            INSERT INTO device_settings (user_id, device_id, settings, updated_at) VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id, device_id) DO UPDATE SET settings = excluded.settings, updated_at = excluded.updated_at
+        `).run(userId, deviceId, JSON.stringify(clean), now);
         return { settings: clean };
     }
 }
