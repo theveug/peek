@@ -37,7 +37,7 @@ function generateIceServers({ turnConfig, stunUrl }) {
     return servers;
 }
 
-export function setupWebSocket(wss, iceConfig, manager, buildId) {
+export function setupWebSocket(wss, iceConfig, manager, buildId, trust) {
     const PING_INTERVAL = 30_000;
 
     // The per-connection failedJoins counter alone isn't enough — it resets on
@@ -168,7 +168,7 @@ export function setupWebSocket(wss, iceConfig, manager, buildId) {
                     const meta = manager.getSessionMeta(sessionId);
 
                     const iceServers = generateIceServers(iceConfig);
-                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, creatorPeerId: meta?.creatorPeerId || null, moderatorPeerIds: meta?.moderatorPeerIds || [], micPolicy: meta?.micPolicy || 'open', topic: meta?.topic || null, creatorToken: mintedCreatorToken || undefined, buildId }));
+                    ws.send(JSON.stringify({ type: 'init', peerId, peers, iceServers, roomName: meta?.name || null, hasPassword: !!meta?.hasPassword, maxPeers: meta?.maxPeers || 6, creatorPeerId: meta?.creatorPeerId || null, moderatorPeerIds: meta?.moderatorPeerIds || [], micPolicy: meta?.micPolicy || 'open', topic: meta?.topic || null, creatorToken: mintedCreatorToken || undefined, buildId, trust }));
 
                     peers.forEach(pid => {
                         const socket = manager.getPeerSocket(pid);

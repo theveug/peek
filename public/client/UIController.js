@@ -1722,6 +1722,27 @@ export class UIController {
     }
 
     /**
+     * Populates the top bar's trust-tier badge from the deployment-level
+     * `trust` object sent once per socket on 'init' (built in server.js, not
+     * per-session state — see Key conventions' "Trust-tier indicator" entry).
+     * Re-applied on every reconnect same as setHasPassword() above; harmless
+     * since this is static for the server process's lifetime.
+     * @param {{accounts: boolean, serverSideHistory: boolean, debugLogging: boolean, mediaRelayConfigured: boolean}|undefined} trust
+     * @returns {void}
+     */
+    setTrustTier(trust) {
+        const icon = document.getElementById('topbar-trust-icon');
+        if (!icon || !trust) return;
+        const parts = [
+            trust.accounts ? 'Accounts enabled' : 'No accounts',
+            trust.mediaRelayConfigured ? 'P2P · TURN relay available as fallback' : 'P2P only · no relay fallback configured',
+            trust.debugLogging ? 'Debug logging on (room codes/names may be logged)' : 'Debug logging off',
+        ];
+        icon.dataset.tip = parts.join(' · ');
+        icon.classList.remove('hidden');
+    }
+
+    /**
      * Live-updates the room-topic banner under the top bar — used both for
      * the initial value (from setRoomMeta()) and every live 'topic-update'
      * broadcast. Deliberately single-purpose like setHasPassword() above

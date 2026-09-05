@@ -10,7 +10,7 @@ import { setupWebSocket } from './src/server/WebSocketServer.js';
 import { SessionManager } from './src/server/SessionManager.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Debug } from './utils/Debug.js';
+import { Debug, DEBUG_ENABLED } from './utils/Debug.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,13 +49,26 @@ if (turnConfig) {
     Debug.log('No STUN/TURN configured — direct/LAN candidates only');
 }
 
+// Deployment-level "trust tier" descriptor — what THIS server does,
+// independent of any room's state (sibling to iceServers/buildId on init,
+// not part of getSessionMeta()). accounts/serverSideHistory are hardcoded
+// false: neither feature exists yet, trivial to flip to real detection if
+// they ever ship. debugLogging/mediaRelayConfigured are real, already-
+// computed facts. See CLAUDE.md's "Trust-tier indicator" convention.
+const trust = {
+    accounts: false,
+    serverSideHistory: false,
+    debugLogging: DEBUG_ENABLED,
+    mediaRelayConfigured: !!turnConfig,
+};
+
 // Identifies this running process to connected clients so they can tell when
 // they're talking to a stale client build after a deploy/restart. Generated
 // fresh every process start — no manual version bump required to "just know".
 const APP_VERSION = process.env.APP_VERSION || '0.0.0';
 const BUILD_ID = `${APP_VERSION}-${Date.now()}`;
 
-setupWebSocket(wss, { turnConfig, stunUrl }, manager, BUILD_ID);
+setupWebSocket(wss, { turnConfig, stunUrl }, manager, BUILD_ID, trust);
 
 function generateUniqueShortCode(length = 5) {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
