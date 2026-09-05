@@ -259,6 +259,15 @@ app.get('/settings', (req, res) => {
     res.redirect('/');
 });
 
+// Exposes the same deployment-level trust descriptor already sent (unauthenticated)
+// on every WS 'init' — the lobby has no WebSocket connection at all, so it has no
+// other way to know whether this deployment has accounts turned on before deciding
+// whether to show the account button. Cheap constant lookup, no rate limit needed
+// for the same reason the WS init payload isn't rate-limited per field.
+app.get('/api/trust', (req, res) => {
+    res.json(trust);
+});
+
 // Serve session page for valid room codes
 app.get('/:code', (req, res) => {
     const code = req.params.code;

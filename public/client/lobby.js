@@ -8,6 +8,7 @@ import { saveRoom } from '/client/savedRooms.js';
 import { SettingsPanel } from '/client/SettingsPanel.js';
 import { initTooltips } from '/client/Tooltip.js';
 import { RoomRail } from '/client/RoomRail.js';
+import { AccountPanel } from '/client/AccountPanel.js';
 
 initTheme();
 initTooltips();
@@ -16,6 +17,7 @@ const settingsPanel = new SettingsPanel();
 document.getElementById('settings-button').addEventListener('click', () => settingsPanel.open());
 
 const roomRail = new RoomRail({ currentRoomCode: null, navigate: (url) => { window.location.href = url; } });
+const accountPanel = new AccountPanel();
 
 if (new URLSearchParams(location.search).get('new')) {
     document.getElementById('create-name')?.focus();
