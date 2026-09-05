@@ -131,13 +131,12 @@ export class AccountPanel {
     }
 
     _afterAuthSuccess({ username }) {
-        // Convenience default, never destructive: only pre-fills an EMPTY
-        // nickname — an existing chosen display name is never overwritten
-        // by logging in. Nickname (per-room display name, SettingsPanel.js)
-        // and account username (login identity) are deliberately kept
-        // separate concepts, same split Discord draws between an account
-        // and a per-server display name.
-        if (!localStorage.getItem('nickname')) localStorage.setItem('nickname', username);
+        // Unconditional, not just a fallback for an empty field: a shared
+        // machine with several people each logging into their own account
+        // needs the room-display nickname to actually follow whoever's
+        // logged in, not whatever the last person who used this browser
+        // left behind — see _wireLogout()'s matching clear below.
+        localStorage.setItem('nickname', username);
         this._renderState({ username });
         this.close();
     }
@@ -145,6 +144,11 @@ export class AccountPanel {
     _wireLogout() {
         document.getElementById('account-logout').addEventListener('click', async () => {
             await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+            // Clears the nickname this account's login stamped on it above,
+            // so the next person to use this browser (a different account,
+            // or no account at all) doesn't inherit this account's name —
+            // falls back to the app's existing 'Anonymous' default.
+            localStorage.removeItem('nickname');
             this._renderState(null);
         });
     }
