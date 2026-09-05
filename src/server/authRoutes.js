@@ -107,4 +107,29 @@ export function mountAuthRoutes(app, authManager) {
         }
         res.status(200).json(authManager.getPublicProfile(session.userId));
     });
+
+    // Accounts Phase 1c: sync a small, fixed set of client preferences
+    // (color scheme + device selection) to the account — see
+    // AccountSettingsSync.js for the client-side push/pull logic.
+    app.get('/api/auth/settings', (req, res) => {
+        const token = readCookie(req, COOKIE_NAME);
+        const session = token ? authManager.validateSessionToken(token) : null;
+        if (!session) {
+            return res.status(401).json({ error: 'Not logged in' });
+        }
+        res.status(200).json(authManager.getSettings(session.userId) || {});
+    });
+
+    app.put('/api/auth/settings', rateLimit(60_000, 30), (req, res) => {
+        const token = readCookie(req, COOKIE_NAME);
+        const session = token ? authManager.validateSessionToken(token) : null;
+        if (!session) {
+            return res.status(401).json({ error: 'Not logged in' });
+        }
+        const result = authManager.saveSettings(session.userId, req.body?.settings);
+        if (!result) {
+            return res.status(400).json({ error: 'Invalid settings payload' });
+        }
+        res.status(200).json(result.settings);
+    });
 }

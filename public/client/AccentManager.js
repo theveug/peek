@@ -1,4 +1,8 @@
 // --- public/client/AccentManager.js ---
+// Circular import — see AccountSettingsSync.js's own top-of-file comment for
+// why this is safe (every use is inside a function body, not at module load).
+import { syncPreference } from './AccountSettingsSync.js';
+
 // The 6 accent choices from the design spec — all oklch(0.70 0.16 H) at a
 // different hue, so only H needs to vary per preset.
 const PRESETS = {
@@ -31,6 +35,7 @@ export function setAccent(name) {
     if (!PRESETS[name]) return;
     localStorage.setItem('accentHue', name);
     applyAccent(name);
+    syncPreference();
 }
 
 export function initAccent() {

@@ -10,6 +10,8 @@
 // /api/trust confirms this deployment actually has accounts turned on — the
 // lobby has no WebSocket connection at all (unlike the room page), so this
 // is the only way it can learn that. Never show a login button that 404s.
+import { pullAndApplySettings } from './AccountSettingsSync.js';
+
 export class AccountPanel {
     constructor() {
         this.button = document.getElementById('account-button');
@@ -139,6 +141,7 @@ export class AccountPanel {
         localStorage.setItem('nickname', username);
         this._renderState({ username });
         this.close();
+        pullAndApplySettings();
     }
 
     _wireLogout() {
@@ -156,6 +159,7 @@ export class AccountPanel {
     async _refreshSessionState() {
         const me = await fetch('/api/auth/me').then(r => r.ok ? r.json() : null).catch(() => null);
         this._renderState(me);
+        if (me) pullAndApplySettings();
     }
 
     _renderState(me) {

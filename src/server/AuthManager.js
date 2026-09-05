@@ -10,6 +10,12 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 // which usernames are registered.
 let DUMMY_HASH = null;
 
+// Accounts Phase 1c: the only keys ever persisted to/read from a user's
+// settings blob — a client-sent PUT is never trusted verbatim, same
+// "validate on receive" discipline as WebSocketServer.js's join-message
+// handling elsewhere in this codebase.
+const SETTINGS_KEYS = ['theme', 'accentHue', 'bgTint', 'camDeviceId', 'micDeviceId', 'speakerDeviceId'];
+
 // Mirrors SessionManager.js's method style: every mutator re-checks its own
 // invariants and returns falsy on failure, a small result object on success
 // (never bare `true`, so a success carrying no other data doesn't read as
@@ -110,6 +116,36 @@ class AuthManager {
         return this.db.prepare(
             'SELECT id, username, nickname, avatar FROM users WHERE id = ?'
         ).get(userId) || null;
+    }
+
+    /**
+     * @param {number} userId
+     * @returns {object|null} the saved settings blob, or null if nothing's ever been saved
+     */
+    getSettings(userId) {
+        const row = this.db.prepare('SELECT settings FROM users WHERE id = ?').get(userId);
+        if (!row?.settings) return null;
+        try {
+            return JSON.parse(row.settings);
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * @param {number} userId
+     * @param {unknown} settings client-supplied, never trusted verbatim
+     * @returns {{settings: object}|false}
+     */
+    saveSettings(userId, settings) {
+        if (!settings || typeof settings !== 'object') return false;
+        const clean = {};
+        for (const key of SETTINGS_KEYS) {
+            if (typeof settings[key] === 'string') clean[key] = settings[key].slice(0, 200);
+        }
+        this.db.prepare('UPDATE users SET settings = ?, updated_at = ? WHERE id = ?')
+            .run(JSON.stringify(clean), Date.now(), userId);
+        return { settings: clean };
     }
 }
 

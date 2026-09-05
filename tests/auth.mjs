@@ -32,7 +32,7 @@ function assert(cond, msg) {
 
 function startServer(port, envOverrides = {}) {
     const proc = spawn(process.execPath, ['server.js'], {
-        env: { ...process.env, PORT: String(port), DEBUG: '', NODE_ENV: 'test', ...envOverrides },
+        env: { ...process.env, PORT: String(port), DEBUG: '', NODE_ENV: 'test', ACCOUNTS_ENABLED: '', ACCOUNTS_DB_PATH: '', ...envOverrides },
         stdio: 'pipe',
     });
     return new Promise((resolve, reject) => {

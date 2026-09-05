@@ -35,6 +35,8 @@ function startServer(port, envOverrides = {}) {
             TURN_URL: '',
             TURN_SECRET: '',
             STUN_URL: '',
+            ACCOUNTS_ENABLED: '',
+            ACCOUNTS_DB_PATH: '',
             ...envOverrides,
         },
         stdio: 'pipe',
@@ -70,7 +72,7 @@ async function main() {
     let server = await startServer(3126);
     try {
         const { ws, init } = await joinAndGetInit(3126, 'AAAAA');
-        assert(init.trust.accounts === false, 'accounts is hardcoded false');
+        assert(init.trust.accounts === false, 'accounts is false with ACCOUNTS_ENABLED unset');
         assert(init.trust.serverSideHistory === false, 'serverSideHistory is hardcoded false');
         assert(init.trust.debugLogging === false, 'debugLogging false with no DEBUG env');
         assert(init.trust.mediaRelayConfigured === false, 'mediaRelayConfigured false with no TURN env');

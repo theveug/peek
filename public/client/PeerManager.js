@@ -1,5 +1,6 @@
 // --- public/client/PeerManager.js ---
 import { setSharingWithAudio } from './SoundPlayer.js';
+import { syncPreference } from './AccountSettingsSync.js';
 
 const RES_RANK = { '640x360': 0, '640x480': 1, '1280x720': 2, '1920x1080': 3, '2560x1440': 4, source: 5 };
 
@@ -11,6 +12,28 @@ const QUALITY_TIERS = [
     { max: 10, cap: { screenRes: '1280x720', screenFps: 24, camRes: '640x480', camFps: 15 } },
     { max: 12, cap: { screenRes: '1280x720', screenFps: 15, camRes: '640x360', camFps: 15 } },
 ];
+
+/**
+ * Runs getUserMedia(constraintsWithDevice); on OverconstrainedError (a
+ * synced camDeviceId/micDeviceId — see AccountSettingsSync.js — that doesn't
+ * exist on this machine, expected across different physical hardware, not a
+ * bug) retries with constraintsWithoutDevice instead of hard-failing the
+ * camera/mic. Deliberately never clears the caller's stored device-id
+ * preference on fallback: these IDs are synced as-is specifically for a
+ * shared machine (same hardware, works perfectly there) — self-healing by
+ * clearing on any OverconstrainedError would risk the very next unrelated
+ * setting change silently pushing the cleared value up and overwriting a
+ * working synced preference for the whole desktop, over a device that's
+ * merely unplugged/busy/permission-revoked right now.
+ */
+async function withDeviceFallback(constraintsWithDevice, constraintsWithoutDevice) {
+    try {
+        return await navigator.mediaDevices.getUserMedia(constraintsWithDevice);
+    } catch (err) {
+        if (err.name !== 'OverconstrainedError') throw err;
+        return navigator.mediaDevices.getUserMedia(constraintsWithoutDevice);
+    }
+}
 
 /**
  * Owns the entire WebRTC mesh: per-peer connections, local/remote media
@@ -1199,9 +1222,10 @@ export class PeerManager {
             if (this.micReleased) return this._reacquireMic();
             try {
                 const micDeviceId = localStorage.getItem('micDeviceId');
-                this._rawMicStream = await navigator.mediaDevices.getUserMedia({
-                    audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true,
-                });
+                this._rawMicStream = await withDeviceFallback(
+                    { audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true },
+                    { audio: true },
+                );
                 this._refreshPresenceMicStream(this._rawMicStream);
                 this.micStream = await this._applyNoiseSuppression(this._rawMicStream);
                 this.micEnabled = true;
@@ -1280,9 +1304,10 @@ export class PeerManager {
     async _reacquireMic() {
         try {
             const micDeviceId = localStorage.getItem('micDeviceId');
-            this._rawMicStream = await navigator.mediaDevices.getUserMedia({
-                audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true,
-            });
+            this._rawMicStream = await withDeviceFallback(
+                { audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true },
+                { audio: true },
+            );
             this._refreshPresenceMicStream(this._rawMicStream);
             this.micStream = await this._applyNoiseSuppression(this._rawMicStream);
             const newTrack = this.micStream.getAudioTracks()[0];
@@ -2391,10 +2416,10 @@ export class PeerManager {
         try {
             const camDeviceId = localStorage.getItem('camDeviceId');
             if (camDeviceId) {
-                this._rawCamStream = await navigator.mediaDevices.getUserMedia({
-                    video: { ...this._resolveQuality('cam'), deviceId: { exact: camDeviceId } },
-                    audio: false,
-                });
+                this._rawCamStream = await withDeviceFallback(
+                    { video: { ...this._resolveQuality('cam'), deviceId: { exact: camDeviceId } }, audio: false },
+                    { video: this._resolveQuality('cam'), audio: false },
+                );
                 const settings = this._rawCamStream.getVideoTracks()[0].getSettings();
                 // Don't assume 'user' just because that's the typical default — an
                 // explicit Settings device pick can just as well be the rear camera.
@@ -2566,12 +2591,14 @@ export class PeerManager {
      */
     async switchMicrophone(deviceId) {
         localStorage.setItem('micDeviceId', deviceId || '');
+        syncPreference();
         if (!this.micEnabled || !this._rawMicStream) return;
 
         try {
-            const newRawStream = await navigator.mediaDevices.getUserMedia({
-                audio: deviceId ? { deviceId: { exact: deviceId } } : true,
-            });
+            const newRawStream = await withDeviceFallback(
+                { audio: deviceId ? { deviceId: { exact: deviceId } } : true },
+                { audio: true },
+            );
 
             const oldRawStream = this._rawMicStream;
             const oldProcessedStream = this.micStream;
@@ -2723,17 +2750,20 @@ export class PeerManager {
      * @returns {Promise<void>}
      */
     async switchCamera(deviceId = null) {
-        if (deviceId) localStorage.setItem('camDeviceId', deviceId);
+        if (deviceId) {
+            localStorage.setItem('camDeviceId', deviceId);
+            syncPreference();
+        }
         if (!this.camStream) return;
         const nextFacingMode = this._camFacingMode === 'environment' ? 'user' : 'environment';
 
         try {
             let newRawStream, resolvedFacing;
             if (deviceId) {
-                newRawStream = await navigator.mediaDevices.getUserMedia({
-                    video: { ...this._resolveQuality('cam'), deviceId: { exact: deviceId } },
-                    audio: false,
-                });
+                newRawStream = await withDeviceFallback(
+                    { video: { ...this._resolveQuality('cam'), deviceId: { exact: deviceId } }, audio: false },
+                    { video: this._resolveQuality('cam'), audio: false },
+                );
                 const settings = newRawStream.getVideoTracks()[0].getSettings();
                 resolvedFacing = settings.facingMode === 'user' || settings.facingMode === 'environment'
                     ? settings.facingMode

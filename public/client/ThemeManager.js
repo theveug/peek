@@ -2,6 +2,9 @@ import { initAccent } from './AccentManager.js';
 import { getStoredBackgroundTint, applyBackgroundTint } from './BackgroundManager.js';
 import { initFontScale } from './FontScaleManager.js';
 import { initThemePack } from './ThemePackManager.js';
+// Circular import — see AccountSettingsSync.js's own top-of-file comment for
+// why this is safe (every use is inside a function body, not at module load).
+import { syncPreference } from './AccountSettingsSync.js';
 
 function updateIcons(theme) {
     const sun = document.getElementById('theme-sun');
@@ -38,10 +41,12 @@ export function setTheme(theme) {
     if (theme === 'system') {
         localStorage.removeItem('theme');
         apply(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        syncPreference();
         return;
     }
     apply(theme);
     localStorage.setItem('theme', theme);
+    syncPreference();
 }
 
 export function getEffectiveTheme() {
