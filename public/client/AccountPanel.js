@@ -174,5 +174,9 @@ export class AccountPanel {
             const confirmField = document.getElementById('account-confirm-password');
             if (confirmField) confirmField.value = '';
         }
+        // Accounts Phase 2: FriendsPanel.js has no session concept of its own
+        // (friends only makes sense for a logged-in identity) — this is the
+        // only signal it needs to show/hide its own button.
+        document.dispatchEvent(new CustomEvent('peek:account', { detail: { loggedIn } }));
     }
 }

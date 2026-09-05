@@ -2367,6 +2367,15 @@ body.light .panel-tab:hover {
   cursor: pointer;
 }
 
+/* Multi-button row action group — reused by FriendsPanel.js's incoming-request
+   rows (Accept + Decline), which need two buttons where the banned-list row
+   this class family was built for only ever needed one (Unban). */
+.quick-banned-action-group {
+  display: flex;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+
 .quick-banned-unban-btn:hover {
   background: var(--accent);
   color: var(--accentText);

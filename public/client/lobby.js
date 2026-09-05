@@ -9,6 +9,7 @@ import { SettingsPanel } from '/client/SettingsPanel.js';
 import { initTooltips } from '/client/Tooltip.js';
 import { RoomRail } from '/client/RoomRail.js';
 import { AccountPanel } from '/client/AccountPanel.js';
+import { FriendsPanel } from '/client/FriendsPanel.js';
 
 initTheme();
 initTooltips();
@@ -18,6 +19,7 @@ document.getElementById('settings-button').addEventListener('click', () => setti
 
 const roomRail = new RoomRail({ currentRoomCode: null, navigate: (url) => { window.location.href = url; } });
 const accountPanel = new AccountPanel();
+const friendsPanel = new FriendsPanel();
 
 if (new URLSearchParams(location.search).get('new')) {
     document.getElementById('create-name')?.focus();

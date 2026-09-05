@@ -78,6 +78,33 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="flex items-center relative">
+                        <button id="friends-button" class="lobby-icon-btn hidden" data-tip="Friends">
+                            <span class="material-symbols-rounded">group</span>
+                        </button>
+                        <div id="friends-popover" class="quick-settings-popover topbar-popover hidden">
+                            <div class="quick-settings-header">Friends</div>
+
+                            <div class="settings-field">
+                                <div class="settings-label">Add friend</div>
+                                <input type="text" id="friends-add-username" class="settings-text-input"
+                                    placeholder="Username" style="max-width:none;" />
+                                <div id="friends-add-error" class="lobby-error hidden"></div>
+                                <button type="button" id="friends-add-submit" class="lobby-btn-primary"
+                                    style="width:100%;margin-top:0.5rem;">Send request</button>
+                            </div>
+
+                            <div class="settings-label" style="margin-top:1rem;">Requests</div>
+                            <div id="friends-incoming-list" class="quick-banned-list"></div>
+
+                            <div class="settings-label" style="margin-top:1rem;">Friends</div>
+                            <div id="friends-list" class="quick-banned-list"></div>
+
+                            <div class="settings-label" style="margin-top:1rem;">Sent</div>
+                            <div id="friends-outgoing-list" class="quick-banned-list"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="lobby-hero">

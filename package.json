@@ -40,7 +40,8 @@
     "test:keybind-combo": "node tests/keybind-combo-logic.mjs",
     "test:trust-tier": "node tests/trust-tier.mjs",
     "test:auth": "node tests/auth.mjs",
-    "test:account-settings": "node tests/account-settings.mjs"
+    "test:account-settings": "node tests/account-settings.mjs",
+    "test:friends": "node tests/friends.mjs"
   },
   "author": "",
   "license": "ISC",

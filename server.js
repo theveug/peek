@@ -16,6 +16,8 @@ import { openDb } from './src/server/db/connection.js';
 import { runMigrations } from './src/server/db/migrate.js';
 import { AuthManager } from './src/server/AuthManager.js';
 import { mountAuthRoutes } from './src/server/authRoutes.js';
+import { FriendsManager } from './src/server/FriendsManager.js';
+import { mountFriendsRoutes } from './src/server/friendsRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,10 +64,12 @@ if (turnConfig) {
 // explicit per-operator choice rather than something Peek itself runs.
 const accountsEnabled = process.env.ACCOUNTS_ENABLED === '1';
 let authManager = null;
+let friendsManager = null;
 if (accountsEnabled) {
     const db = openDb(process.env.ACCOUNTS_DB_PATH || './data/peek.db');
     runMigrations(db);
     authManager = new AuthManager(db);
+    friendsManager = new FriendsManager(db);
     if (!useHttps && !process.env.TRUST_PROXY) {
         console.warn('[WARN] ACCOUNTS_ENABLED=1 but no HTTPS cert and no TRUST_PROXY configured — ' +
             'session cookies will be sent over plain HTTP. Fine on a trusted LAN, not recommended otherwise.');
@@ -165,7 +169,10 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
-if (accountsEnabled) mountAuthRoutes(app, authManager);
+if (accountsEnabled) {
+    mountAuthRoutes(app, authManager);
+    mountFriendsRoutes(app, authManager, friendsManager);
+}
 app.use('/assets', express.static(path.join(__dirname, 'public/assets')));
 app.use('/client', express.static(path.join(__dirname, 'public/client')));
 

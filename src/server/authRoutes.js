@@ -4,7 +4,9 @@ import { rateLimit } from './rateLimit.js';
 const USERNAME_RE = /^[a-zA-Z0-9_-]{3,32}$/;
 const MIN_PASSWORD_LEN = 8;
 const MAX_PASSWORD_LEN = 200;
-const COOKIE_NAME = 'peek_session';
+// Exported for friendsRoutes.js to reuse — the session cookie's name and
+// parser are a single shared concept, not something worth re-deriving.
+export const COOKIE_NAME = 'peek_session';
 const SESSION_MAX_AGE_S = 30 * 24 * 60 * 60;
 
 // Same per-IP fixed-window lockout SHAPE as /api/validate-room's
@@ -19,7 +21,7 @@ setInterval(() => failedLoginsByIp.clear(), 10 * 60_000).unref();
 // cookie-parser's job) — for the one cookie this app needs, a small
 // hand-rolled reader is simpler than adding a dependency for it, matching
 // this codebase's existing hand-rolled rateLimit()/sanitization idiom.
-function readCookie(req, name) {
+export function readCookie(req, name) {
     const header = req.headers.cookie;
     if (typeof header !== 'string') return null;
     for (const part of header.split(';')) {
