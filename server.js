@@ -11,6 +11,11 @@ import { SessionManager } from './src/server/SessionManager.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Debug, DEBUG_ENABLED } from './utils/Debug.js';
+import { rateLimit } from './src/server/rateLimit.js';
+import { openDb } from './src/server/db/connection.js';
+import { runMigrations } from './src/server/db/migrate.js';
+import { AuthManager } from './src/server/AuthManager.js';
+import { mountAuthRoutes } from './src/server/authRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,14 +54,36 @@ if (turnConfig) {
     Debug.log('No STUN/TURN configured — direct/LAN candidates only');
 }
 
+// Accounts (Phase 1: register/login/logout + SQLite storage) — strictly
+// opt-in per deployment, never on by default. An unset ACCOUNTS_ENABLED
+// leaves this whole branch unexecuted: no DB file created, no routes
+// mounted, trust.accounts stays false — byte-for-byte today's behavior. See
+// CLAUDE.md's accounts/design-principles entry for why this stays an
+// explicit per-operator choice rather than something Peek itself runs.
+const accountsEnabled = process.env.ACCOUNTS_ENABLED === '1';
+let authManager = null;
+if (accountsEnabled) {
+    const db = openDb(process.env.ACCOUNTS_DB_PATH || './data/peek.db');
+    runMigrations(db);
+    authManager = new AuthManager(db);
+    if (!useHttps && !process.env.TRUST_PROXY) {
+        console.warn('[WARN] ACCOUNTS_ENABLED=1 but no HTTPS cert and no TRUST_PROXY configured — ' +
+            'session cookies will be sent over plain HTTP. Fine on a trusted LAN, not recommended otherwise.');
+    }
+    Debug.log('Accounts enabled, DB at', process.env.ACCOUNTS_DB_PATH || './data/peek.db');
+}
+// mountAuthRoutes() itself is called after app.use(express.json()) below —
+// route registration order matters in Express, and these handlers need
+// req.body already parsed (see the express.json() call site).
+
 // Deployment-level "trust tier" descriptor — what THIS server does,
 // independent of any room's state (sibling to iceServers/buildId on init,
-// not part of getSessionMeta()). accounts/serverSideHistory are hardcoded
-// false: neither feature exists yet, trivial to flip to real detection if
-// they ever ship. debugLogging/mediaRelayConfigured are real, already-
+// not part of getSessionMeta()). serverSideHistory is hardcoded false: that
+// feature doesn't exist yet, trivial to flip to real detection if it ever
+// ships. accounts/debugLogging/mediaRelayConfigured are real, already-
 // computed facts. See CLAUDE.md's "Trust-tier indicator" convention.
 const trust = {
-    accounts: false,
+    accounts: accountsEnabled,
     serverSideHistory: false,
     debugLogging: DEBUG_ENABLED,
     mediaRelayConfigured: !!turnConfig,
@@ -80,21 +107,6 @@ function generateUniqueShortCode(length = 5) {
         }
     } while (manager.hasSession(result));
     return result;
-}
-
-// Minimal per-IP fixed-window rate limiter — in-memory only, nothing persisted.
-function rateLimit(windowMs, max) {
-    const hits = new Map();
-    setInterval(() => hits.clear(), windowMs).unref();
-    return (req, res, next) => {
-        const count = (hits.get(req.ip) || 0) + 1;
-        hits.set(req.ip, count);
-        if (count > max) {
-            res.status(429).json({ error: 'Too many requests' });
-            return;
-        }
-        next();
-    };
 }
 
 // Sessions created via /api/create-room that nobody ever joins would otherwise live forever.
@@ -153,6 +165,7 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+if (accountsEnabled) mountAuthRoutes(app, authManager);
 app.use('/assets', express.static(path.join(__dirname, 'public/assets')));
 app.use('/client', express.static(path.join(__dirname, 'public/client')));
 

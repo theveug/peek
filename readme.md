@@ -108,6 +108,18 @@ Copy `.env.example` to `.env` — every variable is optional, and the app runs w
 | `STUN_URL` | Optional public STUN server. **No built-in default** (this used to be Google's public STUN — removed deliberately, since a third-party STUN server sees every participant's IP on every call). Not needed on a LAN or when TURN is set. |
 | `TRUST_PROXY` | Set only when deployed behind a reverse proxy (nginx/caddy/cloudflared), so per-IP rate limiting sees real client IPs instead of the proxy's. Never set this without a proxy in front — it lets clients spoof their IP. |
 | `DEBUG` | Enables server-side debug logging (room codes/names to stdout). Off by default so a deployment's captured logs never accumulate call metadata. |
+| `ACCOUNTS_ENABLED` | Turns on optional user accounts (`1` to enable). Off by default — see "Accounts" below before turning this on. |
+| `ACCOUNTS_DB_PATH` | Path to the accounts SQLite file (default: `./data/peek.db`). Only read when `ACCOUNTS_ENABLED=1`. |
+
+### Accounts (self-host only, opt-in)
+
+Peek's default mode has no accounts at all, by design — see "Why" above. `ACCOUNTS_ENABLED=1` turns on an optional register/login system, backed by a local SQLite file, for self-hosters who specifically want it. A few things worth knowing before enabling it on your own instance:
+
+- **This is a real, deliberate exception to Peek's "no info held on a server" default** — turning it on means your instance now stores usernames and password hashes (argon2id) for whoever registers. Passwords are never stored in plain text, and no email address is collected at all in this version (so there's no password-reset-by-email — losing your password currently has no recovery path).
+- **You, not the Peek project, are responsible for this data.** Because this is opt-in and self-hosted, *you* are the one deciding to hold this data for your users — which is what keeps the Peek project itself from being a data controller under GDPR/CCPA/etc. If you enable this for anyone other than yourself, treat it like running any other login system: you're accountable for it.
+- **Cookies over plain HTTP**: if you enable accounts without HTTPS (no `certs/` cert) and without `TRUST_PROXY` (i.e. no reverse proxy terminating TLS in front of you), the server logs a startup warning — session cookies would be sent unencrypted. Fine on a trusted LAN, not recommended over the open internet.
+- **Docker**: the SQLite file lives at `ACCOUNTS_DB_PATH` inside the container, bind-mounted to `./data` on the host via `compose.yml` — back up that directory, not just the container. WAL mode (used for reliability) creates `-wal`/`-shm` sidecar files alongside the main `.db` file; a backup script should either copy all three or checkpoint/stop the server first.
+- **No UI yet** — this first version is API-only (`/api/auth/register`, `/login`, `/logout`, `/me`), meant for scripting/testing before a login panel exists in the app itself.
 
 ### Scripts
 

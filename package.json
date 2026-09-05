@@ -38,11 +38,14 @@
     "test:room-topic": "node tests/room-topic.mjs",
     "test:chat-history": "node tests/chat-history-retention.mjs",
     "test:keybind-combo": "node tests/keybind-combo-logic.mjs",
-    "test:trust-tier": "node tests/trust-tier.mjs"
+    "test:trust-tier": "node tests/trust-tier.mjs",
+    "test:auth": "node tests/auth.mjs"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@node-rs/argon2": "^2.2.0",
+    "better-sqlite3": "^13.0.3",
     "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "uuid": "^11.1.0",

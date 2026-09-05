@@ -5,4 +5,9 @@ services:
       - "3000:3000"
     env_file:
       - .env
+    # Bind-mounts the accounts SQLite DB (see ACCOUNTS_DB_PATH in .env.example)
+    # so it survives `docker compose down` + `up --build` on every deploy —
+    # without this, a redeploy would silently wipe every registered account.
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped
