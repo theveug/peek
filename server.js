@@ -65,8 +65,10 @@ if (turnConfig) {
 const accountsEnabled = process.env.ACCOUNTS_ENABLED === '1';
 let authManager = null;
 let friendsManager = null;
+let accountsDb = null; // hoisted so the graceful-shutdown handler below can close it
 if (accountsEnabled) {
     const db = openDb(process.env.ACCOUNTS_DB_PATH || './data/peek.db');
+    accountsDb = db;
     runMigrations(db);
     authManager = new AuthManager(db);
     friendsManager = new FriendsManager(db);
@@ -315,3 +317,22 @@ server.listen(PORT, HOST, () => {
     // no need to parse the human log lines (which can change wording).
     console.log(`__PEEK_READY__ ${JSON.stringify({ port: server.address().port })}`);
 });
+
+// Without this, every stop of the process (Ctrl+C, nodemon restart, a
+// container/orchestrator SIGTERM) is a hard kill with no chance for
+// better-sqlite3 to run its close-time WAL checkpoint — under WAL mode
+// (openDb()'s default), committed writes live ONLY in the `-wal` file until
+// something checkpoints them back into the main `.db` file, and SQLite's own
+// automatic checkpoint threshold (~1000 WAL pages) is rarely reached by a
+// small dev database's light write volume. A hard kill at exactly the wrong
+// moment mid-write can leave the WAL unable to validate on the next open,
+// which SQLite handles safely by discarding it — but "safely" here means
+// silently reverting to whatever the last checkpoint captured, which for a
+// dev DB that's never been gracefully closed can be nothing at all. `db.close()`
+// forces a full checkpoint, so a normal shutdown never strands data in the WAL.
+function shutdown() {
+    if (accountsDb) accountsDb.close();
+    process.exit(0);
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

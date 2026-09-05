@@ -45,6 +45,9 @@
   },
   "author": "",
   "license": "ISC",
+  "nodemonConfig": {
+    "ignore": ["data/*"]
+  },
   "dependencies": {
     "@node-rs/argon2": "^2.2.0",
     "better-sqlite3": "^13.0.3",
