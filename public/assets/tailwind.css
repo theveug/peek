@@ -5105,6 +5105,16 @@ body,
   align-items: center;
 }
 
+.topbar-trust-icon {
+  display: flex;
+  align-items: center;
+  color: var(--t3);
+}
+
+.topbar-trust-icon .material-symbols-rounded {
+  font-size: 1.125rem;
+}
+
 .topbar-invite-btn {
   display: flex;
   align-items: center;

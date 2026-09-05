@@ -166,6 +166,7 @@ function connect() {
             checkBuildId(msg.buildId);
             acquireWakeLock();
             ui.setRoomMeta({ name: msg.roomName, code: sessionId, hasPassword: msg.hasPassword, maxPeers: msg.maxPeers });
+            ui.setTrustTier(msg.trust);
             // Present only when this join lazily created the room, making us
             // its owner — persist like lobby.js does for /api/create-room.
             if (msg.creatorToken) {

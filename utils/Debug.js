@@ -25,4 +25,4 @@ class Debug {
     }
 }
 
-export { Debug };
+export { Debug, DEBUG_ENABLED };
