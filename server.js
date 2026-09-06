@@ -18,6 +18,8 @@ import { AuthManager } from './src/server/AuthManager.js';
 import { mountAuthRoutes } from './src/server/authRoutes.js';
 import { FriendsManager } from './src/server/FriendsManager.js';
 import { mountFriendsRoutes } from './src/server/friendsRoutes.js';
+import { DirectMessagesManager } from './src/server/DirectMessagesManager.js';
+import { mountMessagesRoutes } from './src/server/messagesRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,6 +67,7 @@ if (turnConfig) {
 const accountsEnabled = process.env.ACCOUNTS_ENABLED === '1';
 let authManager = null;
 let friendsManager = null;
+let messagesManager = null;
 let accountsDb = null; // hoisted so the graceful-shutdown handler below can close it
 if (accountsEnabled) {
     const db = openDb(process.env.ACCOUNTS_DB_PATH || './data/peek.db');
@@ -72,6 +75,7 @@ if (accountsEnabled) {
     runMigrations(db);
     authManager = new AuthManager(db);
     friendsManager = new FriendsManager(db);
+    messagesManager = new DirectMessagesManager(db);
     if (!useHttps && !process.env.TRUST_PROXY) {
         console.warn('[WARN] ACCOUNTS_ENABLED=1 but no HTTPS cert and no TRUST_PROXY configured — ' +
             'session cookies will be sent over plain HTTP. Fine on a trusted LAN, not recommended otherwise.');
@@ -84,13 +88,16 @@ if (accountsEnabled) {
 
 // Deployment-level "trust tier" descriptor — what THIS server does,
 // independent of any room's state (sibling to iceServers/buildId on init,
-// not part of getSessionMeta()). serverSideHistory is hardcoded false: that
-// feature doesn't exist yet, trivial to flip to real detection if it ever
-// ships. accounts/debugLogging/mediaRelayConfigured are real, already-
-// computed facts. See CLAUDE.md's "Trust-tier indicator" convention.
+// not part of getSessionMeta()). serverSideHistory now reflects reality
+// (2026-09-07, accounts Phase 4): direct messages persist plaintext message
+// content server-side, so this can no longer stay hardcoded false once that
+// ships. Tied to the same accountsEnabled gate rather than a separate flag —
+// DMs only ever exist under that same opt-in, there's no independent
+// "messages enabled" toggle. debugLogging/mediaRelayConfigured are real,
+// already-computed facts. See CLAUDE.md's "Trust-tier indicator" convention.
 const trust = {
     accounts: accountsEnabled,
-    serverSideHistory: false,
+    serverSideHistory: accountsEnabled,
     debugLogging: DEBUG_ENABLED,
     mediaRelayConfigured: !!turnConfig,
 };
@@ -174,6 +181,7 @@ app.use(express.json());
 if (accountsEnabled) {
     mountAuthRoutes(app, authManager);
     mountFriendsRoutes(app, authManager, friendsManager);
+    mountMessagesRoutes(app, authManager, messagesManager);
 }
 app.use('/assets', express.static(path.join(__dirname, 'public/assets')));
 app.use('/client', express.static(path.join(__dirname, 'public/client')));

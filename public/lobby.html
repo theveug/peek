@@ -108,6 +108,34 @@
                             <div id="friends-blocked-list" class="quick-banned-list"></div>
                         </div>
                     </div>
+
+                    <div class="flex items-center relative">
+                        <button id="messages-button" class="lobby-icon-btn hidden" data-tip="Messages">
+                            <span class="material-symbols-rounded">mail</span>
+                            <span id="messages-unread-badge" class="hidden messages-unread-badge"></span>
+                        </button>
+                        <div id="messages-popover" class="quick-settings-popover topbar-popover hidden">
+                            <div class="quick-settings-header">
+                                <button type="button" id="messages-back-btn" class="hidden messages-back-btn" data-tip="Back to conversations">
+                                    <span class="material-symbols-rounded">arrow_back</span>
+                                </button>
+                                <span id="messages-popover-title">Messages</span>
+                            </div>
+
+                            <div id="messages-inbox-view">
+                                <div id="messages-inbox-list" class="quick-banned-list"></div>
+                            </div>
+
+                            <div id="messages-conversation-view" class="hidden">
+                                <div id="messages-thread" class="messages-thread"></div>
+                                <div class="messages-composer">
+                                    <input type="text" id="messages-input" class="settings-text-input"
+                                        placeholder="Type a message..." maxlength="4000" style="max-width:none;" />
+                                    <button type="button" id="messages-send-btn" class="lobby-btn-primary">Send</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="lobby-hero">

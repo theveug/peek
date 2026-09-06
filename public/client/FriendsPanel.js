@@ -136,6 +136,11 @@ export class FriendsPanel {
             label: username,
             online: this._onlineUsernames.has(username),
             actions: [
+                // No direct reference to MessagesPanel.js — both popovers are
+                // independently constructed by lobby.js, so a CustomEvent is
+                // the same cross-module signal shape 'peek:account' already
+                // uses, just going the other direction (Friends -> Messages).
+                { text: 'Message', tip: `Message ${username}`, onClick: () => document.dispatchEvent(new CustomEvent('peek:open-dm', { detail: { username } })) },
                 { text: 'Remove', tip: `Remove ${username}`, onClick: () => this._remove(requestId) },
                 { text: 'Block', tip: `Block ${username}`, onClick: () => this._block(username) },
             ],

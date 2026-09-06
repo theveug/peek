@@ -10,7 +10,9 @@ import { initTooltips } from '/client/Tooltip.js';
 import { RoomRail } from '/client/RoomRail.js';
 import { AccountPanel } from '/client/AccountPanel.js';
 import { FriendsPanel } from '/client/FriendsPanel.js';
+import { MessagesPanel } from '/client/MessagesPanel.js';
 import { startPresencePolling } from '/client/presencePoll.js';
+import { startMessagesPolling } from '/client/messagesPoll.js';
 
 initTheme();
 initTooltips();
@@ -21,21 +23,28 @@ document.getElementById('settings-button').addEventListener('click', () => setti
 const roomRail = new RoomRail({ currentRoomCode: null, navigate: (url) => { window.location.href = url; } });
 const accountPanel = new AccountPanel();
 const friendsPanel = new FriendsPanel();
+const messagesPanel = new MessagesPanel();
 
-// Accounts Phase 3 (2026-09-07): presence polling only runs while logged in
-// — 'peek:account' is the same event FriendsPanel.js itself listens to for
-// showing/hiding its own button, dispatched by AccountPanel._renderState()
-// on every login/logout/session-check. Each tick doubles as this account's
-// own heartbeat (see friendsRoutes.js's GET /api/friends/presence), so the
-// poller must actually stop on logout rather than just going unused —
-// otherwise a logged-out browser would keep 401-ing every 30s forever.
+// Accounts Phase 3/4 (2026-09-07): presence + messages polling only run
+// while logged in — 'peek:account' is the same event FriendsPanel.js/
+// MessagesPanel.js themselves listen to for showing/hiding their own
+// buttons, dispatched by AccountPanel._renderState() on every login/logout/
+// session-check. Both pollers must actually stop on logout, not just go
+// unused: presence's poll call is this account's own heartbeat server-side
+// (see friendsRoutes.js's GET /api/friends/presence), so a poller left
+// running against a logged-out session would 401 forever rather than
+// harmlessly idling.
 let stopPresencePolling = null;
+let stopMessagesPolling = null;
 document.addEventListener('peek:account', (e) => {
-    if (e.detail.loggedIn && !stopPresencePolling) {
-        stopPresencePolling = startPresencePolling((presence) => friendsPanel.setOnline(presence));
-    } else if (!e.detail.loggedIn && stopPresencePolling) {
-        stopPresencePolling();
+    if (e.detail.loggedIn) {
+        if (!stopPresencePolling) stopPresencePolling = startPresencePolling((presence) => friendsPanel.setOnline(presence));
+        if (!stopMessagesPolling) stopMessagesPolling = startMessagesPolling((conversations) => messagesPanel.setConversations(conversations));
+    } else {
+        stopPresencePolling?.();
         stopPresencePolling = null;
+        stopMessagesPolling?.();
+        stopMessagesPolling = null;
     }
 });
 
