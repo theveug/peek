@@ -184,6 +184,28 @@ class FriendsManager {
         ).all(userId);
         return rows.map(r => ({ blockId: r.id, ...this._publicProfile(r.blocked_id) }));
     }
+
+    /**
+     * Accounts Phase 3 (2026-09-07): "online" is derived, not stored — a
+     * friend counts online if their own presence poll touched
+     * users.last_seen_at within onlineThresholdMs of now (see
+     * AuthManager.touchLastSeen(), called as the poll route's heartbeat side
+     * effect). A friend who has never polled since the column existed has a
+     * NULL last_seen_at and is always offline.
+     * @param {number} userId
+     * @param {number} onlineThresholdMs
+     * @returns {Array<{username:string, online:boolean}>}
+     */
+    listFriendsPresence(userId, onlineThresholdMs) {
+        const rows = this.db.prepare(`
+            SELECT u.username, u.last_seen_at
+            FROM friendships f
+            JOIN users u ON u.id = (CASE WHEN f.requester_id = ? THEN f.addressee_id ELSE f.requester_id END)
+            WHERE (f.requester_id = ? OR f.addressee_id = ?) AND f.status = 'accepted'
+        `).all(userId, userId, userId);
+        const cutoff = Date.now() - onlineThresholdMs;
+        return rows.map(r => ({ username: r.username, online: !!r.last_seen_at && r.last_seen_at >= cutoff }));
+    }
 }
 
 export { FriendsManager };

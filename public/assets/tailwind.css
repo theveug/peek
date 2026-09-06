@@ -2577,6 +2577,27 @@ body.light .panel-tab:hover {
   justify-content: center;
 }
 
+/* ===== Friends presence dot (Accounts Phase 3, 2026-09-07) =====
+   Small inline dot on friends-list rows in FriendsPanel.js — offline is a
+   muted neutral (--t3, same tone used for e.g. .quick-banned-empty text),
+   online switches to --green. Deliberately not reusing
+   .participant-status-dot's markup/multi-state machinery (tri-state
+   online/away/dnd, corner-badge-on-avatar positioning) — this is a plain
+   inline two-state dot with no avatar to badge onto. */
+.friends-presence-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--t3);
+  margin-right: 0.5rem;
+  flex-shrink: 0;
+}
+
+.friends-presence-dot-online {
+  background: var(--green);
+}
+
 /* ===== Chat hidden state ===== */
 /* .chat-resize-handle's own body:has() rule (near its definition) covers
    hiding the handle now that it's no longer a sibling of #chat to target

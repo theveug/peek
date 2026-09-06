@@ -114,6 +114,18 @@ class AuthManager {
         return info.changes > 0;
     }
 
+    /**
+     * Accounts Phase 3 (2026-09-07): the heartbeat side effect of a client's
+     * presence poll (see friendsRoutes.js's GET /api/friends/presence) —
+     * calling this IS what makes an account "online" from a friend's point
+     * of view. No separate heartbeat endpoint: the poll a friend's list
+     * already needs to make doubles as this account's own heartbeat.
+     * @param {number} userId
+     */
+    touchLastSeen(userId) {
+        this.db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').run(Date.now(), userId);
+    }
+
     // Public-safe projection — never leaks password_hash, mirrors
     // SessionManager.getSessionMeta().
     getPublicProfile(userId) {

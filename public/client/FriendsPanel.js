@@ -12,11 +12,24 @@
 // _renderState()) since there's no other cross-module signal for it on this
 // page; this file also checks /api/auth/me itself on init, matching
 // AccountPanel._init()'s own double-check shape with /api/trust.
+//
+// Phase 3 (2026-09-07): online/offline dots on friends-list rows, fed by
+// lobby.js calling setOnline() on every presencePoll.js tick — see that
+// file and friendsRoutes.js's GET /api/friends/presence for the poll-based
+// (not always-on-socket) design this follows.
 export class FriendsPanel {
     constructor() {
         this.button = document.getElementById('friends-button');
         this.popover = document.getElementById('friends-popover');
         if (!this.button || !this.popover) return;
+
+        // Accounts Phase 3: cached separately from a full _refresh() re-fetch
+        // so a presencePoll.js tick (every ~30s) can update online dots via a
+        // cheap re-render of already-fetched data, without hitting
+        // GET /api/friends again — that heavier fetch only happens when the
+        // popover is actually opened.
+        this._lastFriends = null;
+        this._onlineUsernames = new Set();
 
         this._init();
     }
@@ -105,16 +118,38 @@ export class FriendsPanel {
         });
     }
 
+    /**
+     * Accounts Phase 3: called by lobby.js on every presencePoll.js tick with
+     * the latest online/offline set. Only actually re-renders when there's
+     * something to render against (a popover open before the first
+     * _refresh() has nothing in `_lastFriends` yet) and the popover is
+     * visible — no point re-touching hidden DOM every 30s.
+     * @param {Array<{username:string, online:boolean}>} presence
+     */
+    setOnline(presence) {
+        this._onlineUsernames = new Set(presence.filter(p => p.online).map(p => p.username));
+        if (this._lastFriends && !this.popover.classList.contains('hidden')) this._renderFriendsList();
+    }
+
+    _renderFriendsList() {
+        this._renderList('friends-list', this._lastFriends.map(({ requestId, username }) => ({
+            label: username,
+            online: this._onlineUsernames.has(username),
+            actions: [
+                { text: 'Remove', tip: `Remove ${username}`, onClick: () => this._remove(requestId) },
+                { text: 'Block', tip: `Block ${username}`, onClick: () => this._block(username) },
+            ],
+        })), 'No friends yet.');
+    }
+
     /** Rebuilds all four lists from a fresh server fetch every time the popover opens — same
      * "never trust stale local state" precedent as QuickRoomSettings.js's banned-users section. */
     async _refresh() {
         const res = await fetch('/api/friends');
         if (!res.ok) return;
         const { friends, incoming, outgoing, blocked } = await res.json();
-        this._renderList('friends-list', friends.map(({ requestId, username }) => ({ label: username, actions: [
-            { text: 'Remove', tip: `Remove ${username}`, onClick: () => this._remove(requestId) },
-            { text: 'Block', tip: `Block ${username}`, onClick: () => this._block(username) },
-        ] })), 'No friends yet.');
+        this._lastFriends = friends;
+        this._renderFriendsList();
         this._renderList('friends-incoming-list', incoming.map(({ requestId, user }) => ({ label: user.username, actions: [
             { text: 'Accept', tip: `Accept ${user.username}`, onClick: () => this._accept(requestId) },
             { text: 'Decline', tip: `Decline ${user.username}`, onClick: () => this._remove(requestId) },
@@ -162,9 +197,19 @@ export class FriendsPanel {
             list.innerHTML = `<div class="quick-banned-empty">${emptyText}</div>`;
             return;
         }
-        for (const { label, actions } of rows) {
+        for (const { label, online, actions } of rows) {
             const row = document.createElement('div');
             row.className = 'quick-banned-row';
+
+            // `online` is only ever set on friends-list rows (undefined
+            // elsewhere — incoming/outgoing/blocked have no presence
+            // concept), so this dot only renders there.
+            if (online !== undefined) {
+                const dot = document.createElement('span');
+                dot.className = 'friends-presence-dot' + (online ? ' friends-presence-dot-online' : '');
+                dot.dataset.tip = online ? 'Online' : 'Offline';
+                row.appendChild(dot);
+            }
 
             const name = document.createElement('span');
             name.className = 'quick-banned-name';

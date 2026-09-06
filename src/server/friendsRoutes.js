@@ -26,6 +26,12 @@ function requireSession(req, authManager) {
     return token ? authManager.validateSessionToken(token) : null;
 }
 
+// Accounts Phase 3 (2026-09-07): 3x the client's poll interval
+// (presencePoll.js's 30s) — tolerates one missed beat (a slow tick, a
+// backgrounded-tab pause resuming late) without flickering a friend
+// offline and back on every poll cycle.
+const ONLINE_THRESHOLD_MS = 90_000;
+
 /**
  * @param {import('express').Express} app
  * @param {import('./AuthManager.js').AuthManager} authManager
@@ -42,6 +48,22 @@ export function mountFriendsRoutes(app, authManager, friendsManager) {
             outgoing,
             blocked: friendsManager.listBlocked(session.userId),
         });
+    });
+
+    // Accounts Phase 3 (2026-09-07): presence, poll-based rather than an
+    // always-on socket (see TODO.md's Deployment models entry for the full
+    // reasoning — this was a deliberate load/security tradeoff, not a
+    // shortcut). Polled every ~30s by presencePoll.js while a logged-in user
+    // has the lobby open; the call itself IS the polling account's own
+    // heartbeat (authManager.touchLastSeen()), so no separate heartbeat
+    // endpoint exists. Rate-limited defensively even though it's session-
+    // authenticated — same shape as the settings PUT routes, not because
+    // abuse is expected.
+    app.get('/api/friends/presence', rateLimit(60_000, 30), (req, res) => {
+        const session = requireSession(req, authManager);
+        if (!session) return res.status(401).json({ error: 'Not logged in' });
+        authManager.touchLastSeen(session.userId);
+        res.status(200).json({ presence: friendsManager.listFriendsPresence(session.userId, ONLINE_THRESHOLD_MS) });
     });
 
     app.post('/api/friends/request', rateLimit(60_000, 20), (req, res) => {

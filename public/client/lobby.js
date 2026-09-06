@@ -10,6 +10,7 @@ import { initTooltips } from '/client/Tooltip.js';
 import { RoomRail } from '/client/RoomRail.js';
 import { AccountPanel } from '/client/AccountPanel.js';
 import { FriendsPanel } from '/client/FriendsPanel.js';
+import { startPresencePolling } from '/client/presencePoll.js';
 
 initTheme();
 initTooltips();
@@ -20,6 +21,23 @@ document.getElementById('settings-button').addEventListener('click', () => setti
 const roomRail = new RoomRail({ currentRoomCode: null, navigate: (url) => { window.location.href = url; } });
 const accountPanel = new AccountPanel();
 const friendsPanel = new FriendsPanel();
+
+// Accounts Phase 3 (2026-09-07): presence polling only runs while logged in
+// — 'peek:account' is the same event FriendsPanel.js itself listens to for
+// showing/hiding its own button, dispatched by AccountPanel._renderState()
+// on every login/logout/session-check. Each tick doubles as this account's
+// own heartbeat (see friendsRoutes.js's GET /api/friends/presence), so the
+// poller must actually stop on logout rather than just going unused —
+// otherwise a logged-out browser would keep 401-ing every 30s forever.
+let stopPresencePolling = null;
+document.addEventListener('peek:account', (e) => {
+    if (e.detail.loggedIn && !stopPresencePolling) {
+        stopPresencePolling = startPresencePolling((presence) => friendsPanel.setOnline(presence));
+    } else if (!e.detail.loggedIn && stopPresencePolling) {
+        stopPresencePolling();
+        stopPresencePolling = null;
+    }
+});
 
 if (new URLSearchParams(location.search).get('new')) {
     document.getElementById('create-name')?.focus();
