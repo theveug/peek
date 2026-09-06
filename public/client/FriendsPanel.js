@@ -105,22 +105,29 @@ export class FriendsPanel {
         });
     }
 
-    /** Rebuilds all three lists from a fresh server fetch every time the popover opens — same
+    /** Rebuilds all four lists from a fresh server fetch every time the popover opens — same
      * "never trust stale local state" precedent as QuickRoomSettings.js's banned-users section. */
     async _refresh() {
         const res = await fetch('/api/friends');
         if (!res.ok) return;
-        const { friends, incoming, outgoing } = await res.json();
+        const { friends, incoming, outgoing, blocked } = await res.json();
         this._renderList('friends-list', friends.map(({ requestId, username }) => ({ label: username, actions: [
             { text: 'Remove', tip: `Remove ${username}`, onClick: () => this._remove(requestId) },
+            { text: 'Block', tip: `Block ${username}`, onClick: () => this._block(username) },
         ] })), 'No friends yet.');
         this._renderList('friends-incoming-list', incoming.map(({ requestId, user }) => ({ label: user.username, actions: [
             { text: 'Accept', tip: `Accept ${user.username}`, onClick: () => this._accept(requestId) },
             { text: 'Decline', tip: `Decline ${user.username}`, onClick: () => this._remove(requestId) },
+            { text: 'Block', tip: `Block ${user.username}`, onClick: () => this._block(user.username) },
         ] })), 'No incoming requests.');
         this._renderList('friends-outgoing-list', outgoing.map(({ requestId, user }) => ({ label: user.username, actions: [
             { text: 'Cancel', tip: `Cancel request to ${user.username}`, onClick: () => this._remove(requestId) },
         ] })), 'No sent requests.');
+        // Only the blocker's own view — a block is invisible to the person
+        // blocked (see FriendsManager.listBlocked()'s doc comment).
+        this._renderList('friends-blocked-list', blocked.map(({ blockId, username }) => ({ label: username, actions: [
+            { text: 'Unblock', tip: `Unblock ${username}`, onClick: () => this._unblock(blockId) },
+        ] })), 'No blocked users.');
     }
 
     async _accept(requestId) {
@@ -130,6 +137,20 @@ export class FriendsPanel {
 
     async _remove(requestId) {
         await fetch(`/api/friends/${requestId}`, { method: 'DELETE' }).catch(() => {});
+        this._refresh();
+    }
+
+    async _block(username) {
+        await fetch('/api/friends/block', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username }),
+        }).catch(() => {});
+        this._refresh();
+    }
+
+    async _unblock(blockId) {
+        await fetch(`/api/friends/block/${blockId}`, { method: 'DELETE' }).catch(() => {});
         this._refresh();
     }
 

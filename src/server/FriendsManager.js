@@ -23,6 +23,18 @@ class FriendsManager {
     }
 
     /**
+     * Blocking is symmetric for request purposes even though storage is
+     * directional (only the blocker's row exists) — if A blocks B, B
+     * shouldn't be able to route around it by requesting A first.
+     */
+    isBlockedEitherWay(userA, userB) {
+        return !!this.db.prepare(`
+            SELECT 1 FROM blocks
+            WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)
+        `).get(userA, userB, userB, userA);
+    }
+
+    /**
      * @param {number} requesterId
      * @param {string} addresseeUsername
      * @returns {{ok:true, status:'pending'|'accepted'}|{ok:false, reason:'self'|'not_found'|'already_friends'|'already_pending'}}
@@ -40,6 +52,11 @@ class FriendsManager {
         ).get(addresseeUsername);
         if (!addressee) return { ok: false, reason: 'not_found' };
         if (addressee.id === requesterId) return { ok: false, reason: 'self' };
+        // Reuses 'not_found' rather than a distinct 'blocked' reason — a
+        // blocked user querying by trial-and-error shouldn't be able to
+        // learn that they specifically are blocked vs. the account simply
+        // not existing.
+        if (this.isBlockedEitherWay(requesterId, addressee.id)) return { ok: false, reason: 'not_found' };
 
         const existing = this._findRelationship(requesterId, addressee.id);
         if (existing) {
@@ -113,6 +130,59 @@ class FriendsManager {
             incoming: incomingRows.map(r => ({ requestId: r.id, user: this._publicProfile(r.requester_id) })),
             outgoing: outgoingRows.map(r => ({ requestId: r.id, user: this._publicProfile(r.addressee_id) })),
         };
+    }
+
+    /**
+     * Blocking severs any existing friendship/pending request between the
+     * pair (in either direction — _findRelationship already checks both)
+     * outright, same "no soft state" precedent as removeFriendship(), then
+     * records the block. INSERT OR IGNORE against the unique (blocker_id,
+     * blocked_id) index makes re-blocking an already-blocked user a no-op
+     * rather than a constraint-violation throw.
+     * @param {number} blockerId
+     * @param {string} blockedUsername
+     * @returns {{ok:true}|{ok:false, reason:'self'|'not_found'}}
+     */
+    blockUser(blockerId, blockedUsername) {
+        const target = this.db.prepare(
+            'SELECT id FROM users WHERE username = ? COLLATE NOCASE'
+        ).get(blockedUsername);
+        if (!target) return { ok: false, reason: 'not_found' };
+        if (target.id === blockerId) return { ok: false, reason: 'self' };
+
+        const existing = this._findRelationship(blockerId, target.id);
+        if (existing) {
+            this.db.prepare('DELETE FROM friendships WHERE id = ?').run(existing.id);
+        }
+        this.db.prepare(
+            'INSERT OR IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)'
+        ).run(blockerId, target.id, Date.now());
+        return { ok: true };
+    }
+
+    /**
+     * Only the blocker can lift their own block — mirrors acceptRequest()'s
+     * ownership-in-the-WHERE-clause pattern rather than a separate check.
+     * @returns {boolean} whether a block was actually removed
+     */
+    unblockUser(blockerId, blockId) {
+        const info = this.db.prepare(
+            'DELETE FROM blocks WHERE id = ? AND blocker_id = ?'
+        ).run(blockId, blockerId);
+        return info.changes > 0;
+    }
+
+    /**
+     * Only rows where `userId` is the blocker — you can't see or lift a
+     * block someone else placed on you (nor should you be able to tell one
+     * exists; that's why sendRequest() collapses it into 'not_found').
+     * @returns {Array<{blockId:number, id:number, username:string, nickname:string|null, avatar:string|null}>}
+     */
+    listBlocked(userId) {
+        const rows = this.db.prepare(
+            'SELECT id, blocked_id FROM blocks WHERE blocker_id = ?'
+        ).all(userId);
+        return rows.map(r => ({ blockId: r.id, ...this._publicProfile(r.blocked_id) }));
     }
 }
 

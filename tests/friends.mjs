@@ -11,6 +11,13 @@
 //  10. accept/remove someone else's requestId -> 400,
 //  11. no cookie -> 401 on all four routes,
 //  12. accounts-disabled deployment -> 404 on all four routes.
+//  13. blocking (2026-09-07 security-review follow-up): self-block -> 400,
+//      block nonexistent username -> 400, blocking a friend severs the
+//      friendship, a blocked user's request is rejected exactly like a
+//      nonexistent one (no 'blocked' reason leaked), the *blocker's* own
+//      request to the blocked user is also rejected, unblocking someone
+//      else's block id -> 400, unblocking restores normal request flow,
+//      no cookie -> 401, accounts-disabled -> 404.
 //
 // Run with: npm run test:friends
 
@@ -79,6 +86,20 @@ async function accept(base, cookie, requestId) {
 
 async function remove(base, cookie, requestId) {
     const res = await fetch(`${base}/api/friends/${requestId}`, { method: 'DELETE', headers: { Cookie: cookie } });
+    return { status: res.status, body: await res.json() };
+}
+
+async function block(base, cookie, username) {
+    const res = await fetch(`${base}/api/friends/block`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ username }),
+    });
+    return { status: res.status, body: await res.json() };
+}
+
+async function unblock(base, cookie, blockId) {
+    const res = await fetch(`${base}/api/friends/block/${blockId}`, { method: 'DELETE', headers: { Cookie: cookie } });
     return { status: res.status, body: await res.json() };
 }
 
@@ -168,6 +189,44 @@ async function main() {
         assert(carolView2.body.friends.some(f => f.username === daveName), 'Carol and Dave are friends after the mutual-pending auto-accept');
         assert(carolView2.body.outgoing.length === 0, 'no leftover pending row for Carol after auto-accept');
 
+        // --- 13. blocking --- reuses Alice/Bob (already unfriended in step 7
+        // above) rather than registering two more users — /api/auth/register
+        // is rate-limited to 5/min, and this test already spends 4 of those
+        // on Alice/Bob/Carol/Dave.
+        const selfBlock = await block(BASE, cookieA, aliceName);
+        assert(selfBlock.status === 400, 'self-block is rejected with 400');
+        const ghostBlock = await block(BASE, cookieA, `nobody_${Date.now()}`);
+        assert(ghostBlock.status === 400, 'blocking a nonexistent username is rejected with 400');
+
+        // Become friends again first, so blocking-severs-friendship is exercised too.
+        await sendRequest(BASE, cookieA, bobName);
+        const abView = await getFriends(BASE, cookieB);
+        await accept(BASE, cookieB, abView.body.incoming[0].requestId);
+        assert((await getFriends(BASE, cookieA)).body.friends.some(f => f.username === bobName), 'Alice and Bob are friends again before the block');
+
+        const blockRes = await block(BASE, cookieA, bobName);
+        assert(blockRes.status === 200 && blockRes.body.blocked === true, 'Alice blocks Bob');
+        assert(!(await getFriends(BASE, cookieA)).body.friends.some(f => f.username === bobName), "blocking severs the existing friendship (Alice's side)");
+        assert(!(await getFriends(BASE, cookieB)).body.friends.some(f => f.username === aliceName), "blocking severs the existing friendship (Bob's side)");
+
+        const bobToAlice = await sendRequest(BASE, cookieB, aliceName);
+        assert(bobToAlice.status === 400 && bobToAlice.body.error === 'No account with that username', "the blocked user's request is rejected with the same message as a nonexistent account (no 'blocked' reason leaked)");
+        const aliceToBob = await sendRequest(BASE, cookieA, bobName);
+        assert(aliceToBob.status === 400, "the blocker's own request to the blocked user is also rejected");
+
+        const aliceBlockedView = await getFriends(BASE, cookieA);
+        assert(aliceBlockedView.body.blocked.some(b => b.username === bobName), "Alice's own view shows Bob in her blocked list");
+        assert(!(await getFriends(BASE, cookieB)).body.blocked?.length, "Bob's own blocked list is empty — a block is invisible to the person blocked");
+        const blockId = aliceBlockedView.body.blocked.find(b => b.username === bobName).blockId;
+
+        const wrongUnblock = await unblock(BASE, cookieB, blockId);
+        assert(wrongUnblock.status === 400, "unblocking someone else's block id is rejected");
+
+        const unblockRes = await unblock(BASE, cookieA, blockId);
+        assert(unblockRes.status === 200, 'Alice unblocks Bob');
+        const reFriendReq2 = await sendRequest(BASE, cookieB, aliceName);
+        assert(reFriendReq2.status === 200, 'after unblocking, Bob can request Alice again');
+
         // --- 11. no cookie ---
         const noCookieGet = await fetch(`${BASE}/api/friends`);
         assert(noCookieGet.status === 401, 'GET /api/friends: 401 with no cookie');
@@ -179,6 +238,12 @@ async function main() {
         assert(noCookieAccept.status === 401, 'POST /api/friends/:id/accept: 401 with no cookie');
         const noCookieDelete = await fetch(`${BASE}/api/friends/1`, { method: 'DELETE' });
         assert(noCookieDelete.status === 401, 'DELETE /api/friends/:id: 401 with no cookie');
+        const noCookieBlock = await fetch(`${BASE}/api/friends/block`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'x' }),
+        });
+        assert(noCookieBlock.status === 401, 'POST /api/friends/block: 401 with no cookie');
+        const noCookieUnblock = await fetch(`${BASE}/api/friends/block/1`, { method: 'DELETE' });
+        assert(noCookieUnblock.status === 401, 'DELETE /api/friends/block/:id: 401 with no cookie');
     } finally {
         server.kill();
         await sleep(200);
@@ -192,6 +257,8 @@ async function main() {
         assert((await fetch(`${BASE2}/api/friends/request`, { method: 'POST' })).status === 404, 'accounts disabled: POST /api/friends/request is a plain 404');
         assert((await fetch(`${BASE2}/api/friends/1/accept`, { method: 'POST' })).status === 404, 'accounts disabled: POST /api/friends/:id/accept is a plain 404');
         assert((await fetch(`${BASE2}/api/friends/1`, { method: 'DELETE' })).status === 404, 'accounts disabled: DELETE /api/friends/:id is a plain 404');
+        assert((await fetch(`${BASE2}/api/friends/block`, { method: 'POST' })).status === 404, 'accounts disabled: POST /api/friends/block is a plain 404');
+        assert((await fetch(`${BASE2}/api/friends/block/1`, { method: 'DELETE' })).status === 404, 'accounts disabled: DELETE /api/friends/block/:id is a plain 404');
     } finally {
         server.kill();
         await sleep(200);
