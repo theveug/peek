@@ -85,9 +85,18 @@ export class AccountPanel {
         document.getElementById('account-error').classList.add('hidden');
     }
 
+    // Not a real <form> element (this popover's markup is plain divs, like
+    // every other quick-settings popover in this app), so Enter doesn't
+    // submit for free — each input's own keydown listener below is what
+    // makes Enter behave the way a real form would. Extracted to a named
+    // function (rather than left inline on the button's click handler) so
+    // both the click and every keydown listener can call the exact same
+    // path, same pattern FriendsPanel.js/MessagesPanel.js already use for
+    // their own single-input composers.
     _wireSubmit() {
         const submitBtn = document.getElementById('account-submit');
-        submitBtn.addEventListener('click', async () => {
+
+        const submit = async () => {
             const errorEl = document.getElementById('account-error');
             errorEl.classList.add('hidden');
 
@@ -129,7 +138,14 @@ export class AccountPanel {
             } finally {
                 submitBtn.disabled = false;
             }
-        });
+        };
+
+        submitBtn.addEventListener('click', submit);
+        for (const id of ['account-username', 'account-password', 'account-confirm-password']) {
+            document.getElementById(id).addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); submit(); }
+            });
+        }
     }
 
     _afterAuthSuccess({ username }) {
@@ -152,6 +168,16 @@ export class AccountPanel {
             // or no account at all) doesn't inherit this account's name —
             // falls back to the app's existing 'Anonymous' default.
             localStorage.removeItem('nickname');
+            // Reset to 'login' mode — without this, logging out while the
+            // popover happened to be in 'register' mode (e.g. right after
+            // registering) left it stuck there: still showing the confirm-
+            // password field, still validating a same-page-session re-login
+            // attempt as a registration (found while testing Enter-to-submit,
+            // 2026-09-07 — a fresh page load was never affected, only a
+            // logout followed by a same-session re-login with no reload
+            // in between).
+            this.mode = 'login';
+            this._applyMode();
             this._renderState(null);
         });
     }
