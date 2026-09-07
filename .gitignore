@@ -32,6 +32,7 @@ Icon?
 
 # Local HTTPS certs — generate with mkcert (see README)
 certs/
+data/
 
 # Claude Code — local only, not for repo
 CLAUDE.md
