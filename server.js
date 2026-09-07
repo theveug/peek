@@ -11,6 +11,15 @@ import { SessionManager } from './src/server/SessionManager.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Debug, DEBUG_ENABLED } from './utils/Debug.js';
+import { rateLimit } from './src/server/rateLimit.js';
+import { openDb } from './src/server/db/connection.js';
+import { runMigrations } from './src/server/db/migrate.js';
+import { AuthManager } from './src/server/AuthManager.js';
+import { mountAuthRoutes } from './src/server/authRoutes.js';
+import { FriendsManager } from './src/server/FriendsManager.js';
+import { mountFriendsRoutes } from './src/server/friendsRoutes.js';
+import { DirectMessagesManager } from './src/server/DirectMessagesManager.js';
+import { mountMessagesRoutes } from './src/server/messagesRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,15 +58,46 @@ if (turnConfig) {
     Debug.log('No STUN/TURN configured — direct/LAN candidates only');
 }
 
+// Accounts (Phase 1: register/login/logout + SQLite storage) — strictly
+// opt-in per deployment, never on by default. An unset ACCOUNTS_ENABLED
+// leaves this whole branch unexecuted: no DB file created, no routes
+// mounted, trust.accounts stays false — byte-for-byte today's behavior. See
+// CLAUDE.md's accounts/design-principles entry for why this stays an
+// explicit per-operator choice rather than something Peek itself runs.
+const accountsEnabled = process.env.ACCOUNTS_ENABLED === '1';
+let authManager = null;
+let friendsManager = null;
+let messagesManager = null;
+let accountsDb = null; // hoisted so the graceful-shutdown handler below can close it
+if (accountsEnabled) {
+    const db = openDb(process.env.ACCOUNTS_DB_PATH || './data/peek.db');
+    accountsDb = db;
+    runMigrations(db);
+    authManager = new AuthManager(db);
+    friendsManager = new FriendsManager(db);
+    messagesManager = new DirectMessagesManager(db);
+    if (!useHttps && !process.env.TRUST_PROXY) {
+        console.warn('[WARN] ACCOUNTS_ENABLED=1 but no HTTPS cert and no TRUST_PROXY configured — ' +
+            'session cookies will be sent over plain HTTP. Fine on a trusted LAN, not recommended otherwise.');
+    }
+    Debug.log('Accounts enabled, DB at', process.env.ACCOUNTS_DB_PATH || './data/peek.db');
+}
+// mountAuthRoutes() itself is called after app.use(express.json()) below —
+// route registration order matters in Express, and these handlers need
+// req.body already parsed (see the express.json() call site).
+
 // Deployment-level "trust tier" descriptor — what THIS server does,
 // independent of any room's state (sibling to iceServers/buildId on init,
-// not part of getSessionMeta()). accounts/serverSideHistory are hardcoded
-// false: neither feature exists yet, trivial to flip to real detection if
-// they ever ship. debugLogging/mediaRelayConfigured are real, already-
-// computed facts. See CLAUDE.md's "Trust-tier indicator" convention.
+// not part of getSessionMeta()). serverSideHistory now reflects reality
+// (2026-09-07, accounts Phase 4): direct messages persist plaintext message
+// content server-side, so this can no longer stay hardcoded false once that
+// ships. Tied to the same accountsEnabled gate rather than a separate flag —
+// DMs only ever exist under that same opt-in, there's no independent
+// "messages enabled" toggle. debugLogging/mediaRelayConfigured are real,
+// already-computed facts. See CLAUDE.md's "Trust-tier indicator" convention.
 const trust = {
-    accounts: false,
-    serverSideHistory: false,
+    accounts: accountsEnabled,
+    serverSideHistory: accountsEnabled,
     debugLogging: DEBUG_ENABLED,
     mediaRelayConfigured: !!turnConfig,
 };
@@ -80,21 +120,6 @@ function generateUniqueShortCode(length = 5) {
         }
     } while (manager.hasSession(result));
     return result;
-}
-
-// Minimal per-IP fixed-window rate limiter — in-memory only, nothing persisted.
-function rateLimit(windowMs, max) {
-    const hits = new Map();
-    setInterval(() => hits.clear(), windowMs).unref();
-    return (req, res, next) => {
-        const count = (hits.get(req.ip) || 0) + 1;
-        hits.set(req.ip, count);
-        if (count > max) {
-            res.status(429).json({ error: 'Too many requests' });
-            return;
-        }
-        next();
-    };
 }
 
 // Sessions created via /api/create-room that nobody ever joins would otherwise live forever.
@@ -153,6 +178,11 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+if (accountsEnabled) {
+    mountAuthRoutes(app, authManager);
+    mountFriendsRoutes(app, authManager, friendsManager);
+    mountMessagesRoutes(app, authManager, messagesManager);
+}
 app.use('/assets', express.static(path.join(__dirname, 'public/assets')));
 app.use('/client', express.static(path.join(__dirname, 'public/client')));
 
@@ -246,6 +276,15 @@ app.get('/settings', (req, res) => {
     res.redirect('/');
 });
 
+// Exposes the same deployment-level trust descriptor already sent (unauthenticated)
+// on every WS 'init' — the lobby has no WebSocket connection at all, so it has no
+// other way to know whether this deployment has accounts turned on before deciding
+// whether to show the account button. Cheap constant lookup, no rate limit needed
+// for the same reason the WS init payload isn't rate-limited per field.
+app.get('/api/trust', (req, res) => {
+    res.json(trust);
+});
+
 // Serve session page for valid room codes
 app.get('/:code', (req, res) => {
     const code = req.params.code;
@@ -286,3 +325,22 @@ server.listen(PORT, HOST, () => {
     // no need to parse the human log lines (which can change wording).
     console.log(`__PEEK_READY__ ${JSON.stringify({ port: server.address().port })}`);
 });
+
+// Without this, every stop of the process (Ctrl+C, nodemon restart, a
+// container/orchestrator SIGTERM) is a hard kill with no chance for
+// better-sqlite3 to run its close-time WAL checkpoint — under WAL mode
+// (openDb()'s default), committed writes live ONLY in the `-wal` file until
+// something checkpoints them back into the main `.db` file, and SQLite's own
+// automatic checkpoint threshold (~1000 WAL pages) is rarely reached by a
+// small dev database's light write volume. A hard kill at exactly the wrong
+// moment mid-write can leave the WAL unable to validate on the next open,
+// which SQLite handles safely by discarding it — but "safely" here means
+// silently reverting to whatever the last checkpoint captured, which for a
+// dev DB that's never been gracefully closed can be nothing at all. `db.close()`
+// forces a full checkpoint, so a normal shutdown never strands data in the WAL.
+function shutdown() {
+    if (accountsDb) accountsDb.close();
+    process.exit(0);
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

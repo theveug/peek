@@ -2,6 +2,7 @@ import { playSound } from './SoundPlayer.js';
 import { ChatUI } from './ChatUI.js';
 import { escapeHtml } from './escapeHtml.js';
 import * as chatHistoryStore from './chatHistoryStore.js';
+import { syncPreference } from './AccountSettingsSync.js';
 
 /**
  * Owns everything DOM-facing for the room page: the video grid/focus stage,
@@ -2258,6 +2259,7 @@ export class UIController {
     async setAudioOutputDevice(deviceId) {
         this._audioOutputDeviceId = deviceId || '';
         localStorage.setItem('speakerDeviceId', this._audioOutputDeviceId);
+        syncPreference();
         if (typeof HTMLMediaElement === 'undefined' || !HTMLMediaElement.prototype.setSinkId) return; // unsupported browser — silently a no-op
         const audios = document.querySelectorAll('audio[id^="audio-"]');
         await Promise.all(Array.from(audios).map(a => a.setSinkId(this._audioOutputDeviceId).catch(() => {})));

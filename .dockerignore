@@ -7,3 +7,10 @@ npm-debug.log*
 .idea
 *.md
 public/assets/style.css
+# Accounts SQLite DB (opt-in, ACCOUNTS_ENABLED=1) — without this, a developer's
+# local dev database (registered test accounts, WAL/SHM sidecar files) gets
+# baked into the image via `COPY . .`. compose.yml's volume mount shadows it
+# at runtime under docker-compose, but a bare `docker run` (or any other
+# orchestrator without that same mount) would boot straight off whatever
+# happened to be on the build machine's disk at build time.
+data

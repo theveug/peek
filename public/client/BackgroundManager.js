@@ -1,4 +1,8 @@
 // --- public/client/BackgroundManager.js ---
+// Circular import — see AccountSettingsSync.js's own top-of-file comment for
+// why this is safe (every use is inside a function body, not at module load).
+import { syncPreference } from './AccountSettingsSync.js';
+
 // A "Background Tint" swatch picker (from an earlier design prototype, not
 // the current Peek.dc.html mockup) — mirrors AccentManager.js's shape so
 // adding a preset later is a one-line edit here, no CSS/token changes needed.
@@ -63,6 +67,7 @@ export function setBackgroundTint(name, isLight) {
     if (!PRESETS[name]) return;
     localStorage.setItem('bgTint', name);
     applyBackgroundTint(name, isLight);
+    syncPreference();
 }
 
 export function bgTintPresetNames() {

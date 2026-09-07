@@ -34,6 +34,9 @@ Icon?
 certs/
 data/
 
+# Accounts SQLite DB (opt-in, ACCOUNTS_ENABLED=1) — includes WAL mode's -wal/-shm sidecar files
+data/
+
 # Claude Code — local only, not for repo
 CLAUDE.md
 .claude/
