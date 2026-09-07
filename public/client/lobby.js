@@ -38,8 +38,13 @@ let stopPresencePolling = null;
 let stopMessagesPolling = null;
 document.addEventListener('peek:account', (e) => {
     if (e.detail.loggedIn) {
-        if (!stopPresencePolling) stopPresencePolling = startPresencePolling((presence) => friendsPanel.setOnline(presence));
-        if (!stopMessagesPolling) stopMessagesPolling = startMessagesPolling((conversations) => messagesPanel.setConversations(conversations));
+        // onSessionExpired (2026-09-07 real-usage audit fix): a poller 401
+        // means this tab's session was invalidated elsewhere (e.g. logged out
+        // in another tab) — forceLoggedOut() resets this tab's account UI and
+        // dispatches 'peek:account' itself, which re-enters this handler on
+        // the else branch below and stops both pollers.
+        if (!stopPresencePolling) stopPresencePolling = startPresencePolling((presence) => friendsPanel.setOnline(presence), () => accountPanel.forceLoggedOut());
+        if (!stopMessagesPolling) stopMessagesPolling = startMessagesPolling((conversations) => messagesPanel.setConversations(conversations), () => accountPanel.forceLoggedOut());
     } else {
         stopPresencePolling?.();
         stopPresencePolling = null;

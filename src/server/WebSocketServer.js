@@ -209,6 +209,7 @@ export function setupWebSocket(wss, iceConfig, manager, buildId, trust) {
                 case 'nickname-update':
                 case 'status-update':
                 case 'avatar-update':
+                case 'account-username-update':
                 case 'recording-consent':
                 case 'recording-status': {
                     const sessionId = manager.getSessionId(peerId);

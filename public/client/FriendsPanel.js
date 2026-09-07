@@ -54,6 +54,7 @@ export class FriendsPanel {
 
     open() {
         this.popover.classList.remove('hidden');
+        document.getElementById('friends-action-error')?.classList.add('hidden');
         this._refresh();
     }
 
@@ -170,27 +171,52 @@ export class FriendsPanel {
         ] })), 'No blocked users.');
     }
 
+    /**
+     * Bug fix (2026-09-07 real-usage audit): every row action below used to
+     * `.catch(() => {})` and unconditionally re-render — fetch doesn't reject
+     * on a 4xx, so a genuine failure (stale row after the other side already
+     * acted, a transient 500) produced zero feedback, unlike _wireAddFriend()
+     * which already surfaced `body.error`. This is the shared success/error
+     * path every row action now goes through, clearing any previous error
+     * first so a retry doesn't leave a stale message showing.
+     * @returns {Promise<boolean>} whether the request succeeded
+     */
+    async _runAction(request, genericError) {
+        const errorEl = document.getElementById('friends-action-error');
+        errorEl?.classList.add('hidden');
+        try {
+            const res = await request();
+            if (res.ok) return true;
+            const body = await res.json().catch(() => ({}));
+            if (errorEl) { errorEl.textContent = body.error || genericError; errorEl.classList.remove('hidden'); }
+            return false;
+        } catch {
+            if (errorEl) { errorEl.textContent = 'Could not reach the server — try again'; errorEl.classList.remove('hidden'); }
+            return false;
+        }
+    }
+
     async _accept(requestId) {
-        await fetch(`/api/friends/${requestId}/accept`, { method: 'POST' }).catch(() => {});
-        this._refresh();
+        await this._runAction(() => fetch(`/api/friends/${requestId}/accept`, { method: 'POST' }), 'Could not accept request');
+        this._refresh(); // always — a failure here is often a stale row (already acted on elsewhere), so refreshing corrects it either way
     }
 
     async _remove(requestId) {
-        await fetch(`/api/friends/${requestId}`, { method: 'DELETE' }).catch(() => {});
+        await this._runAction(() => fetch(`/api/friends/${requestId}`, { method: 'DELETE' }), 'Could not complete that action');
         this._refresh();
     }
 
     async _block(username) {
-        await fetch('/api/friends/block', {
+        await this._runAction(() => fetch('/api/friends/block', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username }),
-        }).catch(() => {});
+        }), 'Could not block user');
         this._refresh();
     }
 
     async _unblock(blockId) {
-        await fetch(`/api/friends/block/${blockId}`, { method: 'DELETE' }).catch(() => {});
+        await this._runAction(() => fetch(`/api/friends/block/${blockId}`, { method: 'DELETE' }), 'Could not unblock user');
         this._refresh();
     }
 

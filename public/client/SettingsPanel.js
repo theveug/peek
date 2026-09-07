@@ -537,6 +537,18 @@ export class SettingsPanel {
                             </div>
                             <div class="settings-toggle-row">
                                 <div>
+                                    <div class="settings-toggle-row-title">Reveal my account to peers in this room</div>
+                                    <div class="settings-toggle-row-desc">Lets other logged-in peers in a call see your
+                                        account username and send you a friend request without leaving the room. Off
+                                        by default, and only does anything if you're logged in on a deployment with
+                                        accounts enabled.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox"
+                                        id="settings-reveal-account" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
                                     <div class="settings-toggle-row-title">Save chat history on this device</div>
                                     <div class="settings-toggle-row-desc">Keeps a local copy of your chat text so it's
                                         here when you rejoin this room. Only ever stored in your browser — never sent
@@ -1757,6 +1769,17 @@ export class SettingsPanel {
             this.peerManager?.broadcastRecordingConsent();
         });
 
+        document.getElementById('settings-reveal-account')?.addEventListener('change', (e) => {
+            localStorage.setItem('revealAccountInRoom', e.target.checked ? '1' : '0');
+            // Re-evaluate immediately (fetches /api/auth/me and broadcasts, or
+            // withdraws) rather than waiting for the next join/reconnect — same
+            // "live-apply, not just next-connection" convention as the toggle
+            // above. On the lobby (no peerManager instance), this just persists
+            // for the next time a room is joined, same as every other
+            // localStorage-backed field in this shared markup.
+            this.peerManager?.refreshAccountReveal();
+        });
+
         const historyToggle = document.getElementById('settings-chat-history-enabled');
         const daysField = document.getElementById('chat-history-days-field');
         historyToggle?.addEventListener('change', (e) => {
@@ -1842,6 +1865,9 @@ export class SettingsPanel {
         // consent toggle.
         const allowRecording = document.getElementById('settings-allow-recording');
         if (allowRecording) allowRecording.checked = localStorage.getItem('allowRecording') !== '0';
+
+        const revealAccount = document.getElementById('settings-reveal-account');
+        if (revealAccount) revealAccount.checked = localStorage.getItem('revealAccountInRoom') === '1';
 
         const historyToggle = document.getElementById('settings-chat-history-enabled');
         const historyEnabled = localStorage.getItem('chatHistoryEnabled') === '1';

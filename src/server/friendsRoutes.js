@@ -26,6 +26,15 @@ function requireSession(req, authManager) {
     return token ? authManager.validateSessionToken(token) : null;
 }
 
+// Keyed by the raw session token where present, not by IP (2026-09-07
+// real-usage audit fix) — every route here is session-authenticated, and
+// keying by IP meant two friends behind the same NAT/office network shared
+// one bucket, able to throttle each other's legitimate requests. Falls back
+// to IP for an unauthenticated/expired cookie, same as before. The token
+// itself is never persisted by this limiter — it's just used as an in-memory
+// map key for the current fixed window.
+const byAccount = (req) => readCookie(req, COOKIE_NAME) || req.ip;
+
 // Accounts Phase 3 (2026-09-07): 3x the client's poll interval
 // (presencePoll.js's 30s) — tolerates one missed beat (a slow tick, a
 // backgrounded-tab pause resuming late) without flickering a friend
@@ -38,7 +47,7 @@ const ONLINE_THRESHOLD_MS = 90_000;
  * @param {import('./FriendsManager.js').FriendsManager} friendsManager
  */
 export function mountFriendsRoutes(app, authManager, friendsManager) {
-    app.get('/api/friends', (req, res) => {
+    app.get('/api/friends', rateLimit(60_000, 60, byAccount), (req, res) => {
         const session = requireSession(req, authManager);
         if (!session) return res.status(401).json({ error: 'Not logged in' });
         const { incoming, outgoing } = friendsManager.listPending(session.userId);
@@ -59,14 +68,14 @@ export function mountFriendsRoutes(app, authManager, friendsManager) {
     // endpoint exists. Rate-limited defensively even though it's session-
     // authenticated — same shape as the settings PUT routes, not because
     // abuse is expected.
-    app.get('/api/friends/presence', rateLimit(60_000, 30), (req, res) => {
+    app.get('/api/friends/presence', rateLimit(60_000, 30, byAccount), (req, res) => {
         const session = requireSession(req, authManager);
         if (!session) return res.status(401).json({ error: 'Not logged in' });
         authManager.touchLastSeen(session.userId);
         res.status(200).json({ presence: friendsManager.listFriendsPresence(session.userId, ONLINE_THRESHOLD_MS) });
     });
 
-    app.post('/api/friends/request', rateLimit(60_000, 20), (req, res) => {
+    app.post('/api/friends/request', rateLimit(60_000, 20, byAccount), (req, res) => {
         const session = requireSession(req, authManager);
         if (!session) return res.status(401).json({ error: 'Not logged in' });
         const username = req.body?.username;
@@ -80,7 +89,7 @@ export function mountFriendsRoutes(app, authManager, friendsManager) {
         res.status(200).json({ status: result.status });
     });
 
-    app.post('/api/friends/:id/accept', (req, res) => {
+    app.post('/api/friends/:id/accept', rateLimit(60_000, 20, byAccount), (req, res) => {
         const session = requireSession(req, authManager);
         if (!session) return res.status(401).json({ error: 'Not logged in' });
         const requestId = Number(req.params.id);
@@ -90,7 +99,7 @@ export function mountFriendsRoutes(app, authManager, friendsManager) {
         res.status(200).json({ accepted: true });
     });
 
-    app.delete('/api/friends/:id', (req, res) => {
+    app.delete('/api/friends/:id', rateLimit(60_000, 20, byAccount), (req, res) => {
         const session = requireSession(req, authManager);
         if (!session) return res.status(401).json({ error: 'Not logged in' });
         const requestId = Number(req.params.id);
@@ -105,7 +114,7 @@ export function mountFriendsRoutes(app, authManager, friendsManager) {
     // TODO.md's "No account-level block" entry. Two distinct path segments
     // from the single-:id routes above ('block' is a literal first
     // segment), so there's no Express route-matching collision.
-    app.post('/api/friends/block', rateLimit(60_000, 20), (req, res) => {
+    app.post('/api/friends/block', rateLimit(60_000, 20, byAccount), (req, res) => {
         const session = requireSession(req, authManager);
         if (!session) return res.status(401).json({ error: 'Not logged in' });
         const username = req.body?.username;
@@ -119,7 +128,7 @@ export function mountFriendsRoutes(app, authManager, friendsManager) {
         res.status(200).json({ blocked: true });
     });
 
-    app.delete('/api/friends/block/:id', (req, res) => {
+    app.delete('/api/friends/block/:id', rateLimit(60_000, 20, byAccount), (req, res) => {
         const session = requireSession(req, authManager);
         if (!session) return res.status(401).json({ error: 'Not logged in' });
         const blockId = Number(req.params.id);

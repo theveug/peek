@@ -13,16 +13,22 @@ const POLL_INTERVAL_MS = 30_000;
 
 /**
  * @param {(presence: Array<{username:string, online:boolean}>) => void} onUpdate
+ * @param {() => void} [onSessionExpired] - called on a 401, meaning the
+ *   session cookie no longer validates — e.g. logged out from another tab
+ *   (found during the 2026-09-07 real-usage audit: without this, a second
+ *   tab kept polling forever against a dead session and its UI never learned
+ *   it was logged out).
  * @returns {() => void} stop
  */
-export function startPresencePolling(onUpdate) {
+export function startPresencePolling(onUpdate, onSessionExpired) {
     let timer = null;
     let stopped = false;
 
     async function tick() {
         try {
             const res = await fetch('/api/friends/presence');
-            if (!res.ok) return; // 401 (logged out) or a network error — next tick retries
+            if (res.status === 401) { onSessionExpired?.(); return; }
+            if (!res.ok) return; // some other error — next tick retries
             const { presence } = await res.json();
             onUpdate(presence || []);
         } catch {

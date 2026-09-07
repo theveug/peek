@@ -11,16 +11,20 @@ const POLL_INTERVAL_MS = 30_000;
 
 /**
  * @param {(conversations: Array<{user:object, lastMessage:object, unreadCount:number}>) => void} onUpdate
+ * @param {() => void} [onSessionExpired] - called on a 401, meaning the
+ *   session cookie no longer validates — e.g. logged out from another tab.
+ *   See presencePoll.js's matching param for the full 2026-09-07 audit note.
  * @returns {() => void} stop
  */
-export function startMessagesPolling(onUpdate) {
+export function startMessagesPolling(onUpdate, onSessionExpired) {
     let timer = null;
     let stopped = false;
 
     async function tick() {
         try {
             const res = await fetch('/api/messages');
-            if (!res.ok) return; // 401 (logged out) or a network error — next tick retries
+            if (res.status === 401) { onSessionExpired?.(); return; }
+            if (!res.ok) return; // some other error — next tick retries
             const { conversations } = await res.json();
             onUpdate(conversations || []);
         } catch {

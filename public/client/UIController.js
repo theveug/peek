@@ -84,6 +84,11 @@ export class UIController {
         // via PeerManager's 'avatar-update' (already allowlist-validated there before
         // this map ever sees it). Same non-persistence rationale as peerVolumes above.
         this.peerAvatars = new Map();
+        // peerId → account username a peer opted in to revealing this room
+        // (Settings -> Privacy & P2P's "Reveal my account to peers in this
+        // room", off by default) — drives whether their card shows an "Add
+        // Friend" button. Same non-persistence rationale as peerVolumes above.
+        this.peerAccountUsernames = new Map();
         // peerId → Date.now() when their hand went up; Map insertion order is
         // the sidebar queue's order. Same non-persistence rationale as
         // peerVolumes above — cleared in clearAllParticipants().
@@ -1361,6 +1366,7 @@ export class UIController {
             actions.className = 'participant-actions';
             actions.appendChild(this._buildVolumeControl(peerId));
             actions.appendChild(this._buildBlockControl(peerId));
+            actions.appendChild(this._buildAddFriendControl(peerId));
             const modMenu = this._buildModeratorMenu(peerId);
             const iAmModerator = !!this.selfPeerId && this.moderatorPeerIds.has(this.selfPeerId);
             modMenu.style.display = iAmModerator ? 'flex' : 'none';
@@ -1575,6 +1581,77 @@ export class UIController {
     }
 
     /**
+     * Accounts in-room bridge (opt-in — Settings -> Privacy & P2P's "Reveal my
+     * account to peers in this room", off by default): shows an "Add Friend"
+     * button on a peer's card once they reveal an account username, entirely
+     * independent of whether the LOCAL user has also opted in to revealing
+     * themselves — sending a request only needs the local user logged in,
+     * checked server-side on click. Available to everyone (like block), not
+     * gated behind moderator status.
+     * @param {string} peerId
+     * @returns {HTMLElement}
+     */
+    _buildAddFriendControl(peerId) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'participant-add-friend-btn';
+        btn.dataset.tip = 'Add friend';
+        btn.style.display = 'none'; // revealed by _refreshAddFriendButton() once a real reveal arrives
+        btn.innerHTML = '<span class="material-symbols-rounded">person_add</span>';
+
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const username = this.peerAccountUsernames.get(peerId);
+            if (!username || btn.disabled) return;
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/friends/request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username }),
+                });
+                const body = await res.json().catch(() => ({}));
+                this.showToast(body.error || `Friend request sent to ${username}`);
+            } catch {
+                this.showToast('Could not reach the server — try again');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        return btn;
+    }
+
+    /**
+     * Receive-side apply path for PeerManager's 'account-username-update'
+     * broadcast — records (or clears, on withdrawal) the account username a
+     * peer chose to reveal and toggles their card's "Add Friend" button.
+     * Session-scoped like peerAvatars/peerVolumes (cleared in
+     * clearAllParticipants(), pruned in removeParticipant()) since peerIds
+     * don't survive a reconnect. Purely a local UI signal for whether to show
+     * the button — never trusted for anything beyond that; the actual
+     * request round-trips through the server's own session-authenticated
+     * /api/friends/request.
+     * @param {string} peerId
+     * @param {string|null} username
+     * @returns {void}
+     */
+    updateParticipantAccountUsername(peerId, username) {
+        if (username) this.peerAccountUsernames.set(peerId, username);
+        else this.peerAccountUsernames.delete(peerId);
+        this._refreshAddFriendButton(peerId);
+    }
+
+    _refreshAddFriendButton(peerId) {
+        const card = document.getElementById(`participant-${peerId}`);
+        const btn = card?.querySelector('.participant-add-friend-btn');
+        if (!btn) return;
+        const username = this.peerAccountUsernames.get(peerId);
+        btn.style.display = username ? '' : 'none';
+        btn.dataset.tip = username ? `Add ${username} as a friend` : 'Add friend';
+    }
+
+    /**
      * Updates one participant card's status dot color/icon and text label.
      * @param {string} peerId
      * @param {'online'|'unfocused'|'away'|'dnd'|'offline'} status
@@ -1643,6 +1720,7 @@ export class UIController {
         if (el) el.remove();
         if (this.raisedHands.delete(peerId)) this._renderRaisedHands();
         this.recordingPeers.delete(peerId);
+        this.peerAccountUsernames.delete(peerId);
         this._updateMemberCount();
     }
 
@@ -1660,6 +1738,7 @@ export class UIController {
         this.peerVolumes.clear();
         this.blockedPeerIds.clear();
         this.peerAvatars.clear();
+        this.peerAccountUsernames.clear();
         this.raisedHands.clear();
         this.recordingPeers.clear();
         this._renderRaisedHands();

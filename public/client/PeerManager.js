@@ -103,6 +103,12 @@ export class PeerManager {
         // persisted like nickname and broadcast bundled into the same status-update
         // message — untouched by _reconcileAwayStatus's automatic enum flips.
         this.statusText = (localStorage.getItem('statusText') || '').trim().slice(0, 60);
+        // Accounts in-room bridge (opt-in, Settings -> Privacy & P2P's "Reveal my
+        // account to peers in this room", off by default) — the account username
+        // currently being revealed to this room's peers, or null while withdrawn.
+        // Unlike nickname/statusText this is never read from localStorage directly;
+        // see refreshAccountReveal().
+        this.accountUsername = null;
         this.dataChannels = {};
         // messageId → authoring peerId, for chat-edit/chat-delete authorization.
         // Capped at 600 entries; reset on 'init' (peerIds don't survive reconnects,
@@ -286,6 +292,7 @@ export class PeerManager {
                     this.broadcastStatus();
                     this.broadcastAvatar();
                     this.broadcastRecordingConsent();
+                    this.refreshAccountReveal();
                 }, 500);
                 break;
 
@@ -390,6 +397,7 @@ export class PeerManager {
                 this.broadcastNickname();
                 this.broadcastStatus();
                 this.broadcastAvatar();
+                this.broadcastAccountUsername();
                 this.broadcastCamStreamId();
                 this.applyQualitySettings();
                 this.applyCamQualitySettings();
@@ -490,6 +498,19 @@ export class PeerManager {
                 // guard, not an XSS one.
                 this.ui.updateParticipantStatus(from, payload.status, String(payload.statusText || '').slice(0, 60));
                 break;
+
+            // Accounts in-room bridge (opt-in — see refreshAccountReveal()):
+            // peer-declared identity, honor-system like nickname/status, never
+            // trusted for anything beyond deciding whether the local UI shows
+            // an "Add Friend" button — the actual request is authorized
+            // server-side against the *sender's own* session when they click
+            // it, this payload is never used to authorize anything itself. An
+            // empty string is the valid "reveal withdrawn" signal.
+            case 'account-username-update': {
+                const username = typeof payload.username === 'string' ? payload.username.slice(0, 32) : '';
+                this.ui.updateParticipantAccountUsername(from, username || null);
+                break;
+            }
 
             case 'typing':
                 this.ui.updateTypingIndicator(from, payload.isTyping);
@@ -1423,6 +1444,54 @@ export class PeerManager {
     broadcastAvatar() {
         const avatarDataUrl = localStorage.getItem('avatarDataUrl') || '';
         this.send('avatar-update', null, { avatarDataUrl });
+    }
+
+    /**
+     * Sets and broadcasts (or withdraws, if `username` is falsy) the account
+     * username shown to peers in this room, and updates `accountUsername`.
+     * This is the one place account identity crosses into the P2P mesh,
+     * which otherwise has no concept of accounts at all — see
+     * refreshAccountReveal() for the opt-in gate that decides whether this
+     * is ever called with a real value.
+     * @param {string|null} username
+     * @returns {void}
+     */
+    setAccountUsername(username) {
+        this.accountUsername = username || null;
+        this.send('account-username-update', null, { username: this.accountUsername || '' });
+    }
+
+    /** Re-sends the current revealed account username (or withdrawal) to a
+     * newly-joined peer — same pattern as broadcastAvatar()/broadcastStatus(). */
+    broadcastAccountUsername() {
+        this.send('account-username-update', null, { username: this.accountUsername || '' });
+    }
+
+    /**
+     * Accounts in-room bridge (2026-09-07, opt-in — Settings -> Privacy & P2P's
+     * "Reveal my account to peers in this room", off by default): re-checks
+     * whether that toggle is on and, if so, fetches the logged-in username (if
+     * any) and broadcasts it; otherwise withdraws it. Called once per
+     * connection/reconnect (the 'init' handler) and whenever the Settings
+     * toggle changes. A harmless no-op — silently withdraws — on any
+     * deployment without accounts enabled, or when not logged in: /api/auth/me
+     * simply 404s/401s in both cases, same as AccountSettingsSync.js's own
+     * direct-fetch precedent for reaching a REST endpoint from inside this
+     * class.
+     * @returns {Promise<void>}
+     */
+    async refreshAccountReveal() {
+        if (localStorage.getItem('revealAccountInRoom') !== '1') {
+            this.setAccountUsername(null);
+            return;
+        }
+        try {
+            const res = await fetch('/api/auth/me');
+            const me = res.ok ? await res.json() : null;
+            this.setAccountUsername(me?.username || null);
+        } catch {
+            this.setAccountUsername(null);
+        }
     }
 
     /**

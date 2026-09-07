@@ -187,7 +187,8 @@ function connect() {
     socket.onclose = () => {
         clearTimeout(reconnectTimer);
         if (leavingRoom) return;
-        reconnectTimer = setTimeout(connect, 2000);
+        // Jittered so a server restart doesn't reconnect every open tab in the same instant.
+        reconnectTimer = setTimeout(connect, 2000 + Math.random() * 2000);
     };
 }
 

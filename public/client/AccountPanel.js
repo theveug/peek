@@ -182,6 +182,21 @@ export class AccountPanel {
         });
     }
 
+    /**
+     * Bug fix (2026-09-07 real-usage audit): called by lobby.js when a poller
+     * (presencePoll.js/messagesPoll.js) gets a 401 — the session was
+     * invalidated elsewhere (most commonly: logged out from another tab,
+     * since the session cookie is shared browser-wide). Without this, this
+     * tab's account UI kept showing "Logged in as X" with fully clickable
+     * buttons that would all silently no-op. No extra fetch needed — the 401
+     * already proved the session is gone.
+     */
+    forceLoggedOut() {
+        this.mode = 'login';
+        this._applyMode();
+        this._renderState(null);
+    }
+
     async _refreshSessionState() {
         const me = await fetch('/api/auth/me').then(r => r.ok ? r.json() : null).catch(() => null);
         this._renderState(me);

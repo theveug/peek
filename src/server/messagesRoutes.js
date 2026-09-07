@@ -17,6 +17,11 @@ function requireSession(req, authManager) {
     return token ? authManager.validateSessionToken(token) : null;
 }
 
+// Same per-session (not per-IP) rate-limit key as friendsRoutes.js's own
+// byAccount — see that file's comment. Two friends behind the same NAT
+// actually messaging each other is exactly the case this avoids penalizing.
+const byAccount = (req) => readCookie(req, COOKIE_NAME) || req.ip;
+
 /**
  * @param {import('express').Express} app
  * @param {import('./AuthManager.js').AuthManager} authManager
@@ -27,13 +32,13 @@ export function mountMessagesRoutes(app, authManager, messagesManager) {
     // "the fetch is enough, no separate signal needed" shape as
     // GET /api/friends/presence, just without a heartbeat side effect here
     // (presence's heartbeat lives on that route, not this one).
-    app.get('/api/messages', rateLimit(60_000, 30), (req, res) => {
+    app.get('/api/messages', rateLimit(60_000, 30, byAccount), (req, res) => {
         const session = requireSession(req, authManager);
         if (!session) return res.status(401).json({ error: 'Not logged in' });
         res.status(200).json({ conversations: messagesManager.listConversations(session.userId) });
     });
 
-    app.get('/api/messages/:username', rateLimit(60_000, 60), (req, res) => {
+    app.get('/api/messages/:username', rateLimit(60_000, 60, byAccount), (req, res) => {
         const session = requireSession(req, authManager);
         if (!session) return res.status(401).json({ error: 'Not logged in' });
         const result = messagesManager.getConversation(session.userId, req.params.username);
@@ -41,7 +46,7 @@ export function mountMessagesRoutes(app, authManager, messagesManager) {
         res.status(200).json({ messages: result.messages });
     });
 
-    app.post('/api/messages/:username', rateLimit(60_000, 30), (req, res) => {
+    app.post('/api/messages/:username', rateLimit(60_000, 30, byAccount), (req, res) => {
         const session = requireSession(req, authManager);
         if (!session) return res.status(401).json({ error: 'Not logged in' });
         const result = messagesManager.sendMessage(session.userId, req.params.username, req.body?.body);

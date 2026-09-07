@@ -37,6 +37,7 @@ export class MessagesPanel {
 
         this._conversations = []; // last fetched inbox, for cheap re-render on a poll tick
         this._activeUsername = null; // which conversation thread is open, if any
+        this._lastThreadLength = -1; // message count last rendered into the open thread, see _pollActiveThread()
 
         this._init();
     }
@@ -174,6 +175,32 @@ export class MessagesPanel {
             this.thread.appendChild(bubble);
         }
         this.thread.scrollTop = this.thread.scrollHeight;
+        this._lastThreadLength = messages.length;
+    }
+
+    /**
+     * Bug fix (2026-09-07 real-usage audit): an open conversation used to never
+     * live-update at all — _applyConversations() only ever re-renders the inbox
+     * list, explicitly skipping while a thread is open, and nothing else polled
+     * the open thread itself. Called on every messagesPoll.js tick (see
+     * setConversations() below) so two friends actually chatting see new
+     * messages arrive within one poll interval instead of only after leaving
+     * and reopening the conversation. Deliberately doesn't call _refreshInbox()
+     * itself (unlike _loadConversation(), which does, for the "reading marks
+     * read" side effect on a real open) — setConversations()'s own
+     * _applyConversations() call already just refreshed the inbox cache this
+     * same tick, so doing it again here would be a redundant fetch for no
+     * benefit. Skips the re-render entirely when the message count hasn't
+     * changed, so a quiet conversation doesn't get its scroll position yanked
+     * to the bottom every 30 seconds for nothing.
+     */
+    async _pollActiveThread() {
+        if (!this._activeUsername) return;
+        const res = await fetch(`/api/messages/${encodeURIComponent(this._activeUsername)}`).catch(() => null);
+        if (!res?.ok) return;
+        const { messages } = await res.json();
+        if (messages.length === this._lastThreadLength) return;
+        this._renderThread(messages);
     }
 
     async _refreshInbox() {
@@ -194,6 +221,7 @@ export class MessagesPanel {
     /** Called by lobby.js on every messagesPoll.js tick. */
     setConversations(conversations) {
         this._applyConversations(conversations);
+        this._pollActiveThread();
     }
 
     _updateBadge() {
