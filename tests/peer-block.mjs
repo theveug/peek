@@ -14,7 +14,15 @@ const BASE_URL = `https://localhost:${PORT}`;
 
 function startServer() {
     const proc = spawn(process.execPath, ['server.js'], {
-        env: { ...process.env, PORT: String(PORT) },
+        // Blank ACCOUNTS_ENABLED/ACCOUNTS_DB_PATH so a local .env with
+        // accounts on doesn't leak in — this test doesn't exercise accounts
+        // at all, but an ambient ACCOUNTS_ENABLED=1 makes AccountPanel.js/
+        // SocialPanel.js's page-load session checks (GET /api/auth/me) come
+        // back 401 while logged out, which Chrome logs as a console error
+        // regardless of the app's own try/catch — same ambient-env leak
+        // trust-tier.mjs/auth.mjs/account-settings.mjs already guard against
+        // in their own startServer() helpers.
+        env: { ...process.env, PORT: String(PORT), ACCOUNTS_ENABLED: '', ACCOUNTS_DB_PATH: '' },
         stdio: 'pipe',
     });
     return new Promise((resolve, reject) => {
@@ -84,10 +92,13 @@ async function main() {
         console.log('STEP 2 - pre-block chat message delivered: PASS');
 
         // --- Block ---
-        // The action buttons are hover-revealed (.participant-actions), so the
-        // card must be hovered before the block button is clickable.
+        // The action cluster (.participant-actions) is hover-revealed, and the
+        // block row now lives inside the consolidated per-peer menu popover —
+        // opened via the kebab button — rather than being directly clickable.
+        const menuBtn = pageB.locator(`#participant-${remotePeerId} .participant-menu-btn`);
         const blockBtn = pageB.locator(`#participant-${remotePeerId} .participant-block-btn`);
         await pageB.hover(`#participant-${remotePeerId}`);
+        await menuBtn.click();
         await blockBtn.click();
 
         // With only 2 participants, blocking the sole remote peer drops remoteStreams
@@ -121,6 +132,7 @@ async function main() {
 
         // --- Unblock ---
         await pageB.hover(`#participant-${remotePeerId}`);
+        await menuBtn.click();
         await blockBtn.click();
         await pageB.waitForSelector(`#grid-view [data-peer-id="${remotePeerId}"]`, { timeout: 8000 });
         console.log('STEP 6 - A\'s grid tile reappears on B after unblock (no reload): PASS');
@@ -133,8 +145,17 @@ async function main() {
         console.log('STEP 7 - chat resumes after unblock: PASS');
 
         // 🔍 probe: double-block (click twice fast) shouldn't throw or desync state.
+        // The block row closes the popover on click (real UX), so each toggle
+        // re-opens the menu first — still exercises rapid setBlocked() state
+        // flips back-to-back, just via two real interactions instead of one.
+        // Re-hover the card before each open: the popover renders below the
+        // card, so the pointer ends up outside it once a click closes the
+        // popover, dropping the CSS :hover that keeps .participant-actions revealed.
         await pageB.hover(`#participant-${remotePeerId}`);
+        await menuBtn.click();
         await blockBtn.click();
+        await pageB.hover(`#participant-${remotePeerId}`);
+        await menuBtn.click();
         await blockBtn.click();
         await pageB.waitForTimeout(500);
         const finalTitle = await blockBtn.getAttribute('data-tip');
