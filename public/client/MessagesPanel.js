@@ -1,17 +1,21 @@
 // --- public/client/MessagesPanel.js ---
-// Accounts Phase 4 (2026-09-07): lobby-only direct-messages popover, modeled
-// on FriendsPanel.js/AccountPanel.js's popover shape (toggle, outside-click/
-// Escape close, no focus trap). Two views sharing one popover: an inbox
-// (conversation list) and a conversation thread — `_showInbox()`/
-// `_showConversation()` toggle which is visible, `messages-back-btn`
-// returns to the inbox.
+// Accounts Phase 4 (2026-09-07): direct-messages sub-panel. Two views
+// sharing one section: an inbox (conversation list) and a conversation
+// thread — `_showInbox()`/`_showConversation()` toggle which is visible,
+// `messages-back-btn` returns to the inbox.
 //
-// #messages-button stays hidden until BOTH accounts are enabled AND the
-// viewer is logged in — same `peek:account` gating as FriendsPanel.js.
-// FriendsPanel.js dispatches `peek:open-dm` (with {username}) when its own
-// "Message" row action is clicked, since there's no other way for one
-// popover to tell another "open this conversation" without a direct
-// reference between them (both are independently constructed by lobby.js).
+// Markup is built by SocialPanel.js's self-building modal (2026-09-08
+// polish pass — this used to be its own lobby-only anchored popover; see
+// that file's header comment for why, and AccountPanel.js's for the
+// matching change there). SocialPanel.js gates construction of this class
+// on /api/trust + login state itself, so this file no longer re-checks
+// either. FriendsPanel.js dispatches `peek:open-dm` (with {username}) when
+// its own "Message" row action is clicked, since there's no other way for
+// one sub-panel to tell another "open this conversation" without a direct
+// reference between them (both are independently constructed by
+// SocialPanel.js) — SocialPanel.js has its own listener on the same event
+// to bring the whole modal to the Messages tab; see openConversation()
+// below and onShow()'s header comment for how the two avoid racing.
 //
 // Deliberately plain-text, not markdown: `_renderThread()` uses textContent
 // for every message body, not the marked/DOMPurify pipeline ChatUI.js uses
@@ -22,9 +26,9 @@
 // Phase 4" entry for the fuller reasoning and what's deliberately cut.
 export class MessagesPanel {
     constructor() {
-        this.button = document.getElementById('messages-button');
-        this.popover = document.getElementById('messages-popover');
-        if (!this.button || !this.popover) return;
+        // Defensive guard, shouldn't fire in practice — SocialPanel.js always
+        // builds this markup before constructing this class.
+        if (!document.getElementById('messages-thread')) return;
 
         this.backBtn = document.getElementById('messages-back-btn');
         this.titleEl = document.getElementById('messages-popover-title');
@@ -33,67 +37,39 @@ export class MessagesPanel {
         this.thread = document.getElementById('messages-thread');
         this.input = document.getElementById('messages-input');
         this.sendBtn = document.getElementById('messages-send-btn');
-        this.unreadBadge = document.getElementById('messages-unread-badge');
+        this.unreadBadge = document.getElementById('social-unread-badge');
+        // Used only by _applyConversations() below to decide whether a live
+        // re-render is worth doing right now — SocialPanel.js owns actual
+        // visibility.
+        this._sectionEl = this.thread.closest('.social-tab-panel');
+        this._modalEl = document.getElementById('social-modal');
 
         this._conversations = []; // last fetched inbox, for cheap re-render on a poll tick
         this._activeUsername = null; // which conversation thread is open, if any
         this._lastThreadLength = -1; // message count last rendered into the open thread, see _pollActiveThread()
 
-        this._init();
-    }
-
-    async _init() {
-        const trust = await fetch('/api/trust').then(r => r.json()).catch(() => null);
-        if (!trust?.accounts) return; // stays hidden — accounts aren't enabled on this deployment
-
-        this._wireToggle();
-        this._wireOutsideClick();
         this._wireBack();
         this._wireSend();
-        document.addEventListener('peek:account', (e) => this._setLoggedIn(e.detail.loggedIn));
         document.addEventListener('peek:open-dm', (e) => this.openConversation(e.detail.username));
-
-        const me = await fetch('/api/auth/me').then(r => r.ok ? r.json() : null).catch(() => null);
-        this._setLoggedIn(!!me);
     }
 
-    _setLoggedIn(loggedIn) {
-        this.button.classList.toggle('hidden', !loggedIn);
-        if (!loggedIn) this.close();
-    }
-
-    open() {
-        this.popover.classList.remove('hidden');
-        this._showInbox();
-    }
-
-    close() {
-        this.popover.classList.add('hidden');
+    /** Called by SocialPanel.js whenever the Messages tab becomes the active
+     * section. Idempotent w.r.t. an already-open conversation (refreshes it
+     * rather than resetting to the inbox) — matters because this can also
+     * run right after FriendsPanel.js's "Message" action already opened a
+     * specific conversation via the peek:open-dm event (SocialPanel.js's own
+     * listener on that event calls open('messages'), which calls this too);
+     * without that guard whichever handler ran second would stomp the
+     * other's view. */
+    onShow() {
+        if (this._activeUsername) this._loadConversation(this._activeUsername);
+        else this._showInbox();
     }
 
     /** Entry point for FriendsPanel.js's "Message" row action (via the
      * `peek:open-dm` event) and for re-opening an already-active thread. */
     openConversation(username) {
-        this.popover.classList.remove('hidden');
         this._showConversation(username);
-    }
-
-    _wireToggle() {
-        this.button.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.popover.classList.contains('hidden') ? this.open() : this.close();
-        });
-    }
-
-    _wireOutsideClick() {
-        document.addEventListener('click', (e) => {
-            if (this.popover.classList.contains('hidden')) return;
-            if (this.popover.contains(e.target) || e.target === this.button) return;
-            this.close();
-        });
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !this.popover.classList.contains('hidden')) this.close();
-        });
     }
 
     _wireBack() {
@@ -143,6 +119,7 @@ export class MessagesPanel {
         this.inboxView.classList.add('hidden');
         this.conversationView.classList.remove('hidden');
         this.input.value = '';
+        this.input.placeholder = `Message ${username}`; // same convention as the room composer's "Message the room"
         await this._loadConversation(username);
         this.input.focus();
     }
@@ -214,7 +191,8 @@ export class MessagesPanel {
      * tick (setUnread()) — both need the same render + badge-total logic. */
     _applyConversations(conversations) {
         this._conversations = conversations;
-        if (!this.popover.classList.contains('hidden') && !this._activeUsername) this._renderInbox();
+        const visible = this._sectionEl?.classList.contains('active') && !this._modalEl?.classList.contains('hidden');
+        if (visible && !this._activeUsername) this._renderInbox();
         this._updateBadge();
     }
 

@@ -1,83 +1,42 @@
 // --- public/client/FriendsPanel.js ---
-// Accounts Phase 2 (friends) — lobby-only popover wiring /api/friends/* into
-// a real UI. Modeled directly on AccountPanel.js's popover shape (toggle,
-// outside-click/Escape close, no focus trap — same small-anchored-popover
-// exemption InvitePopover.js/AccountPanel.js already rely on).
-//
-// #friends-button starts hidden and only shows once BOTH are true: accounts
-// are enabled on this deployment, AND the viewer is actually logged in —
-// friends only makes sense for a real account identity, unlike the account
-// button itself, which shows once accounts merely exist. Login state comes
-// from AccountPanel's 'peek:account' CustomEvent (dispatched from its own
-// _renderState()) since there's no other cross-module signal for it on this
-// page; this file also checks /api/auth/me itself on init, matching
-// AccountPanel._init()'s own double-check shape with /api/trust.
+// Accounts Phase 2 (friends) sub-panel wiring /api/friends/* into a real UI.
+// Markup is built by SocialPanel.js's self-building modal (2026-09-08 polish
+// pass — this used to be its own lobby-only anchored popover; see that
+// file's header comment for why, and AccountPanel.js's for the matching
+// change there). SocialPanel.js gates construction of this class on
+// /api/trust + login state itself, so this file no longer re-checks either.
 //
 // Phase 3 (2026-09-07): online/offline dots on friends-list rows, fed by
-// lobby.js calling setOnline() on every presencePoll.js tick — see that
-// file and friendsRoutes.js's GET /api/friends/presence for the poll-based
-// (not always-on-socket) design this follows.
+// SocialPanel.js calling setOnline() on every presencePoll.js tick — see
+// that file and friendsRoutes.js's GET /api/friends/presence for the
+// poll-based (not always-on-socket) design this follows.
 export class FriendsPanel {
     constructor() {
-        this.button = document.getElementById('friends-button');
-        this.popover = document.getElementById('friends-popover');
-        if (!this.button || !this.popover) return;
+        // Defensive guard, shouldn't fire in practice — SocialPanel.js always
+        // builds this markup before constructing this class.
+        if (!document.getElementById('friends-list')) return;
 
         // Accounts Phase 3: cached separately from a full _refresh() re-fetch
         // so a presencePoll.js tick (every ~30s) can update online dots via a
         // cheap re-render of already-fetched data, without hitting
         // GET /api/friends again — that heavier fetch only happens when the
-        // popover is actually opened.
+        // Friends tab is actually shown (onShow()).
         this._lastFriends = null;
         this._onlineUsernames = new Set();
+        // Used only by setOnline() below to decide whether a live re-render
+        // is worth doing right now — SocialPanel.js owns actual visibility.
+        this._sectionEl = document.getElementById('friends-list')?.closest('.social-tab-panel');
+        this._modalEl = document.getElementById('social-modal');
 
-        this._init();
-    }
-
-    async _init() {
-        const trust = await fetch('/api/trust').then(r => r.json()).catch(() => null);
-        if (!trust?.accounts) return; // stays hidden — accounts aren't enabled on this deployment
-
-        this._wireToggle();
-        this._wireOutsideClick();
         this._wireAddFriend();
-        document.addEventListener('peek:account', (e) => this._setLoggedIn(e.detail.loggedIn));
-
-        const me = await fetch('/api/auth/me').then(r => r.ok ? r.json() : null).catch(() => null);
-        this._setLoggedIn(!!me);
     }
 
-    _setLoggedIn(loggedIn) {
-        this.button.classList.toggle('hidden', !loggedIn);
-        if (!loggedIn) this.close();
-    }
-
-    open() {
-        this.popover.classList.remove('hidden');
+    /** Called by SocialPanel.js whenever the Friends tab becomes the active
+     * section — same "never trust stale local state, refetch on show" rule
+     * this popover's own open() already followed before this refactor. */
+    onShow() {
         document.getElementById('friends-action-error')?.classList.add('hidden');
         this._refresh();
-    }
-
-    close() {
-        this.popover.classList.add('hidden');
-    }
-
-    _wireToggle() {
-        this.button.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.popover.classList.contains('hidden') ? this.open() : this.close();
-        });
-    }
-
-    _wireOutsideClick() {
-        document.addEventListener('click', (e) => {
-            if (this.popover.classList.contains('hidden')) return;
-            if (this.popover.contains(e.target) || e.target === this.button) return;
-            this.close();
-        });
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !this.popover.classList.contains('hidden')) this.close();
-        });
     }
 
     _wireAddFriend() {
@@ -129,7 +88,8 @@ export class FriendsPanel {
      */
     setOnline(presence) {
         this._onlineUsernames = new Set(presence.filter(p => p.online).map(p => p.username));
-        if (this._lastFriends && !this.popover.classList.contains('hidden')) this._renderFriendsList();
+        const visible = this._sectionEl?.classList.contains('active') && !this._modalEl?.classList.contains('hidden');
+        if (this._lastFriends && visible) this._renderFriendsList();
     }
 
     _renderFriendsList() {
@@ -137,10 +97,11 @@ export class FriendsPanel {
             label: username,
             online: this._onlineUsernames.has(username),
             actions: [
-                // No direct reference to MessagesPanel.js — both popovers are
-                // independently constructed by lobby.js, so a CustomEvent is
-                // the same cross-module signal shape 'peek:account' already
-                // uses, just going the other direction (Friends -> Messages).
+                // No direct reference to MessagesPanel.js — both sub-panels
+                // are independently constructed by SocialPanel.js, so a
+                // CustomEvent is the same cross-module signal shape
+                // 'peek:account' already uses, just going the other
+                // direction (Friends -> Messages).
                 { text: 'Message', tip: `Message ${username}`, onClick: () => document.dispatchEvent(new CustomEvent('peek:open-dm', { detail: { username } })) },
                 { text: 'Remove', tip: `Remove ${username}`, onClick: () => this._remove(requestId) },
                 { text: 'Block', tip: `Block ${username}`, onClick: () => this._block(username) },
@@ -148,7 +109,7 @@ export class FriendsPanel {
         })), 'No friends yet.');
     }
 
-    /** Rebuilds all four lists from a fresh server fetch every time the popover opens — same
+    /** Rebuilds all four lists from a fresh server fetch every time the Friends tab is shown — same
      * "never trust stale local state" precedent as QuickRoomSettings.js's banned-users section. */
     async _refresh() {
         const res = await fetch('/api/friends');

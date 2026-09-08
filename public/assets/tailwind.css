@@ -2642,7 +2642,10 @@ body.light .panel-tab:hover {
   text-align: center;
 }
 
-#messages-popover .quick-settings-header {
+/* Was #messages-popover .quick-settings-header — that id no longer exists
+   now that MessagesPanel.js's markup lives inside SocialPanel.js's modal
+   (2026-09-08 polish pass), so this got its own class instead. */
+.messages-section-header {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -2688,15 +2691,6 @@ body.light .panel-tab:hover {
   align-self: flex-end;
 }
 
-.messages-composer {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.messages-composer .settings-text-input {
-  flex: 1;
-}
-
 .messages-inbox-name-group {
   display: flex;
   flex-direction: column;
@@ -2724,6 +2718,137 @@ body.light .panel-tab:hover {
   font-weight: 700;
   line-height: 1.125rem;
   text-align: center;
+}
+
+/* ===== Social panel: Friends & Messages (SocialPanel.js, 2026-09-08 round 2) =====
+   Deliberately NOT a clone of #settings-modal's full-bleed overlay + left-nav
+   sidebar (round 1 was, and read as "Settings but slightly different") — a
+   right-anchored, partial-width drawer with a lighter backdrop instead, which
+   also leaves more of the room visible while messaging. Only .settings-close-btn
+   (a generic icon-button treatment) and .settings-segmented (the same segmented
+   control the screen/cam quality pickers already use) are borrowed from Settings'
+   own classes — neither pulls in any of the nav-sidebar/sticky-header chrome. */
+.social-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.social-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 24rem;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg3);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+
+.social-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.125rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.social-header-title {
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--t1);
+}
+
+.social-tabs {
+  flex: none;
+  margin: 1rem 1.25rem 0;
+}
+
+.social-tabs .settings-segmented {
+  width: 100%;
+}
+
+.social-tabs .settings-segmented button {
+  flex: 1;
+  justify-content: center;
+}
+
+.social-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.125rem 1.25rem 1.5rem;
+}
+
+.social-tab-panel {
+  display: none;
+}
+
+.social-tab-panel.active {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* The Messages tab specifically needs to fill the drawer's height (thread
+   scrolls, composer stays pinned at the bottom) — Friends' tab is a plain
+   top-to-bottom list that's fine using the .social-body's own scroll. */
+/* :not(.hidden) — same cascade-layers gotcha as .quick-status-option above:
+   without it, this unconditional display:flex would beat the layered .hidden
+   utility and both views would render at once instead of exactly one. */
+.social-tab-panel[data-social-panel="messages"] #messages-inbox-view:not(.hidden),
+.social-tab-panel[data-social-panel="messages"] #messages-conversation-view:not(.hidden) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.social-tab-panel[data-social-panel="messages"] .messages-thread {
+  flex: 1;
+  max-height: none;
+}
+
+@media (max-width: 767px) {
+  .social-drawer {
+    width: 100%;
+  }
+}
+
+/* ===== Account identity rows (AccountPanel.js, 2026-09-08 round 2) =====
+   Room: two rows added to TopbarIdentity.js's existing #topbar-identity-menu
+   dropdown. Lobby: a small self-built identity button (.lobby-account-btn)
+   since no equivalent element exists there — its own logged-in dropdown
+   reuses .quick-status-menu/.quick-status-option unchanged. */
+.quick-status-menu-account-label {
+  padding: 0.5rem 0.75rem 0.25rem;
+  font-size: 0.75rem;
+  color: var(--t3);
+}
+
+.lobby-account-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  color: var(--t2);
+  font-size: 0.8438rem;
+  font-weight: 600;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.lobby-account-btn:hover {
+  background: var(--bg3);
+  color: var(--t1);
 }
 
 /* ===== Chat hidden state ===== */
@@ -4292,6 +4417,15 @@ body,
 
 .quick-status-option:hover {
   background: var(--bg4);
+}
+
+/* Cascade-layers gotcha (see CLAUDE.md's standing rule): .quick-status-option
+   is unlayered and sets display:flex, which beats the layered .hidden
+   utility's display:none on its own — same fix already applied to
+   .quick-status-menu/.quick-settings-popover above/below. Needed for
+   #topbar-identity-signin (AccountPanel.js), which combines both classes. */
+.quick-status-option.hidden {
+  display: none;
 }
 
 .quick-status-dot {

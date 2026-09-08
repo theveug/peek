@@ -9,10 +9,7 @@ import { SettingsPanel } from '/client/SettingsPanel.js';
 import { initTooltips } from '/client/Tooltip.js';
 import { RoomRail } from '/client/RoomRail.js';
 import { AccountPanel } from '/client/AccountPanel.js';
-import { FriendsPanel } from '/client/FriendsPanel.js';
-import { MessagesPanel } from '/client/MessagesPanel.js';
-import { startPresencePolling } from '/client/presencePoll.js';
-import { startMessagesPolling } from '/client/messagesPoll.js';
+import { SocialPanel } from '/client/SocialPanel.js';
 
 initTheme();
 initTooltips();
@@ -21,37 +18,15 @@ const settingsPanel = new SettingsPanel();
 document.getElementById('settings-button').addEventListener('click', () => settingsPanel.open());
 
 const roomRail = new RoomRail({ currentRoomCode: null, navigate: (url) => { window.location.href = url; } });
-const accountPanel = new AccountPanel();
-const friendsPanel = new FriendsPanel();
-const messagesPanel = new MessagesPanel();
 
-// Accounts Phase 3/4 (2026-09-07): presence + messages polling only run
-// while logged in — 'peek:account' is the same event FriendsPanel.js/
-// MessagesPanel.js themselves listen to for showing/hiding their own
-// buttons, dispatched by AccountPanel._renderState() on every login/logout/
-// session-check. Both pollers must actually stop on logout, not just go
-// unused: presence's poll call is this account's own heartbeat server-side
-// (see friendsRoutes.js's GET /api/friends/presence), so a poller left
-// running against a logged-out session would 401 forever rather than
-// harmlessly idling.
-let stopPresencePolling = null;
-let stopMessagesPolling = null;
-document.addEventListener('peek:account', (e) => {
-    if (e.detail.loggedIn) {
-        // onSessionExpired (2026-09-07 real-usage audit fix): a poller 401
-        // means this tab's session was invalidated elsewhere (e.g. logged out
-        // in another tab) — forceLoggedOut() resets this tab's account UI and
-        // dispatches 'peek:account' itself, which re-enters this handler on
-        // the else branch below and stops both pollers.
-        if (!stopPresencePolling) stopPresencePolling = startPresencePolling((presence) => friendsPanel.setOnline(presence), () => accountPanel.forceLoggedOut());
-        if (!stopMessagesPolling) stopMessagesPolling = startMessagesPolling((conversations) => messagesPanel.setConversations(conversations), () => accountPanel.forceLoggedOut());
-    } else {
-        stopPresencePolling?.();
-        stopPresencePolling = null;
-        stopMessagesPolling?.();
-        stopMessagesPolling = null;
-    }
-});
+// Accounts polish pass (2026-09-08, round 2): AccountPanel.js (sign in/
+// register/out, now living in the identity area rather than inside the
+// Friends/Messages drawer) and SocialPanel.js (that drawer) are independently
+// constructed and communicate only via CustomEvents (peek:account,
+// peek:open-dm, peek:force-logout) — see SocialPanel.js's header comment.
+// Neither needs the other's instance, so this page just constructs both.
+const accountPanel = new AccountPanel();
+const socialPanel = new SocialPanel();
 
 if (new URLSearchParams(location.search).get('new')) {
     document.getElementById('create-name')?.focus();

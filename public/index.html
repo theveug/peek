@@ -201,6 +201,23 @@
                         <button type="button" id="topbar-identity-settings" class="quick-status-option">
                             <span class="material-symbols-rounded" style="font-size:1rem;">settings</span>Settings
                         </button>
+
+                        <!-- Account rows: hidden until AccountPanel.js confirms this deployment
+                             has accounts enabled, then it toggles exactly one of these two based
+                             on login state. See CLAUDE.md's "Accounts, identity-area redesign"
+                             entry — deliberately here rather than a tab inside the Friends/
+                             Messages drawer (SocialPanel.js), since a bare sign-out action isn't
+                             a section on its own. -->
+                        <div class="quick-status-menu-divider"></div>
+                        <button type="button" id="topbar-identity-signin" class="quick-status-option hidden">
+                            <span class="material-symbols-rounded" style="font-size:1rem;">login</span>Sign in / Register
+                        </button>
+                        <div id="topbar-identity-account-info" class="hidden">
+                            <div class="quick-status-menu-account-label" id="topbar-identity-account-label"></div>
+                            <button type="button" id="topbar-identity-signout" class="quick-status-option">
+                                <span class="material-symbols-rounded" style="font-size:1rem;">logout</span>Sign out
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

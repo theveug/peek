@@ -39,104 +39,12 @@
                     <button id="settings-button" class="lobby-icon-btn" data-tip="Settings">
                         <span class="material-symbols-rounded">settings</span>
                     </button>
-                    <div class="flex items-center relative">
-                        <button id="account-button" class="lobby-icon-btn hidden" data-tip="Account">
-                            <span class="material-symbols-rounded">person</span>
-                        </button>
-                        <div id="account-popover" class="quick-settings-popover topbar-popover hidden">
-                            <div class="quick-settings-header" id="account-popover-title">Log in</div>
-
-                            <div id="account-form-view">
-                                <div class="settings-field">
-                                    <div class="settings-label">Username</div>
-                                    <input type="text" id="account-username" class="settings-text-input"
-                                        autocomplete="username" />
-                                </div>
-                                <div class="settings-field">
-                                    <div class="settings-label">Password</div>
-                                    <input type="password" id="account-password" class="settings-text-input"
-                                        autocomplete="current-password" />
-                                </div>
-                                <div class="settings-field hidden" id="account-confirm-field">
-                                    <div class="settings-label">Confirm password</div>
-                                    <input type="password" id="account-confirm-password" class="settings-text-input"
-                                        autocomplete="new-password" />
-                                </div>
-                                <div id="account-error" class="lobby-error hidden"></div>
-                                <button type="button" id="account-submit" class="lobby-btn-primary"
-                                    style="width:100%;">Log in</button>
-                                <p class="settings-section-subcopy" style="margin:0.75rem 0 0;text-align:center;">
-                                    <a href="#" id="account-mode-toggle">Need an account? Register</a>
-                                </p>
-                            </div>
-
-                            <div id="account-logged-in-view" class="hidden">
-                                <p id="account-logged-in-as" class="settings-section-subcopy"
-                                    style="margin:0 0 1rem;"></p>
-                                <button type="button" id="account-logout" class="lobby-btn-secondary"
-                                    style="width:100%;">Log out</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center relative">
-                        <button id="friends-button" class="lobby-icon-btn hidden" data-tip="Friends">
-                            <span class="material-symbols-rounded">group</span>
-                        </button>
-                        <div id="friends-popover" class="quick-settings-popover topbar-popover hidden">
-                            <div class="quick-settings-header">Friends</div>
-                            <div id="friends-action-error" class="lobby-error hidden"></div>
-
-                            <div class="settings-field">
-                                <div class="settings-label">Add friend</div>
-                                <input type="text" id="friends-add-username" class="settings-text-input"
-                                    placeholder="Username" style="max-width:none;" />
-                                <div id="friends-add-error" class="lobby-error hidden"></div>
-                                <button type="button" id="friends-add-submit" class="lobby-btn-primary"
-                                    style="width:100%;margin-top:0.5rem;">Send request</button>
-                            </div>
-
-                            <div class="settings-label" style="margin-top:1rem;">Requests</div>
-                            <div id="friends-incoming-list" class="quick-banned-list"></div>
-
-                            <div class="settings-label" style="margin-top:1rem;">Friends</div>
-                            <div id="friends-list" class="quick-banned-list"></div>
-
-                            <div class="settings-label" style="margin-top:1rem;">Sent</div>
-                            <div id="friends-outgoing-list" class="quick-banned-list"></div>
-
-                            <div class="settings-label" style="margin-top:1rem;">Blocked</div>
-                            <div id="friends-blocked-list" class="quick-banned-list"></div>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center relative">
-                        <button id="messages-button" class="lobby-icon-btn hidden" data-tip="Messages">
-                            <span class="material-symbols-rounded">mail</span>
-                            <span id="messages-unread-badge" class="hidden messages-unread-badge"></span>
-                        </button>
-                        <div id="messages-popover" class="quick-settings-popover topbar-popover hidden">
-                            <div class="quick-settings-header">
-                                <button type="button" id="messages-back-btn" class="hidden messages-back-btn" data-tip="Back to conversations">
-                                    <span class="material-symbols-rounded">arrow_back</span>
-                                </button>
-                                <span id="messages-popover-title">Messages</span>
-                            </div>
-
-                            <div id="messages-inbox-view">
-                                <div id="messages-inbox-list" class="quick-banned-list"></div>
-                            </div>
-
-                            <div id="messages-conversation-view" class="hidden">
-                                <div id="messages-thread" class="messages-thread"></div>
-                                <div class="messages-composer">
-                                    <input type="text" id="messages-input" class="settings-text-input"
-                                        placeholder="Type a message..." maxlength="4000" style="max-width:none;" />
-                                    <button type="button" id="messages-send-btn" class="lobby-btn-primary">Send</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- Account/Friends/Messages: built entirely by SocialPanel.js
+                         (public/client/SocialPanel.js) and self-inserted here, same
+                         no-markup-duplication precedent as SettingsPanel.js's
+                         _buildModal()/RoomRail.js — this is what lets the same modal
+                         also be reachable from the in-room page (index.html has no
+                         equivalent markup either). -->
                 </div>
 
                 <div class="lobby-hero">

@@ -15,6 +15,8 @@ import { getOwnerToken, setOwnerToken } from './ownerTokens.js';
 import { getMediaState, saveMediaState, clearMediaState } from './mediaStateStore.js';
 import { playSound } from './SoundPlayer.js';
 import { RoomRail } from './RoomRail.js';
+import { AccountPanel } from './AccountPanel.js';
+import { SocialPanel } from './SocialPanel.js';
 import { updateSavedRoomPassword } from './savedRooms.js';
 import { isModifierCode, comboFromEvent, isComboHeld } from './keybindUtils.js';
 import { CallRecorder } from './CallRecorder.js';
@@ -653,6 +655,15 @@ document.getElementById('leave-room-button').addEventListener('click', () => {
 });
 
 new RoomRail({ currentRoomCode: sessionId, navigate: leaveSession });
+
+// Accounts polish pass (2026-09-08): Friends/DMs are now reachable from
+// inside an active room too, not just the lobby. Round 2 moved sign-in/
+// register/out into the room's existing #topbar-identity-menu dropdown
+// (AccountPanel.js) rather than a tab inside the Friends/Messages drawer
+// (SocialPanel.js) — the two are independently constructed and talk only
+// via CustomEvents, see SocialPanel.js's header comment.
+new AccountPanel();
+new SocialPanel();
 
 // Manual mic toggle — the mic button's click and the Toggle Mute keybind
 // (below) both call this. Mirrors toggleDeafen()'s click+keybind sharing.
