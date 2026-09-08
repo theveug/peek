@@ -17,7 +17,7 @@ import { playSound } from './SoundPlayer.js';
 import { RoomRail } from './RoomRail.js';
 import { AccountPanel } from './AccountPanel.js';
 import { SocialPanel } from './SocialPanel.js';
-import { updateSavedRoomPassword } from './savedRooms.js';
+import { updateSavedRoomPassword, isRoomSaved, saveRoom, removeRoom } from './savedRooms.js';
 import { isModifierCode, comboFromEvent, isComboHeld } from './keybindUtils.js';
 import { CallRecorder } from './CallRecorder.js';
 
@@ -657,6 +657,29 @@ document.getElementById('leave-room-button').addEventListener('click', () => {
 });
 
 new RoomRail({ currentRoomCode: sessionId, navigate: leaveSession });
+
+// Mirrors the lobby's "Save this room" checkbox for someone already in a
+// call — label defaults to the room's own name (falling back to its code,
+// same fallback lobby.js's create/join forms use) since there's no form
+// field here to type a custom one into; the room-rail's saved-room entries
+// have no rename affordance either, so this matches existing capability.
+const saveRoomBtn = document.getElementById('save-room-button');
+const saveRoomIcon = document.getElementById('save-room-icon');
+function refreshSaveRoomButton() {
+    const saved = isRoomSaved(sessionId);
+    saveRoomBtn.classList.toggle('saved', saved);
+    saveRoomIcon.classList.toggle('icon-filled', saved);
+    saveRoomBtn.dataset.tip = saved ? 'Saved — click to remove' : 'Save this room';
+}
+saveRoomBtn.addEventListener('click', () => {
+    if (isRoomSaved(sessionId)) removeRoom(sessionId);
+    else saveRoom({ code: sessionId, label: ui.roomName || sessionId, password: roomPassword });
+});
+// RoomRail.js's remove ("x") button can also drop this room from the saved
+// list while it's the one currently open — same event keeps this button in
+// sync with that, not just its own clicks.
+window.addEventListener('peek:saved-rooms-changed', refreshSaveRoomButton);
+refreshSaveRoomButton();
 
 // Accounts polish pass (2026-09-08): Friends/DMs are now reachable from
 // inside an active room too, not just the lobby. Round 2 moved sign-in/

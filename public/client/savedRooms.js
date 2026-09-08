@@ -12,6 +12,15 @@ export function getSavedRooms() {
 
 function setSavedRooms(rooms) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms));
+    // Single write chokepoint, so every mutation (save/remove/password-update)
+    // notifies listeners the same way — RoomRail.js re-renders on this rather
+    // than needing every external caller (e.g. App.js's in-room save-room
+    // button) to know to call it directly.
+    window.dispatchEvent(new CustomEvent('peek:saved-rooms-changed'));
+}
+
+export function isRoomSaved(code) {
+    return getSavedRooms().some(r => r.code === code);
 }
 
 export function saveRoom({ code, label, password }) {

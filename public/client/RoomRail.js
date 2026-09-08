@@ -41,6 +41,11 @@ export class RoomRail {
         this.mobileToggle = document.getElementById('room-rail-mobile-toggle') || this._buildMobileToggle();
 
         this._wireOutsideClick();
+        // Covers both this component's own saveRoom()/removeRoom() calls
+        // below AND any external one (e.g. App.js's in-room "save this room"
+        // star button) — single re-render chokepoint instead of every mutation
+        // site needing to remember to call render() itself.
+        window.addEventListener('peek:saved-rooms-changed', () => this.render());
         this.render();
     }
 
@@ -99,18 +104,48 @@ export class RoomRail {
     }
 
     _handleHome() {
-        this._closeMobileRail();
-        if (location.pathname === '/') return;
-        sessionStorage.removeItem('roomPassword');
-        sessionStorage.removeItem('roomTopic');
-        this.navigate('/');
+        if (location.pathname === '/') { this._closeMobileRail(); return; }
+        const go = () => {
+            this._closeMobileRail();
+            sessionStorage.removeItem('roomPassword');
+            sessionStorage.removeItem('roomTopic');
+            this.navigate('/');
+        };
+        this._confirmLeave(this.rail.querySelector('#room-rail-home'), 'go home', go);
     }
 
     _handleAdd() {
-        this._closeMobileRail();
-        sessionStorage.removeItem('roomPassword');
-        sessionStorage.removeItem('roomTopic');
-        this.navigate('/?new=1');
+        const go = () => {
+            this._closeMobileRail();
+            sessionStorage.removeItem('roomPassword');
+            sessionStorage.removeItem('roomTopic');
+            this.navigate('/?new=1');
+        };
+        this._confirmLeave(this.rail.querySelector('#room-rail-add'), 'create a new room', go);
+    }
+
+    // Only asks when there's actually a call to leave (this.currentRoomCode
+    // set, i.e. mounted in-room — the lobby's own RoomRail instance has no
+    // active call, so every action there fires immediately). Reuses the same
+    // anchored .room-rail-popover every other room-rail action already shows,
+    // rather than a native confirm() dialog, to match this app's standing
+    // no-native-dialogs convention (see SettingsPanel.js's "Clear all local
+    // data" comment).
+    _confirmLeave(anchorEl, actionLabel, onConfirm) {
+        if (!this.currentRoomCode) { onConfirm(); return; }
+        this._showPopover(anchorEl, `
+            <div class="room-rail-popover-title">Leave this room?</div>
+            <div class="room-rail-popover-status">You're still in a call. Leaving it to ${escapeHtml(actionLabel)} will disconnect you.</div>
+            <div class="room-rail-popover-row">
+                <button type="button" class="lobby-btn-secondary room-rail-popover-cancel">Cancel</button>
+                <button type="button" class="lobby-btn-secondary room-rail-popover-confirm">Leave</button>
+            </div>
+        `);
+        this.popover.querySelector('.room-rail-popover-cancel')?.addEventListener('click', () => this._closePopover());
+        this.popover.querySelector('.room-rail-popover-confirm')?.addEventListener('click', () => {
+            this._closePopover();
+            onConfirm();
+        });
     }
 
     render() {
@@ -144,8 +179,7 @@ export class RoomRail {
             removeBtn.innerHTML = '<span class="material-symbols-rounded">close</span>';
             removeBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                removeRoom(room.code);
-                this.render();
+                removeRoom(room.code); // re-renders via the 'peek:saved-rooms-changed' listener above
             });
 
             item.appendChild(btn);
@@ -190,6 +224,10 @@ export class RoomRail {
 
     async _handleRoomClick(room, anchorBtn) {
         if (room.code === this.currentRoomCode) return;
+        this._confirmLeave(anchorBtn, `join "${room.label}"`, () => this._startJoin(room, anchorBtn));
+    }
+
+    async _startJoin(room, anchorBtn) {
         this._showPopover(anchorBtn, `
             <div class="room-rail-popover-title">${escapeHtml(room.label)}</div>
             <div class="room-rail-popover-status">Joining…</div>

@@ -5125,8 +5125,13 @@ body,
   line-height: 1;
 }
 
+/* inset, not a bare box-shadow ring — an outer ring bleeds past the
+   button's own 3rem circle (reading as bigger than the plain .room-rail-btn
+   Home button) and gets clipped by .room-rail-list's overflow-y:auto, which
+   per the CSS overflow spec also computes overflow-x to auto/clipping since
+   only one axis was set explicitly. */
 .room-rail-item.current .room-rail-avatar-btn {
-  box-shadow: 0 0 0 2px var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .room-rail-popover {
@@ -5415,6 +5420,18 @@ body,
 .topbar-icon-btn:hover {
   background: var(--bg3);
   color: var(--t1);
+}
+
+/* Filled-star glyph swap is handled by fonts.css's existing .icon-filled
+   (the font's real FILL variable axis) — this just adds the accent color on
+   top, same "filled + colored" combo already used for other toggled icons. */
+.topbar-save-btn.saved {
+  color: var(--accent);
+}
+
+.topbar-save-btn.saved:hover {
+  color: var(--accent);
+  background: var(--accentSoft);
 }
 
 /* The whole avatar+name area is the single status/settings dropdown trigger
