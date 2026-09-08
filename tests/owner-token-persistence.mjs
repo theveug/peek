@@ -92,9 +92,9 @@ async function main() {
         // a client-side crown icon — confirm a kick actually works post-reload.
         const otherCard = ownerPage.locator('.participant-card:not([data-self])').first();
         await otherCard.hover();
-        await otherCard.locator('.participant-mod-btn').click();
-        await ownerPage.waitForSelector('.participant-mod-popover:not(.hidden)', { timeout: 3000 });
-        const kickBtn = ownerPage.locator('.participant-mod-popover:not(.hidden) button:has-text("Kick from room")');
+        await otherCard.locator('.participant-menu-btn').click();
+        await ownerPage.waitForSelector('.participant-menu-popover:not(.hidden)', { timeout: 3000 });
+        const kickBtn = ownerPage.locator('.participant-menu-popover:not(.hidden) button:has-text("Kick from room")');
         await kickBtn.click();
         await otherPage.waitForURL(/[?&]kicked=1/, { timeout: 5000 });
         console.log('STEP 2 - reclaimed ownership carries real kick power: PASS');

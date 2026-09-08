@@ -2182,12 +2182,14 @@ body.light .panel-tab:hover {
   min-width: 0.875rem;
 }
 
-/* Per-peer action buttons (volume/block/mod kebab) collapse behind a hover
-   reveal so each member row stays one icon tall — only the passive status
-   icons (signal/mic) are always visible. The :has() clauses keep the cluster
-   (and the popover anchored inside it) alive while a popover is open, since
-   the popover floats below the card and the pointer leaves the card's :hover
-   on the way down to it. */
+/* The consolidated per-peer actions kebab (volume/block/add-friend/noise-
+   suppression/moderator, see UIController._buildParticipantMenu()) collapses
+   behind a hover reveal so each member row stays one icon tall — only the
+   passive status icons (signal/mic) are always visible. Reachable via the
+   kebab or a right-click anywhere on the card (see the card's contextmenu
+   listener). The :has() clause keeps the cluster (and the popover anchored
+   inside it) alive while the popover is open, since the popover floats below
+   the card and the pointer leaves the card's :hover on the way down to it. */
 .participant-actions {
   display: none;
   align-items: center;
@@ -2196,8 +2198,7 @@ body.light .panel-tab:hover {
 
 .participant-card:hover .participant-actions,
 .participant-card:focus-within .participant-actions,
-.participant-actions:has(.participant-mod-popover:not(.hidden)),
-.participant-actions:has(.participant-volume-popover:not(.hidden)) {
+.participant-actions:has(.participant-menu-popover:not(.hidden)) {
   display: flex;
 }
 
@@ -2223,9 +2224,7 @@ body.light .panel-tab:hover {
    stacking alongside it — keeps the width jump small so the name doesn't get
    crushed. Conditions mirror the reveal rules above exactly. */
 .participant-card:hover .participant-actions ~ .participant-passive-icons,
-.participant-right-col:has(.participant-mod-popover:not(.hidden))
-  .participant-passive-icons,
-.participant-right-col:has(.participant-volume-popover:not(.hidden))
+.participant-right-col:has(.participant-menu-popover:not(.hidden))
   .participant-passive-icons {
   display: none;
 }
@@ -2256,11 +2255,11 @@ body.light .panel-tab:hover {
   padding: 0.0625rem;
 }
 
-.participant-mod-menu {
+.participant-menu {
   align-items: center;
 }
 
-.participant-mod-btn {
+.participant-menu-btn {
   width: 1.375rem;
   height: 1.375rem;
   border: none;
@@ -2273,34 +2272,46 @@ body.light .panel-tab:hover {
   justify-content: center;
 }
 
-.participant-mod-btn:hover {
+.participant-menu-btn:hover {
   background: var(--bg4);
   color: var(--t1);
 }
 
-.participant-mod-btn .material-symbols-rounded {
+.participant-menu-btn .material-symbols-rounded {
   font-size: 1rem;
   line-height: 1;
 }
 
-.participant-mod-popover {
+.participant-menu-popover {
   position: absolute;
   top: calc(100% + 0.25rem);
   right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 0.25rem;
+  padding: 0.375rem;
   box-shadow: var(--shadow-md);
   z-index: 70;
-  min-width: 9.375rem;
+  min-width: 11rem;
 }
 
-.participant-mod-popover.hidden {
+.participant-menu-popover.hidden {
   display: none;
 }
 
-.participant-mod-popover button {
+/* One shared row style for every entry in the consolidated menu — the volume
+   slider, block, add-friend, noise-suppression override, and every moderator
+   action all render as one of these (a <div> for the volume row since it
+   isn't itself clickable, a <button> for everything else). Icon + label
+   children (see participant-menu-row-label below) lay out side by side for
+   rows that have both; plain-text moderator items just show the one child. */
+.participant-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   width: 100%;
   text-align: left;
   padding: 0.5rem 0.625rem;
@@ -2313,8 +2324,25 @@ body.light .panel-tab:hover {
   cursor: pointer;
 }
 
-.participant-mod-popover button:hover {
+button.participant-menu-row:hover {
   background: var(--bg4);
+}
+
+.participant-menu-row .material-symbols-rounded {
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+  color: var(--t3);
+}
+
+.participant-menu-row-label {
+  flex: 1;
+}
+
+.participant-menu-divider {
+  height: 1px;
+  margin: 0.25rem 0.125rem;
+  background: var(--border);
 }
 
 .participant-mod-kick {
@@ -2381,77 +2409,12 @@ body.light .panel-tab:hover {
   color: var(--accentText);
 }
 
-.participant-volume-btn {
-  width: 1.375rem;
-  height: 1.375rem;
-  border: none;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--t3);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.participant-volume-btn:hover {
-  background: var(--bg4);
-  color: var(--t1);
-}
-
-.participant-volume-btn .material-symbols-rounded {
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.participant-block-btn {
-  width: 1.375rem;
-  height: 1.375rem;
-  border: none;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--t3);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.participant-block-btn:hover {
-  background: var(--bg4);
-  color: var(--t1);
-}
-
-.participant-block-btn .material-symbols-rounded {
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.participant-block-btn.is-blocked {
+/* Block/add-friend now render as .participant-menu-row entries inside the
+   consolidated popover (see the row styling above) — only their state-specific
+   colors stay here. */
+.participant-block-btn.is-blocked,
+.participant-block-btn.is-blocked .material-symbols-rounded {
   color: var(--red);
-}
-
-.participant-add-friend-btn {
-  width: 1.375rem;
-  height: 1.375rem;
-  border: none;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--t3);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.participant-add-friend-btn:hover {
-  background: var(--bg4);
-  color: var(--t1);
-}
-
-.participant-add-friend-btn .material-symbols-rounded {
-  font-size: 1rem;
-  line-height: 1;
 }
 
 .participant-card.is-blocked {
@@ -2466,27 +2429,7 @@ body.light .panel-tab:hover {
   background: color-mix(in oklch, var(--red) 16%, var(--card-hover));
 }
 
-.participant-volume-popover {
-  position: absolute;
-  top: calc(100% + 0.25rem);
-  right: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 0.5rem 0.625rem;
-  box-shadow: var(--shadow-md);
-  z-index: 70;
-  width: 10rem;
-}
-
-.participant-volume-popover.hidden {
-  display: none;
-}
-
-.participant-volume-popover input[type="range"] {
+.participant-volume-row input[type="range"] {
   flex: 1;
 }
 

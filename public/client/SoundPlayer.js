@@ -1,12 +1,18 @@
+// Guarded so this module can be imported by the repo's Node-based pure-logic
+// tests (several of which pull it in transitively via PeerManager.js) without
+// a real browser's Audio/document globals — playSound() already no-ops on a
+// missing sound, so `null` here is a correct, not just tolerated, fallback.
+const hasAudio = typeof Audio !== 'undefined';
+
 const Sounds = {
     volume: 1,
-    streamUp: new Audio('/assets/sfx/stream-up.mp3'),
-    streamDown: new Audio('/assets/sfx/stream-down.mp3'),
-    newMessage: new Audio('/assets/sfx/new-message.mp3'),
-    peerJoin: new Audio('/assets/sfx/peer-join.mp3'),
-    peerLeft: new Audio('/assets/sfx/peer-left.mp3'),
-    muted: new Audio('/assets/sfx/muted.mp3'),
-    unmuted: new Audio('/assets/sfx/unmuted.mp3'),
+    streamUp: hasAudio ? new Audio('/assets/sfx/stream-up.mp3') : null,
+    streamDown: hasAudio ? new Audio('/assets/sfx/stream-down.mp3') : null,
+    newMessage: hasAudio ? new Audio('/assets/sfx/new-message.mp3') : null,
+    peerJoin: hasAudio ? new Audio('/assets/sfx/peer-join.mp3') : null,
+    peerLeft: hasAudio ? new Audio('/assets/sfx/peer-left.mp3') : null,
+    muted: hasAudio ? new Audio('/assets/sfx/muted.mp3') : null,
+    unmuted: hasAudio ? new Audio('/assets/sfx/unmuted.mp3') : null,
 };
 
 let soundQueue = [];
@@ -29,7 +35,7 @@ export function setSharingWithAudio(active) {
 function unlockAudio() {
     if (audioUnlocked) return;
     Object.values(Sounds).forEach(s => {
-        if (s instanceof Audio) {
+        if (hasAudio && s instanceof Audio) {
             s.muted = true;
             s.play().then(() => {
                 s.pause();
@@ -43,9 +49,11 @@ function unlockAudio() {
     audioUnlocked = true;
 }
 
-['click', 'keydown', 'touchstart'].forEach(evt => {
-    document.addEventListener(evt, unlockAudio, { once: true });
-});
+if (typeof document !== 'undefined') {
+    ['click', 'keydown', 'touchstart'].forEach(evt => {
+        document.addEventListener(evt, unlockAudio, { once: true });
+    });
+}
 
 export function playSound(soundName) {
     const muteToggle = localStorage.getItem('muteSounds') === '1';

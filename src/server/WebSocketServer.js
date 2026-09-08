@@ -204,6 +204,7 @@ export function setupWebSocket(wss, iceConfig, manager, buildId, trust) {
                 case 'webcam-start':
                 case 'webcam-stop':
                 case 'mic-status':
+                case 'noise-suppression-status':
                 case 'deafen-status':
                 case 'hand-status':
                 case 'nickname-update':

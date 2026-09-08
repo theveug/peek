@@ -35,6 +35,8 @@ export class UIController {
         this.onWatchChange = null;
         this.onPipExit = null;
         this.onModeratorAction = null; // set by App.js — (action, peerId)
+        this.getPeerNoiseSuppressionOverride = null; // set by App.js — (peerId) => true|false|undefined
+        this.onPeerNoiseSuppressionOverride = null; // set by App.js — (peerId, enabled) => void
         this.creatorPeerId = null;
         this.moderatorPeerIds = new Set();
         this.focusedPeerId = null;
@@ -1364,14 +1366,18 @@ export class UIController {
             // keep their spot at the far right when the cluster appears.
             const actions = document.createElement('div');
             actions.className = 'participant-actions';
-            actions.appendChild(this._buildVolumeControl(peerId));
-            actions.appendChild(this._buildBlockControl(peerId));
-            actions.appendChild(this._buildAddFriendControl(peerId));
-            const modMenu = this._buildModeratorMenu(peerId);
-            const iAmModerator = !!this.selfPeerId && this.moderatorPeerIds.has(this.selfPeerId);
-            modMenu.style.display = iAmModerator ? 'flex' : 'none';
-            actions.appendChild(modMenu);
+            const menu = this._buildParticipantMenu(peerId);
+            actions.appendChild(menu);
             rightCol.appendChild(actions);
+
+            // Right-click anywhere on the card opens the exact same popover the
+            // kebab button opens — a faster path for mouse users, never the ONLY
+            // path (the always-visible kebab button covers keyboard/touch), so
+            // this is additive, not a replacement, for accessibility.
+            card.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                menu._openParticipantMenu?.();
+            });
         }
 
         // Passive status icons (signal/mic) live in one group so the CSS can
@@ -1416,6 +1422,18 @@ export class UIController {
         micIcon.innerHTML = this._micOnSvg();
         micIcon.style.display = 'none';
         passiveIcons.appendChild(micIcon);
+
+        // Noise-suppression badge — same "absent unless active" treatment as the
+        // screen/cam device icons above, driven by the peer's own broadcast
+        // 'noise-suppression-status' rather than a stream, see
+        // updateParticipantNoiseSuppressionBadge().
+        const nsIcon = document.createElement('span');
+        nsIcon.className = 'participant-ns-icon participant-device-icon material-symbols-rounded';
+        nsIcon.textContent = 'noise_control_off';
+        nsIcon.dataset.tip = 'Noise suppression on (their mic audio is being cleaned)';
+        nsIcon.style.display = 'none';
+        passiveIcons.appendChild(nsIcon);
+
         rightCol.appendChild(passiveIcons);
 
         card.appendChild(avatarWrap);
@@ -1431,106 +1449,60 @@ export class UIController {
     }
 
     /**
-     * Kebab button + tiny popover for moderator-only actions on another peer's card.
-     * Hidden by default — updateModeratorStatus() reveals it only when the local user
-     * is themselves a moderator. Enforcement is server-side regardless (see
-     * WebSocketServer.js); this is just the UI entry point.
+     * Consolidated per-peer actions menu — replaces the old separate
+     * hover-revealed volume slider / block button / add-friend button /
+     * moderator kebab with one popover. Reachable via a persistent kebab
+     * button (`.participant-menu-btn`, shown on every non-self card — no
+     * longer moderator-gated, only the moderator ROWS inside are) or a
+     * right-click anywhere on the card (wired in _createParticipantCard(),
+     * via the `_openParticipantMenu` hook exposed on the returned wrap).
+     * Both paths open the exact same popover element, so mouse users
+     * (right-click) and keyboard/touch users (the always-visible kebab
+     * button) get identical functionality.
      *
-     * Menu items are (re)built fresh every time the popover opens, not once at card
-     * creation — "Stop their stream" is available to any moderator (including against
-     * the room creator's own card), but "Kick"/"Make moderator"/"Remove moderator" are
-     * creator-only and the promote/demote label depends on the target's *current*
-     * moderator membership, both of which can change after the card already exists.
+     * Rows split into two groups:
+     *  - Built once, at card creation (volume, block, add-friend) — their
+     *    own update functions (_applyAudioVolume/setBlocked/
+     *    _refreshAddFriendButton) keep working unchanged since these stay
+     *    permanent DOM nodes, never rebuilt per-open.
+     *  - Rebuilt fresh every open, in `dynamicSection` (noise-suppression
+     *    override + moderator rows) — permission/state-dependent content
+     *    that can change after the card already exists. "Stop their
+     *    stream" is available to any moderator (including against the
+     *    room creator's own card); "Kick"/"Ban"/"Make moderator"/"Remove
+     *    moderator" are creator-only. Server-side enforcement regardless
+     *    (see WebSocketServer.js) — this is just the UI entry point.
      * @param {string} peerId
      * @returns {HTMLElement}
      */
-    _buildModeratorMenu(peerId) {
+    _buildParticipantMenu(peerId) {
         const wrap = document.createElement('div');
-        wrap.className = 'participant-mod-menu relative flex-shrink-0';
-        wrap.style.display = 'none';
+        wrap.className = 'participant-menu relative flex-shrink-0';
 
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'participant-mod-btn';
-        btn.dataset.tip = 'Moderator actions';
+        btn.className = 'participant-menu-btn';
+        btn.dataset.tip = 'Actions';
         btn.innerHTML = '<span class="material-symbols-rounded">more_vert</span>';
 
-        const menu = document.createElement('div');
-        menu.className = 'participant-mod-popover hidden';
-
-        const addMenuItem = (label, action, extraClass) => {
-            const item = document.createElement('button');
-            item.type = 'button';
-            if (extraClass) item.className = extraClass;
-            item.textContent = label;
-            item.addEventListener('click', (e) => {
-                e.stopPropagation();
-                menu.classList.add('hidden');
-                this.onModeratorAction?.(action, peerId);
-            });
-            menu.appendChild(item);
-        };
-
-        const renderMenuItems = () => {
-            menu.innerHTML = '';
-            addMenuItem('Stop their stream', 'stop-stream');
-
-            const iAmCreator = !!this.selfPeerId && this.selfPeerId === this.creatorPeerId;
-            if (iAmCreator) {
-                const isTargetMod = this.moderatorPeerIds.has(peerId);
-                addMenuItem(isTargetMod ? 'Remove moderator' : 'Make moderator', isTargetMod ? 'demote' : 'promote');
-                addMenuItem('Kick from room', 'kick', 'participant-mod-kick');
-                addMenuItem('Ban from room', 'ban', 'participant-mod-kick');
-            }
-        };
-
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            document.querySelectorAll('.participant-mod-popover').forEach(p => { if (p !== menu) p.classList.add('hidden'); });
-            const opening = menu.classList.contains('hidden');
-            if (opening) renderMenuItems();
-            menu.classList.toggle('hidden');
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!wrap.contains(e.target)) menu.classList.add('hidden');
-        });
-
-        wrap.appendChild(btn);
-        wrap.appendChild(menu);
-        return wrap;
-    }
-
-    /**
-     * Local playback volume for this one peer — everyone's own preference, so
-     * (unlike _buildModeratorMenu) this is never gated behind moderator status.
-     * @param {string} peerId
-     * @returns {HTMLElement}
-     */
-    _buildVolumeControl(peerId) {
-        const wrap = document.createElement('div');
-        wrap.className = 'participant-volume-menu relative flex-shrink-0';
-
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'participant-volume-btn';
-        btn.dataset.tip = 'Adjust their volume';
-        btn.innerHTML = '<span class="material-symbols-rounded">volume_up</span>';
-
         const popover = document.createElement('div');
-        popover.className = 'participant-volume-popover hidden';
+        popover.className = 'participant-menu-popover hidden';
 
+        // --- Volume row (built once; local-only preference, never gated) ---
+        const volumeRow = document.createElement('div');
+        volumeRow.className = 'participant-menu-row participant-volume-row';
+        const volumeIcon = document.createElement('span');
+        volumeIcon.className = 'material-symbols-rounded';
+        volumeIcon.textContent = 'volume_up';
         const slider = document.createElement('input');
         slider.type = 'range';
         slider.min = '0';
         slider.max = '1';
         slider.step = '0.05';
         slider.value = String(this.peerVolumes.get(peerId) ?? 1);
-
         const valueLabel = document.createElement('span');
         valueLabel.className = 'participant-volume-value';
         valueLabel.textContent = `${Math.round(slider.value * 100)}%`;
-
         slider.addEventListener('input', (e) => {
             e.stopPropagation();
             const volume = parseFloat(slider.value);
@@ -1538,72 +1510,36 @@ export class UIController {
             this.setPeerVolume(peerId, volume);
         });
         slider.addEventListener('click', (e) => e.stopPropagation());
+        volumeRow.appendChild(volumeIcon);
+        volumeRow.appendChild(slider);
+        volumeRow.appendChild(valueLabel);
 
-        popover.appendChild(slider);
-        popover.appendChild(valueLabel);
-
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            document.querySelectorAll('.participant-volume-popover').forEach(p => { if (p !== popover) p.classList.add('hidden'); });
-            popover.classList.toggle('hidden');
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!wrap.contains(e.target)) popover.classList.add('hidden');
-        });
-
-        wrap.appendChild(btn);
-        wrap.appendChild(popover);
-        return wrap;
-    }
-
-    /**
-     * Local-only block toggle — no popover needed, unlike volume/mod menus, since
-     * it's a single on/off action. Available to everyone (unlike the moderator
-     * menu), since blocking is a personal preference, not a permission.
-     * @param {string} peerId
-     * @returns {HTMLElement}
-     */
-    _buildBlockControl(peerId) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'participant-block-btn';
-        btn.dataset.tip = this.blockedPeerIds.has(peerId) ? 'Unblock' : 'Block';
-        btn.innerHTML = '<span class="material-symbols-rounded">block</span>';
-        if (this.blockedPeerIds.has(peerId)) btn.classList.add('is-blocked');
-
-        btn.addEventListener('click', (e) => {
+        // --- Block row (built once; personal preference, available to everyone) ---
+        const blockBtn = document.createElement('button');
+        blockBtn.type = 'button';
+        blockBtn.className = 'participant-menu-row participant-block-btn';
+        const blockedNow = this.blockedPeerIds.has(peerId);
+        blockBtn.dataset.tip = blockedNow ? 'Unblock' : 'Block';
+        blockBtn.innerHTML = `<span class="material-symbols-rounded">block</span><span class="participant-menu-row-label">${blockedNow ? 'Unblock' : 'Block'}</span>`;
+        if (blockedNow) blockBtn.classList.add('is-blocked');
+        blockBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.setBlocked(peerId, !this.blockedPeerIds.has(peerId));
+            popover.classList.add('hidden');
         });
 
-        return btn;
-    }
-
-    /**
-     * Accounts in-room bridge (opt-in — Settings -> Privacy & P2P's "Reveal my
-     * account to peers in this room", off by default): shows an "Add Friend"
-     * button on a peer's card once they reveal an account username, entirely
-     * independent of whether the LOCAL user has also opted in to revealing
-     * themselves — sending a request only needs the local user logged in,
-     * checked server-side on click. Available to everyone (like block), not
-     * gated behind moderator status.
-     * @param {string} peerId
-     * @returns {HTMLElement}
-     */
-    _buildAddFriendControl(peerId) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'participant-add-friend-btn';
-        btn.dataset.tip = 'Add friend';
-        btn.style.display = 'none'; // revealed by _refreshAddFriendButton() once a real reveal arrives
-        btn.innerHTML = '<span class="material-symbols-rounded">person_add</span>';
-
-        btn.addEventListener('click', async (e) => {
+        // --- Add-friend row (built once; hidden until a reveal arrives) ---
+        const addFriendBtn = document.createElement('button');
+        addFriendBtn.type = 'button';
+        addFriendBtn.className = 'participant-menu-row participant-add-friend-btn';
+        addFriendBtn.dataset.tip = 'Add friend';
+        addFriendBtn.style.display = 'none'; // revealed by _refreshAddFriendButton() once a real reveal arrives
+        addFriendBtn.innerHTML = '<span class="material-symbols-rounded">person_add</span><span class="participant-menu-row-label">Add friend</span>';
+        addFriendBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const username = this.peerAccountUsernames.get(peerId);
-            if (!username || btn.disabled) return;
-            btn.disabled = true;
+            if (!username || addFriendBtn.disabled) return;
+            addFriendBtn.disabled = true;
             try {
                 const res = await fetch('/api/friends/request', {
                     method: 'POST',
@@ -1615,11 +1551,100 @@ export class UIController {
             } catch {
                 this.showToast('Could not reach the server — try again');
             } finally {
-                btn.disabled = false;
+                addFriendBtn.disabled = false;
             }
+            popover.classList.add('hidden');
         });
 
-        return btn;
+        // --- Dynamic section: rebuilt fresh every open ---
+        const dynamicSection = document.createElement('div');
+        dynamicSection.className = 'participant-menu-dynamic';
+
+        const addMenuItem = (label, action, extraClass) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = extraClass ? `participant-menu-row ${extraClass}` : 'participant-menu-row';
+            item.textContent = label;
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                popover.classList.add('hidden');
+                this.onModeratorAction?.(action, peerId);
+            });
+            dynamicSection.appendChild(item);
+        };
+
+        const renderMenuItems = () => {
+            dynamicSection.innerHTML = '';
+
+            // Incoming noise suppression — per-peer override layered on top of
+            // the global "Noise suppression (incoming)" Settings default.
+            const override = this.getPeerNoiseSuppressionOverride?.(peerId);
+            const globalDefault = localStorage.getItem('noiseSuppressionIncoming') === '1';
+            const effective = override ?? globalDefault;
+            const nsItem = document.createElement('button');
+            nsItem.type = 'button';
+            nsItem.className = 'participant-menu-row';
+            nsItem.textContent = effective ? 'Turn off noise suppression for them' : 'Turn on noise suppression for them';
+            nsItem.dataset.tip = override === undefined
+                ? `Following the global default (currently ${globalDefault ? 'on' : 'off'})`
+                : 'Overridden just for this person';
+            nsItem.addEventListener('click', (e) => {
+                e.stopPropagation();
+                popover.classList.add('hidden');
+                this.onPeerNoiseSuppressionOverride?.(peerId, !effective);
+            });
+            dynamicSection.appendChild(nsItem);
+
+            // Moderator actions — unlike the rows above (available to everyone,
+            // since the kebab itself is no longer moderator-gated), these stay
+            // restricted to actual moderators, same boundary the old
+            // moderator-only kebab enforced by hiding the whole button. "Stop
+            // their stream" has no target restriction (a moderator can target
+            // the room creator's own card); kick/ban/promote/demote are
+            // creator-only. Enforcement is server-side regardless.
+            const iAmModerator = !!this.selfPeerId && this.moderatorPeerIds.has(this.selfPeerId);
+            if (iAmModerator) {
+                const divider = document.createElement('div');
+                divider.className = 'participant-menu-divider';
+                dynamicSection.appendChild(divider);
+
+                addMenuItem('Stop their stream', 'stop-stream');
+
+                const iAmCreator = this.selfPeerId === this.creatorPeerId;
+                if (iAmCreator) {
+                    const isTargetMod = this.moderatorPeerIds.has(peerId);
+                    addMenuItem(isTargetMod ? 'Remove moderator' : 'Make moderator', isTargetMod ? 'demote' : 'promote');
+                    addMenuItem('Kick from room', 'kick', 'participant-mod-kick');
+                    addMenuItem('Ban from room', 'ban', 'participant-mod-kick');
+                }
+            }
+        };
+
+        const openMenu = () => {
+            document.querySelectorAll('.participant-menu-popover').forEach(p => { if (p !== popover) p.classList.add('hidden'); });
+            const opening = popover.classList.contains('hidden');
+            if (opening) renderMenuItems();
+            popover.classList.toggle('hidden');
+        };
+
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openMenu();
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!wrap.contains(e.target)) popover.classList.add('hidden');
+        });
+
+        popover.appendChild(volumeRow);
+        popover.appendChild(blockBtn);
+        popover.appendChild(addFriendBtn);
+        popover.appendChild(dynamicSection);
+
+        wrap.appendChild(btn);
+        wrap.appendChild(popover);
+        wrap._openParticipantMenu = openMenu; // exposed for the card's contextmenu listener
+        return wrap;
     }
 
     /**
@@ -1649,6 +1674,22 @@ export class UIController {
         const username = this.peerAccountUsernames.get(peerId);
         btn.style.display = username ? '' : 'none';
         btn.dataset.tip = username ? `Add ${username} as a friend` : 'Add friend';
+    }
+
+    /**
+     * Receive-side apply path for PeerManager's 'noise-suppression-status'
+     * broadcast — toggles a peer's card badge showing whether THEIR own
+     * outgoing mic audio is currently being cleaned up. Same "absent unless
+     * active" treatment as the screen/cam device icons — the DOM element
+     * itself is the state, no separate Map needed.
+     * @param {string} peerId
+     * @param {boolean} enabled
+     * @returns {void}
+     */
+    updateParticipantNoiseSuppressionBadge(peerId, enabled) {
+        const card = document.getElementById(`participant-${peerId}`);
+        const icon = card?.querySelector('.participant-ns-icon');
+        if (icon) icon.style.display = enabled ? '' : 'none';
     }
 
     /**
@@ -1893,7 +1934,6 @@ export class UIController {
     updateModeratorStatus(creatorPeerId, moderatorPeerIds) {
         this.creatorPeerId = creatorPeerId;
         this.moderatorPeerIds = moderatorPeerIds instanceof Set ? moderatorPeerIds : new Set(moderatorPeerIds || []);
-        const iAmModerator = !!this.selfPeerId && this.moderatorPeerIds.has(this.selfPeerId);
         // Re-derives the topic banner's creator-only affordances (edit button,
         // visible-when-empty) now that creatorPeerId/selfPeerId are current.
         this.setTopic(this.roomTopic);
@@ -1906,14 +1946,14 @@ export class UIController {
                 crown.dataset.tip = peerId === this.creatorPeerId ? 'Room creator' : 'Moderator';
             }
 
-            const modMenu = card.querySelector('.participant-mod-menu');
-            if (modMenu) {
-                const showMenu = iAmModerator && peerId !== this.selfPeerId;
-                modMenu.style.display = showMenu ? 'flex' : 'none';
-                // Force the popover closed and stale — it rebuilds fresh on next open,
-                // so a permission change never leaves an outdated menu visibly open.
-                modMenu.querySelector('.participant-mod-popover')?.classList.add('hidden');
-            }
+            // The kebab button/menu is generic now (volume/block/add-friend/
+            // noise-suppression are available to everyone) — no longer hidden
+            // for non-moderators, only the moderator ROWS inside are gated,
+            // via renderMenuItems() re-running fresh on every open. Still
+            // force any currently-open popover closed on a permission change,
+            // so a just-demoted moderator's already-open menu doesn't keep
+            // showing kick/ban until the next click.
+            card.querySelector('.participant-menu-popover')?.classList.add('hidden');
         });
     }
 
@@ -2441,6 +2481,8 @@ export class UIController {
         if (btn) {
             btn.classList.toggle('is-blocked', blocked);
             btn.dataset.tip = blocked ? 'Unblock' : 'Block';
+            const label = btn.querySelector('.participant-menu-row-label');
+            if (label) label.textContent = blocked ? 'Unblock' : 'Block';
         }
 
         this.updateLayout();

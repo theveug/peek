@@ -24,6 +24,8 @@
 // textContent is the simplest sufficient answer for a v1 with no formatting
 // features to justify parsing markdown at all. See CLAUDE.md's "Accounts,
 // Phase 4" entry for the fuller reasoning and what's deliberately cut.
+import { playSound } from './SoundPlayer.js';
+
 export class MessagesPanel {
     constructor() {
         // Defensive guard, shouldn't fire in practice — SocialPanel.js always
@@ -47,6 +49,8 @@ export class MessagesPanel {
         this._conversations = []; // last fetched inbox, for cheap re-render on a poll tick
         this._activeUsername = null; // which conversation thread is open, if any
         this._lastThreadLength = -1; // message count last rendered into the open thread, see _pollActiveThread()
+        this._conversationsLoaded = false; // see _applyConversations() — suppresses notify-on-first-fetch
+        this._lastMessageSoundAt = -Infinity; // throttle, same 1.5s window as ChatUI.js's _playMessageSound()
 
         this._wireBack();
         this._wireSend();
@@ -190,10 +194,85 @@ export class MessagesPanel {
     /** Shared by _refreshInbox()'s own fetch and lobby.js's messagesPoll.js
      * tick (setUnread()) — both need the same render + badge-total logic. */
     _applyConversations(conversations) {
+        // Must run before this._conversations is overwritten below — diffs
+        // against the previous snapshot to find conversations whose unread
+        // count just went up. Suppressed on the very first fetch (page load/
+        // modal construction) so pre-existing unread DMs from before this
+        // session don't all ping at once.
+        if (this._conversationsLoaded) this._notifyNewMessages(conversations);
+        this._conversationsLoaded = true;
+
         this._conversations = conversations;
         const visible = this._sectionEl?.classList.contains('active') && !this._modalEl?.classList.contains('hidden');
         if (visible && !this._activeUsername) this._renderInbox();
         this._updateBadge();
+    }
+
+    /**
+     * Sound + desktop-notification parity with ChatUI.js's @mention handling
+     * (owner-reported 2026-09-08: a DM is at least as "for you" as a mention,
+     * but used to arrive completely silently). Only conversations whose
+     * unread count just increased are notified — a poll tick that re-fetches
+     * an unchanged inbox, or one where the last message is our own reply,
+     * pings nothing.
+     * @param {Array<{user:object, lastMessage:object, unreadCount:number}>} conversations
+     */
+    _notifyNewMessages(conversations) {
+        const oldUnread = new Map(this._conversations.map(c => [c.user.username, c.unreadCount]));
+        for (const { user, lastMessage, unreadCount } of conversations) {
+            if (lastMessage.fromMe) continue;
+            if (unreadCount <= (oldUnread.get(user.username) || 0)) continue;
+            // Already looking at this exact conversation with the window
+            // focused — it just live-updated via _pollActiveThread(), same
+            // "already visible, skip the ping" rule as ChatUI's _isChatViewClosed().
+            if (document.hasFocus() && this._isConversationViewOpen(user.username)) continue;
+            this._playMessageSound();
+            this._desktopNotify(user.username, lastMessage.body);
+        }
+    }
+
+    _isConversationViewOpen(username) {
+        const visible = this._sectionEl?.classList.contains('active') && !this._modalEl?.classList.contains('hidden');
+        return !!visible && this._activeUsername === username;
+    }
+
+    /** Throttled the same way as ChatUI.js's _playMessageSound() — a burst of
+     * DMs (or a DM landing alongside an unrelated poll tick) pings once. */
+    _playMessageSound() {
+        const now = Date.now();
+        if (now - this._lastMessageSoundAt > 1500) playSound('newMessage');
+        this._lastMessageSoundAt = now;
+    }
+
+    /**
+     * Same opt-in/gating contract as ChatUI.js's _desktopNotify(): only while
+     * `desktopNotifications` is enabled, permission is already granted, and
+     * the window is unfocused (a focused tab already got the sound above).
+     * `silent: true` for the same reason — the sound just played, and Web
+     * Audio keeps playing in a backgrounded tab, so the OS notification's
+     * own sound would double up.
+     * @param {string} username - account usernames are regex-constrained
+     *     (authRoutes.js's USERNAME_RE) — safe with no escaping.
+     * @param {string} body
+     */
+    _desktopNotify(username, body) {
+        if (document.hasFocus()) return;
+        if (localStorage.getItem('desktopNotifications') !== '1') return;
+        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+        try {
+            const n = new Notification(`${username} sent you a message`, {
+                body: String(body || '').slice(0, 140),
+                silent: true,
+            });
+            n.onclick = () => {
+                window.focus();
+                document.dispatchEvent(new CustomEvent('peek:open-dm', { detail: { username } }));
+                n.close();
+            };
+        } catch {
+            // Some platforms (e.g. Android Chrome) require ServiceWorker-based
+            // notifications and throw on the constructor — degrade to sound-only.
+        }
     }
 
     /** Called by lobby.js on every messagesPoll.js tick. */

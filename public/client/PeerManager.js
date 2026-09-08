@@ -138,6 +138,11 @@ export class PeerManager {
         this.peerCamStreamIds = {};
         this._lastQualityTierKey = null;
         this.peerScreenStreamIds = {};
+        // Incoming (receive-side) noise suppression — see setPeerNoiseSuppressionOverride()/
+        // _applyIncomingNoiseSuppression() below. Session-scoped, torn down per-peer in removePeer().
+        this.peerIncomingNoiseSuppressors = new Map(); // peerId -> live NoiseSuppressor instance
+        this.peerNoiseSuppressionOverrides = new Map(); // peerId -> true|false (absent = follow global default)
+        this._peerRawMicTracks = new Map(); // peerId -> raw incoming mic track, so overrides can re-derive without a new ontrack
         this.senders = {};
         this._statsInterval = null;
 
@@ -398,6 +403,7 @@ export class PeerManager {
                 this.broadcastStatus();
                 this.broadcastAvatar();
                 this.broadcastAccountUsername();
+                this.broadcastNoiseSuppressionStatus();
                 this.broadcastCamStreamId();
                 this.applyQualitySettings();
                 this.applyCamQualitySettings();
@@ -457,6 +463,10 @@ export class PeerManager {
 
             case 'deafen-status':
                 this.ui.updateParticipantDeafen(from, payload.deafened);
+                break;
+
+            case 'noise-suppression-status':
+                this.ui.updateParticipantNoiseSuppressionBadge(from, !!payload.enabled);
                 break;
 
             case 'hand-status': {
@@ -1684,7 +1694,13 @@ export class PeerManager {
             if (e.track.kind === 'audio') {
                 const screenStreamId = this.peerScreenStreamIds[remotePeerId];
                 const isScreenAudio = screenStreamId && e.streams[0]?.id === screenStreamId;
-                this.ui.addAudio(isScreenAudio ? remotePeerId + '-screen' : remotePeerId, e.track);
+                if (isScreenAudio) {
+                    this.ui.addAudio(remotePeerId + '-screen', e.track);
+                } else {
+                    this._applyIncomingNoiseSuppression(remotePeerId, e.track)
+                        .then(track => this.ui.addAudio(remotePeerId, track))
+                        .catch(() => this.ui.addAudio(remotePeerId, e.track));
+                }
             } else {
                 const stream = e.streams[0] || new MediaStream([e.track]);
                 const camStreamId = this.peerCamStreamIds[remotePeerId];
@@ -2412,6 +2428,10 @@ export class PeerManager {
         }
         delete this.peerCamStreamIds[peerId];
         delete this.peerScreenStreamIds[peerId];
+        this.peerIncomingNoiseSuppressors.get(peerId)?.stop();
+        this.peerIncomingNoiseSuppressors.delete(peerId);
+        this.peerNoiseSuppressionOverrides.delete(peerId);
+        this._peerRawMicTracks.delete(peerId);
         delete this.senders[peerId];
         delete this._sendQueues[peerId];
         this.peerRecordingConsent.delete(peerId);
@@ -2626,6 +2646,7 @@ export class PeerManager {
      */
     async setNoiseSuppression(enabled) {
         localStorage.setItem('noiseSuppression', enabled ? '1' : '0');
+        this.broadcastNoiseSuppressionStatus();
         if (!this.micEnabled || !this._rawMicStream) return;
 
         const oldStream = this.micStream;
@@ -2644,6 +2665,91 @@ export class PeerManager {
 
         if (oldStream && oldStream !== this._rawMicStream) {
             oldStream.getTracks().forEach(t => t.stop());
+        }
+    }
+
+    /**
+     * Broadcasts whether *our own* outgoing mic audio is currently being
+     * cleaned up via noise suppression, so peers can show a small badge on
+     * our card (see UIController.updateParticipantNoiseSuppressionBadge()).
+     * Honor-system state, same trust tier as mic-status/account-username-update.
+     */
+    broadcastNoiseSuppressionStatus() {
+        this.send('noise-suppression-status', null, { enabled: localStorage.getItem('noiseSuppression') === '1' });
+    }
+
+    /**
+     * Effective incoming-suppression decision for a given peer: an explicit
+     * per-peer override (set via the participant context menu) always wins;
+     * otherwise falls back to the global "Noise suppression (incoming)"
+     * Settings default.
+     * @param {string} peerId
+     * @returns {boolean}
+     */
+    _effectiveIncomingNoiseSuppression(peerId) {
+        if (this.peerNoiseSuppressionOverrides.has(peerId)) return this.peerNoiseSuppressionOverrides.get(peerId);
+        return localStorage.getItem('noiseSuppressionIncoming') === '1';
+    }
+
+    /**
+     * Receive-side counterpart to _applyNoiseSuppression() above — cleans up
+     * a remote peer's incoming mic track before it's handed to
+     * UIController.addAudio(). Mic-only: the pc.ontrack handler never calls
+     * this for screen-share audio. Stops any suppressor already running for
+     * this peer first (a device/track change or a re-toggle must not leak
+     * the old AudioContext), then re-derives from the current effective
+     * setting, falling back to the raw track with a console warning (not a
+     * user-facing toast — this can run silently on every peer join/toggle,
+     * unlike the one-off outgoing case) if the WASM/worklet fails to load.
+     * @param {string} peerId
+     * @param {MediaStreamTrack} rawTrack
+     * @returns {Promise<MediaStreamTrack>}
+     */
+    async _applyIncomingNoiseSuppression(peerId, rawTrack) {
+        this._peerRawMicTracks.set(peerId, rawTrack);
+        this.peerIncomingNoiseSuppressors.get(peerId)?.stop();
+        this.peerIncomingNoiseSuppressors.delete(peerId);
+        if (!this._effectiveIncomingNoiseSuppression(peerId)) return rawTrack;
+        try {
+            const { NoiseSuppressor } = await import('./NoiseSuppressor.js');
+            const suppressor = new NoiseSuppressor();
+            this.peerIncomingNoiseSuppressors.set(peerId, suppressor);
+            const processed = await suppressor.start(new MediaStream([rawTrack]));
+            return processed.getAudioTracks()[0];
+        } catch (err) {
+            console.warn('Incoming noise suppression unavailable for peer, using raw track:', err);
+            this.peerIncomingNoiseSuppressors.delete(peerId);
+            return rawTrack;
+        }
+    }
+
+    /**
+     * Sets or clears (pass `null`) a per-peer incoming-suppression override
+     * from the participant context menu, then hot-swaps the already-attached
+     * `<audio id="audio-${peerId}">` element's track live. UIController.addAudio()
+     * re-derives deafen/volume/sinkId from source-of-truth state on every call,
+     * so swapping the element's track this way is safe.
+     * @param {string} peerId
+     * @param {boolean|null} enabled
+     */
+    async setPeerNoiseSuppressionOverride(peerId, enabled) {
+        if (enabled === null) this.peerNoiseSuppressionOverrides.delete(peerId);
+        else this.peerNoiseSuppressionOverrides.set(peerId, enabled);
+        const rawTrack = this._peerRawMicTracks.get(peerId);
+        if (!rawTrack) return;
+        this.ui.addAudio(peerId, await this._applyIncomingNoiseSuppression(peerId, rawTrack));
+    }
+
+    /**
+     * Live-apply for the Settings "Noise suppression (incoming)" global
+     * default toggle — only touches peers with no individual override, so a
+     * per-peer choice from the context menu is never silently clobbered by
+     * a later global-default change.
+     */
+    async applyIncomingNoiseSuppressionDefault() {
+        for (const [peerId, rawTrack] of this._peerRawMicTracks) {
+            if (this.peerNoiseSuppressionOverrides.has(peerId)) continue;
+            this.ui.addAudio(peerId, await this._applyIncomingNoiseSuppression(peerId, rawTrack));
         }
     }
 

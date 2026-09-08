@@ -45,6 +45,8 @@ ui.onModeratorAction = (action, peerId) => {
     else if (action === 'promote') peerManager.promotePeer(peerId);
     else if (action === 'demote') peerManager.demotePeer(peerId);
 };
+ui.getPeerNoiseSuppressionOverride = (peerId) => peerManager.peerNoiseSuppressionOverrides.get(peerId);
+ui.onPeerNoiseSuppressionOverride = (peerId, enabled) => peerManager.setPeerNoiseSuppressionOverride(peerId, enabled);
 peerManager.onActiveSpeakerChange = (peerId) => ui.autoFocusTo(peerId);
 peerManager.onSpeakingChange = (peerId, speaking) => ui.setSpeaking(peerId, speaking);
 

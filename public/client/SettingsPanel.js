@@ -381,10 +381,10 @@ export class SettingsPanel {
                             </div>
                             <div class="settings-toggle-row">
                                 <div>
-                                    <div class="settings-toggle-row-title">Desktop notifications for @mentions</div>
+                                    <div class="settings-toggle-row-title">Desktop notifications for mentions & DMs</div>
                                     <div class="settings-toggle-row-desc">Shows an OS notification when someone @mentions
-                                        you while this window isn't focused. Handled entirely by your browser — nothing
-                                        leaves your device.</div>
+                                        you or sends you a direct message while this window isn't focused. Handled
+                                        entirely by your browser — nothing leaves your device.</div>
                                 </div>
                                 <label class="settings-switch"><input type="checkbox"
                                         id="settings-desktop-notifications" /><span
@@ -398,6 +398,18 @@ export class SettingsPanel {
                                         device.</div>
                                 </div>
                                 <label class="settings-switch"><input type="checkbox" id="settings-noise-suppression" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row settings-live-only">
+                                <div>
+                                    <div class="settings-toggle-row-title">Noise suppression (incoming)</div>
+                                    <div class="settings-toggle-row-desc">Filters background noise out of what you hear from
+                                        others' mics — never applied to screen-share audio. Off by default; can also be
+                                        turned on/off for just one person from their card's menu regardless of this
+                                        setting.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox"
+                                        id="settings-noise-suppression-incoming" /><span
                                         class="settings-switch-track"></span></label>
                             </div>
                             <div class="settings-toggle-row settings-live-only">
@@ -1420,6 +1432,11 @@ export class SettingsPanel {
             this.peerManager?.setNoiseSuppression(e.target.checked);
         });
 
+        document.getElementById('settings-noise-suppression-incoming')?.addEventListener('change', (e) => {
+            localStorage.setItem('noiseSuppressionIncoming', e.target.checked ? '1' : '0');
+            this.peerManager?.applyIncomingNoiseSuppressionDefault();
+        });
+
         const volume = document.getElementById('settings-volume');
         const volumeValue = document.getElementById('settings-volume-value');
         volume?.addEventListener('input', (e) => {
@@ -1733,6 +1750,9 @@ export class SettingsPanel {
 
         const noiseSuppression = document.getElementById('settings-noise-suppression');
         if (noiseSuppression) noiseSuppression.checked = localStorage.getItem('noiseSuppression') === '1';
+
+        const noiseSuppressionIncoming = document.getElementById('settings-noise-suppression-incoming');
+        if (noiseSuppressionIncoming) noiseSuppressionIncoming.checked = localStorage.getItem('noiseSuppressionIncoming') === '1';
 
         const autoDeafenAway = document.getElementById('settings-auto-deafen-away');
         if (autoDeafenAway) autoDeafenAway.checked = localStorage.getItem('autoDeafenOnAway') === '1';

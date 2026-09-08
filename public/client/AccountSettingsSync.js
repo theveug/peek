@@ -89,12 +89,17 @@ export function syncPreference() {
 // swatch click immediately followed by closing the tab loses that final
 // change. 'pagehide' (not 'beforeunload', which defeats bfcache) +
 // keepalive:true is the standard flush-on-unload pattern.
-document.addEventListener('pagehide', () => {
-    if (!pendingTimer) return;
-    clearTimeout(pendingTimer);
-    pendingTimer = null;
-    if (accountsEnabled) pushNow();
-});
+// Guarded so this module can be imported by the repo's Node-based pure-logic
+// tests (pulled in transitively via PeerManager.js) without a real browser's
+// document global.
+if (typeof document !== 'undefined') {
+    document.addEventListener('pagehide', () => {
+        if (!pendingTimer) return;
+        clearTimeout(pendingTimer);
+        pendingTimer = null;
+        if (accountsEnabled) pushNow();
+    });
+}
 
 /** Called right after login/register and on every already-logged-in page load. */
 export async function pullAndApplySettings() {
