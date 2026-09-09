@@ -3,6 +3,7 @@ import { escapeHtml } from './escapeHtml.js';
 import { openEmojiPicker } from './EmojiPicker.js';
 import { trapFocus } from './focusTrap.js';
 import * as chatHistoryStore from './chatHistoryStore.js';
+import { finalizeCodeBlocks } from './markdownCodeBlocks.js';
 
 /**
  * Chat panel behavior: messages, typing indicators, reactions, polls,
@@ -1732,54 +1733,10 @@ export class ChatUI {
      * @returns {boolean} true if the local user was mentioned in this body.
      */
     _finalizeMarkdownBody(msgContainer) {
-        msgContainer.querySelectorAll('pre code').forEach((block) => {
-            // Read the declared fence language before highlightElement runs —
-            // hljs adds its own language-* class when it auto-detects, and only
-            // the sender's explicit ```lang should get a label.
-            const declaredLang = block.className.match(/language-([\w+#-]+)/)?.[1];
-
-            hljs.highlightElement(block);
-
-            const pre = block.parentElement;
-            pre.style.position = 'relative';
-
-            if (declaredLang) {
-                const langLabel = document.createElement('span');
-                langLabel.className = 'code-lang-label';
-                langLabel.textContent = declaredLang;
-                pre.appendChild(langLabel);
-            }
-
-            const copyBtn = document.createElement('button');
-            copyBtn.textContent = '\u{1F4CB}';
-            copyBtn.dataset.tip = 'Copy code';
-            copyBtn.className = 'copy-btn';
-
-            copyBtn.addEventListener('click', () => {
-                // marked always leaves a trailing \n inside the <code> element —
-                // trim so pasting into a field doesn't drag a newline along.
-                navigator.clipboard.writeText(block.textContent.trim()).then(() => {
-                    copyBtn.textContent = '✅';
-                    setTimeout(() => (copyBtn.textContent = '\u{1F4CB}'), 1500);
-                });
-            });
-
-            pre.appendChild(copyBtn);
-        });
-
-        // Inline (single-backtick) code chips are click-to-copy — the chip itself
-        // is the button, since an appended button would break inline text flow.
-        msgContainer.querySelectorAll('.chat-markdown code').forEach((code) => {
-            if (code.closest('pre')) return;
-            code.dataset.tip = 'Click to copy';
-            code.addEventListener('click', (e) => {
-                e.stopPropagation();
-                navigator.clipboard.writeText(code.textContent.trim()).then(() => {
-                    code.classList.add('inline-code-copied');
-                    setTimeout(() => code.classList.remove('inline-code-copied'), 1500);
-                });
-            });
-        });
+        // Code-block/inline-code highlighting+copy-button treatment is shared
+        // with MessagesPanel.js's DM composer (2026-09-09) — see that file.
+        const markdownEl = msgContainer.querySelector('.chat-markdown');
+        if (markdownEl) finalizeCodeBlocks(markdownEl);
 
         this._processLinkPreviews(msgContainer);
         return this._processMentions(msgContainer);

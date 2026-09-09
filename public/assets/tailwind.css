@@ -316,6 +316,13 @@ body {
   color: var(--chat-body);
 }
 .chat-body.prose {
+  /* The typography plugin's own default caps prose content at 65ch
+     regardless of its container's actual width — harmless in a fixed-width
+     article layout, but here .chat-body's container IS the chat panel,
+     which is user-resizable (and can be much wider than 65ch once other
+     panels are closed via the stage toggle). Same fix already applied to
+     .chat-code-viewer-markdown just below for the identical reason. */
+  max-width: none;
   --tw-prose-body: var(--chat-body);
   --tw-prose-headings: var(--color-foreground);
   --tw-prose-bold: var(--color-foreground);
@@ -1151,6 +1158,15 @@ body {
 .mention-autocomplete-item {
   display: block;
   width: 100%;
+  /* flex-shrink:0 (2026-09-09): .mention-autocomplete-list is a column flex
+     container with a max-height, and flex items default to flex-shrink:1 —
+     without this, a list with enough items to actually exceed max-height
+     doesn't scroll (overflow-y:auto never triggers) so much as squeeze
+     every item down to a sliver of its real height instead, clipping most
+     of each line's text under `overflow:hidden` below. @mention (6 results)
+     and :emoji (8 results) autocomplete never had enough matches to expose
+     this — CodeBlockPicker.js's ~39-language unfiltered list did. */
+  flex-shrink: 0;
   text-align: left;
   border: none;
   background: transparent;
@@ -1200,6 +1216,17 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ===== Code block language picker (see client/CodeBlockPicker.js) =====
+   Shares .emoji-picker-popover/-search's box/search-input styling and
+   .mention-autocomplete-list/-item/-empty's list/keyboard-nav styling (all
+   applied together on the same elements) — same "extend the shared
+   classes" pattern .emoji-autocomplete-* above already uses, since this is
+   just a plain single-column searchable list, not a new visual shape. Only
+   the popover's width needs its own override. */
+.codeblock-picker-popover {
+  width: 13rem;
 }
 
 /* ===== Link previews =====
@@ -1475,6 +1502,29 @@ body {
 .panel-tab-btn.active {
   background: var(--bg5);
   color: var(--t1);
+}
+
+/* Icon-only collapse (2026-09-09, see UIController.js's updateTabBarCompact()):
+   once the Chat/Files/Messages row's real content — which varies with how
+   many tabs are visible (Messages is accounts-gated) and whether the
+   Files/Messages unread badges are showing — no longer fits alongside the
+   trailing search/pinned/close icons, drop the text labels and keep just
+   the icon + badge. This used to be a `@container` width breakpoint, but a
+   single fixed width can't correctly cover every tab/badge combination at
+   once (2 tabs with no badges fits down to the panel's own min-width; 3
+   tabs with both badges needs far more room than that) — measuring the
+   row's actual layout in JS and toggling this class adapts to whichever
+   combination is actually on screen instead of guessing. Same
+   tooltip-on-hover affordance every other icon-only button in this app
+   relies on (data-tip is set on all three tab buttons unconditionally, not
+   just once labels are hidden). */
+.panel-tabs.tabs-compact .panel-tab-btn {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  gap: 0.25rem;
+}
+.panel-tabs.tabs-compact .panel-tab-label {
+  display: none;
 }
 
 .panel-tab-badge {
@@ -1767,7 +1817,19 @@ body {
 .chat-markdown pre {
   background-color: var(--bg1);
   border: 1px solid var(--border);
-  padding: 0.6em 0.75em;
+  /* Top padding reserves room for .code-lang-label/.copy-btn below (both
+     absolutely positioned, floating over the block rather than in normal
+     flow) — 1.75rem clears both regardless of container width. Found
+     2026-09-09: the original 0.6em-all-around padding only avoided visibly
+     colliding with a long first code line by relying on room chat's
+     panel usually being wide enough that the line's own text didn't reach
+     column `right: 3rem`; MessagesPanel.js's much narrower `.messages-bubble`
+     (added the same day, reusing this exact styling for DM code blocks)
+     made a short one-line function signature collide with the label
+     immediately — a real latent bug in every context, not new to DMs, just
+     newly visible there. rem, not em, for the same reason `.code-lang-label`
+     already uses rem: consistent at any of `pre`'s own font-size. */
+  padding: 1.75rem 0.75em 0.6em;
   border-radius: var(--radius-sm);
   overflow-x: auto;
   margin-top: 0.25em;
@@ -1903,7 +1965,14 @@ body {
 /* ===== Resizable chat panel ===== */
 .chat-panel {
   width: 20rem;
-  min-width: 15rem;
+  /* 17rem is the icon-only tab bar's own floor — see the "Icon-only collapse"
+     comment above .panel-tabs.tabs-compact. Below this, even the icon-only
+     tab row (icons + trailing search/pinned/close icons) can no longer fit
+     on one line. App.js's initChatResize() drag handler reads this value
+     live (getComputedStyle) rather than hardcoding it in px, since it's in
+     rem against this app's fluid clamp() root font-size — its pixel value
+     isn't constant. */
+  min-width: 17rem;
   max-width: 50vw;
   flex-shrink: 0;
   background: var(--bg2);

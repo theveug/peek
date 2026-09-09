@@ -25,14 +25,36 @@
 // in-and-out, still a modal). Same class either way — the constructor's
 // `badgeId`/`isVisible` options are what let it not care which host it's in.
 //
-// Deliberately plain-text, not markdown: `_renderThread()` uses textContent
-// for every message body, not the marked/DOMPurify pipeline ChatUI.js uses
-// for room chat — free text from another account is exactly the kind of
-// input escapeHtml.js/DOMPurify exist for elsewhere in this app, and
-// textContent is the simplest sufficient answer for a v1 with no formatting
-// features to justify parsing markdown at all. See CLAUDE.md's "Accounts,
-// Phase 4" entry for the fuller reasoning and what's deliberately cut.
+// Renders markdown when the vendor libs are available, plain text otherwise
+// (2026-09-09, owner-reported: "can we not reuse the same input area as
+// chat so we get all the other features too like code blocks and
+// emoticons" — revisiting the "deliberately plain-text" v1 cut TODO.md's
+// Phase 4 entry flagged as revisitable). `_renderThread()` feature-detects
+// `marked`/`DOMPurify` (both `typeof`-checked, since neither is a module
+// import — they're classic-script vendor globals, same as everywhere else
+// in this app that uses them) and falls back to the original `textContent`
+// path when they're absent. **They're absent on the lobby page** —
+// `lobby.html` never loads `marked`/`DOMPurify`/`highlight.js`, unlike
+// `index.html` (ChatUI.js already needs them there) — so a DM sent/viewed
+// from the lobby's Friends & Messages drawer still renders plain text,
+// deliberately, rather than growing the lobby's initial page weight for a
+// feature only reachable after logging in and adding a friend.
+// `_wireComposerExtras()` below hides the "Code block" +-menu option
+// entirely on a page without `hljs` for the same reason — offering it
+// would just insert literal backticks with nothing to highlight them.
+// Markdown rendering reuses the exact same `marked.parse()` →
+// `DOMPurify.sanitize()` → innerHTML pipeline ChatUI.js already runs for
+// room chat (not a new attack surface — the same already-audited pattern,
+// just applied to a second surface), plus the code-block/inline-code
+// highlighting+copy-button treatment shared via `markdownCodeBlocks.js`.
+// Deliberately NOT reused: `ChatUI._processMentions()` (a DM thread has no
+// participant list to mention against) and link-preview processing (never
+// built app-wide to begin with, see CLAUDE.md's own standing rule on that).
 import { playSound } from './SoundPlayer.js';
+import { openEmojiPicker } from './EmojiPicker.js';
+import { openCodeBlockPicker } from './CodeBlockPicker.js';
+import { insertAtCaret, wireComposerPlusMenu, isInsideOpenCodeFence, autoGrowTextarea } from './composerUtils.js';
+import { finalizeCodeBlocks } from './markdownCodeBlocks.js';
 
 export class MessagesPanel {
     /**
@@ -72,7 +94,60 @@ export class MessagesPanel {
 
         this._wireBack();
         this._wireSend();
+        this._wireComposerExtras();
         document.addEventListener('peek:open-dm', (e) => this.openConversation(e.detail.username));
+    }
+
+    /**
+     * "+" composer menu (code block / emoji), added 2026-09-09 so DMs get
+     * the same composer affordances room chat has — see the file header's
+     * "renders markdown when available" note for why the code-block button
+     * specifically is hidden on a page that never loaded `hljs` (the lobby).
+     * @returns {void}
+     */
+    _wireComposerExtras() {
+        const plusBtn = document.getElementById('messages-composer-plus-btn');
+        const plusMenu = document.getElementById('messages-composer-plus-menu');
+        wireComposerPlusMenu(plusBtn, plusMenu);
+
+        const codeBlockBtn = document.getElementById('messages-code-block-btn');
+        if (typeof hljs === 'undefined') {
+            // No vendor libs on this page (the lobby doesn't load them) —
+            // a code fence would just render as literal backticks with
+            // nothing to highlight it, so there's no point offering it.
+            codeBlockBtn?.remove();
+        } else {
+            codeBlockBtn?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                // Anchor to the persistent "+" trigger, not this button itself —
+                // its own menu is already hidden by wireComposerPlusMenu's
+                // close-on-option-click by the time this listener runs, same
+                // reasoning as App.js's identical composer-emoji-btn handler.
+                openCodeBlockPicker(plusBtn, (lang) => {
+                    const start = this.input.selectionStart ?? this.input.value.length;
+                    const end = this.input.selectionEnd ?? this.input.value.length;
+                    const selected = this.input.value.slice(start, end);
+                    const openFence = '```' + lang + '\n';
+                    insertAtCaret(this.input, openFence + selected + '\n```');
+                    if (!selected) {
+                        const caret = start + openFence.length;
+                        this.input.selectionStart = this.input.selectionEnd = caret;
+                    }
+                    // insertAtCaret mutates .value directly (no real 'input'
+                    // event), so the auto-grow listener above never sees this.
+                    autoGrowTextarea(this.input);
+                    this.input.focus();
+                });
+            });
+        }
+
+        document.getElementById('messages-emoji-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openEmojiPicker(plusBtn, (emoji) => {
+                insertAtCaret(this.input, emoji);
+                this.input.focus();
+            });
+        });
     }
 
     /** Called by SocialPanel.js whenever the Messages tab becomes the active
@@ -112,6 +187,7 @@ export class MessagesPanel {
                 const data = await res.json();
                 if (data.error) return; // best-effort v1 — no inline send-error UI yet, message just stays in the box
                 this.input.value = '';
+                autoGrowTextarea(this.input); // back to single-row after a multi-line (e.g. code block) send
                 await this._loadConversation(this._activeUsername);
             } catch {
                 // offline — leave the typed text in place so nothing's lost
@@ -120,8 +196,20 @@ export class MessagesPanel {
             }
         };
         this.sendBtn.addEventListener('click', submit);
+        // Room composer parity (2026-09-09) — needed now that this composer
+        // can hold real multi-line content (a code fence), not just a
+        // one-line message.
+        this.input.addEventListener('input', () => autoGrowTextarea(this.input));
         this.input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); submit(); }
+            // Shift+Enter always inserts a newline (default textarea behavior,
+            // not intercepted); plain Enter mid-fence does too — see
+            // composerUtils.js's isInsideOpenCodeFence for why this matters
+            // now that the "Code block" +-menu option can put a real
+            // multi-line fence in this composer.
+            if (e.key !== 'Enter' || e.shiftKey) return;
+            if (isInsideOpenCodeFence(this.input.value, this.input.selectionStart)) return;
+            e.preventDefault();
+            submit();
         });
     }
 
@@ -167,10 +255,21 @@ export class MessagesPanel {
 
     _renderThread(messages) {
         this.thread.innerHTML = '';
+        // See file header: markdown when the vendor libs are loaded (the room
+        // page always has them; the lobby never does), plain text otherwise.
+        const canRenderMarkdown = typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined';
         for (const { body, fromMe } of messages) {
             const bubble = document.createElement('div');
             bubble.className = 'messages-bubble' + (fromMe ? ' messages-bubble-mine' : '');
-            bubble.textContent = body; // plain text only — see file header for why
+            if (canRenderMarkdown) {
+                const markdownEl = document.createElement('div');
+                markdownEl.className = 'chat-markdown prose';
+                markdownEl.innerHTML = DOMPurify.sanitize(marked.parse(body));
+                bubble.appendChild(markdownEl);
+                if (typeof hljs !== 'undefined') finalizeCodeBlocks(markdownEl);
+            } else {
+                bubble.textContent = body; // plain text only — see file header for why
+            }
             this.thread.appendChild(bubble);
         }
         this.thread.scrollTop = this.thread.scrollHeight;
@@ -302,6 +401,11 @@ export class MessagesPanel {
         const total = this._conversations.reduce((sum, c) => sum + c.unreadCount, 0);
         this.unreadBadge.textContent = total > 99 ? '99+' : String(total);
         this.unreadBadge.classList.toggle('hidden', total === 0);
+        // The badge showing/hiding/changing digit count can change how much
+        // room the room's chat-tab-bar instance of this panel needs — no
+        // direct reference to UIController.js from here, so a CustomEvent,
+        // same shape as peek:account/peek:open-dm elsewhere in this app.
+        document.dispatchEvent(new CustomEvent('peek:messages-badge-changed'));
     }
 
     _renderInbox() {

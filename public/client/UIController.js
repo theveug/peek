@@ -126,6 +126,57 @@ export class UIController {
         document.getElementById('tab-messages').addEventListener('click', () => this._switchTab('messages'));
         document.getElementById('files-download-all').addEventListener('click', () => this._downloadAllFiles());
         document.getElementById('export-recap-btn')?.addEventListener('click', () => this.exportSessionRecap());
+        this._initTabBarCompact();
+    }
+
+    /**
+     * Icon-only chat tab bar (2026-09-09) — see tailwind.css's
+     * ".panel-tabs.tabs-compact" comment for why this is measured in JS
+     * rather than a fixed CSS breakpoint: the row's real content varies
+     * with how many tabs are visible and whether the Files/Messages unread
+     * badges are showing, so a single width guess can't get every
+     * combination right. `updateTabBarCompact()` is idempotent and safe to
+     * call as often as needed from any call site whose change could affect
+     * the row's content width.
+     * @returns {void}
+     */
+    _initTabBarCompact() {
+        const tabsEl = document.querySelector('.panel-tabs');
+        if (!tabsEl) return;
+        this._tabsEl = tabsEl;
+        this.updateTabBarCompact();
+        // Catches panel-width changes (drag-resize) — toggling .tabs-compact
+        // itself never changes .panel-tabs' own box (its width comes from
+        // #chat, not its children), so this can't self-trigger a loop.
+        new ResizeObserver(() => this.updateTabBarCompact()).observe(tabsEl);
+        // Catches the fluid clamp() root font-size changing with viewport
+        // width — .panel-tabs' own box may stay the same size while every
+        // rem-sized child (including how much text needs) changes under it.
+        window.addEventListener('resize', () => this.updateTabBarCompact());
+    }
+
+    /**
+     * Measures whether Chat/Files/Messages' text labels actually fit
+     * alongside the trailing search/pinned/close icons right now, and
+     * toggles `.tabs-compact` (hides the labels) accordingly. Call this
+     * after anything that changes the row's content — a tab becoming
+     * visible/hidden, or an unread badge showing/hiding/changing digits.
+     * @returns {void}
+     */
+    updateTabBarCompact() {
+        const tabsEl = this._tabsEl;
+        if (!tabsEl) return;
+        // Measure with labels temporarily forced visible (classList.remove
+        // is a no-op, firing no mutation, if the class wasn't present) so a
+        // panel that's already compact doesn't just measure its own
+        // already-shrunk content and conclude it fits.
+        const wasCompact = tabsEl.classList.contains('tabs-compact');
+        if (wasCompact) tabsEl.classList.remove('tabs-compact');
+        const needed = tabsEl.scrollWidth;
+        const available = tabsEl.clientWidth;
+        // toggle(cls, force) is a no-op (fires no mutation) when the class
+        // already matches `force`, so this never causes redundant churn.
+        tabsEl.classList.toggle('tabs-compact', needed > available);
     }
 
     /**
@@ -167,6 +218,7 @@ export class UIController {
         badge.textContent = this._sharedFiles.length;
         badge.classList.remove('hidden');
         badge.classList.add('flex');
+        this.updateTabBarCompact();
         if (this._sharedFiles.length >= 2) {
             document.getElementById('files-download-wrap').classList.remove('hidden');
         }

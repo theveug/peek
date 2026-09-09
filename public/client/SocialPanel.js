@@ -193,6 +193,21 @@ export class SocialPanel {
                         <div id="messages-conversation-view" class="hidden">
                             <div id="messages-thread" class="messages-thread"></div>
                             <div class="chat-composer">
+                                <div class="composer-plus-wrap">
+                                    <button id="messages-composer-plus-btn" data-tip="Add" class="chat-composer-btn shrink-0">
+                                        <span class="material-symbols-rounded">add</span>
+                                    </button>
+                                    <div id="messages-composer-plus-menu" class="composer-plus-menu hidden">
+                                        <button type="button" id="messages-code-block-btn" class="composer-plus-option">
+                                            <span class="w-4 h-4 flex items-center justify-center material-symbols-rounded text-base leading-none">code</span>
+                                            Code block
+                                        </button>
+                                        <button type="button" id="messages-emoji-btn" class="composer-plus-option">
+                                            <span class="w-4 h-4 flex items-center justify-center text-base leading-none">😀</span>
+                                            Add emoji
+                                        </button>
+                                    </div>
+                                </div>
                                 <textarea id="messages-input" rows="1" placeholder="Message"
                                     class="chat-composer-input" maxlength="4000"></textarea>
                                 <button type="button" id="messages-send-btn" data-tip="Send" class="chat-composer-send shrink-0">

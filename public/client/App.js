@@ -9,6 +9,8 @@ import { InvitePopover } from './InvitePopover.js';
 import { TopbarIdentity } from './TopbarIdentity.js';
 import { initTooltips } from './Tooltip.js';
 import { openEmojiPicker } from './EmojiPicker.js';
+import { openCodeBlockPicker } from './CodeBlockPicker.js';
+import { insertAtCaret, wireComposerPlusMenu, isInsideOpenCodeFence, autoGrowTextarea } from './composerUtils.js';
 import { attachMentionAutocomplete } from './MentionAutocomplete.js';
 import { attachEmojiAutocomplete } from './EmojiAutocomplete.js';
 import { getOwnerToken, setOwnerToken } from './ownerTokens.js';
@@ -289,38 +291,10 @@ if (fileAttachBtn && fileInput) {
 
 // Composer "+" dropup — folds attach-file/create-poll into one menu instead of
 // two permanent buttons flanking the textarea. The two actions' own click
-// handlers (above, and in the poll IIFE below) are unchanged; this only owns
-// opening/closing the menu around them.
-(function initComposerPlusMenu() {
-    const btn = document.getElementById('composer-plus-btn');
-    const menu = document.getElementById('composer-plus-menu');
-    if (!btn || !menu) return;
-
-    const close = () => menu.classList.add('hidden');
-
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        menu.classList.toggle('hidden');
-    });
-    menu.querySelectorAll('button').forEach(option => {
-        option.addEventListener('click', close);
-    });
-    document.addEventListener('click', (e) => {
-        if (menu.classList.contains('hidden')) return;
-        if (menu.contains(e.target) || e.target === btn) return;
-        close();
-    });
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !menu.classList.contains('hidden')) close();
-    });
-})();
-
-function insertAtCaret(el, text) {
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? el.value.length;
-    el.value = el.value.slice(0, start) + text + el.value.slice(end);
-    el.selectionStart = el.selectionEnd = start + text.length;
-}
+// handlers (above, and in the poll IIFE below) are unchanged; wireComposerPlusMenu()
+// only owns opening/closing the menu around them (shared with MessagesPanel.js's
+// DM composer, see composerUtils.js).
+wireComposerPlusMenu(document.getElementById('composer-plus-btn'), document.getElementById('composer-plus-menu'));
 
 document.getElementById('composer-emoji-btn')?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -331,6 +305,29 @@ document.getElementById('composer-emoji-btn')?.addEventListener('click', (e) => 
     // zero out this button's own getBoundingClientRect().
     openEmojiPicker(document.getElementById('composer-plus-btn'), (emoji) => {
         insertAtCaret(input, emoji);
+        autoGrowMessageInput();
+        input.focus();
+    });
+});
+
+document.getElementById('code-block-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // Same anchor-to-the-persistent-trigger reasoning as the emoji button
+    // above — this button's own menu is already hidden by the time this
+    // listener runs.
+    openCodeBlockPicker(document.getElementById('composer-plus-btn'), (lang) => {
+        const start = input.selectionStart ?? input.value.length;
+        const end = input.selectionEnd ?? input.value.length;
+        const selected = input.value.slice(start, end);
+        const openFence = '```' + lang + '\n';
+        insertAtCaret(input, openFence + selected + '\n```');
+        if (!selected) {
+            // Nothing was selected to wrap — drop the caret on the blank
+            // line between the fences instead of after the closing one, so
+            // typing the code itself needs no extra navigation.
+            const caret = start + openFence.length;
+            input.selectionStart = input.selectionEnd = caret;
+        }
         autoGrowMessageInput();
         input.focus();
     });
@@ -463,8 +460,7 @@ function sendTypingStatus(typing) {
 // overflow:auto takes over (internal scroll) once content exceeds that, so
 // there's nothing to clamp here beyond letting the CSS cap do its job.
 function autoGrowMessageInput() {
-    input.style.height = 'auto';
-    input.style.height = `${input.scrollHeight}px`;
+    autoGrowTextarea(input);
 }
 
 input.addEventListener('input', () => {
@@ -473,14 +469,6 @@ input.addEventListener('input', () => {
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => sendTypingStatus(false), 2000);
 });
-
-// Discord-style: Enter inside an unclosed ``` fence inserts a newline instead
-// of sending, since a fenced code block is the one case where you actually
-// want multiple lines without reaching for Shift+Enter every time.
-function isInsideOpenCodeFence(text, caretPos) {
-    const fenceCount = (text.slice(0, caretPos).match(/```/g) || []).length;
-    return fenceCount % 2 === 1;
-}
 
 // Handle enter + shift logic
 input.addEventListener('keydown', (e) => {
@@ -742,6 +730,9 @@ let stopRoomMessagesPolling = null;
 const tabMessagesBtn = document.getElementById('tab-messages');
 function setRoomMessagesLoggedIn(loggedIn) {
     tabMessagesBtn.style.display = loggedIn ? '' : 'none'; // see the button's own HTML comment for why style, not .hidden
+    // The Messages tab appearing/disappearing changes how much content the
+    // tab bar needs to fit — see UIController.js's updateTabBarCompact().
+    ui.updateTabBarCompact();
     if (loggedIn) {
         if (!roomMessagesPanel) {
             roomMessagesPanel = new MessagesPanel({
@@ -775,6 +766,9 @@ async function initRoomMessagesTab() {
     document.addEventListener('peek:account', (e) => setRoomMessagesLoggedIn(e.detail.loggedIn));
 }
 initRoomMessagesTab();
+// MessagesPanel.js's badge (shown/hidden/digit count) can change how much
+// room the tab bar needs — see UIController.js's updateTabBarCompact().
+document.addEventListener('peek:messages-badge-changed', () => ui.updateTabBarCompact());
 // UIController.js's _switchTab('messages') dispatches this — the only way
 // this file's MessagesPanel instance learns it just became visible, since
 // neither class holds a reference to the other.
@@ -1324,11 +1318,16 @@ function initChatResize() {
         e.preventDefault();
         startX = e.clientX;
         startW = chat.offsetWidth;
+        // Read live rather than hardcode — .chat-panel's CSS min-width (tailwind.css,
+        // the floor where the icon-only tab bar still fits) is in rem against this
+        // app's fluid clamp() root font-size, so its pixel value shifts with viewport
+        // width; a hardcoded px guess would drift out of sync with the real floor.
+        const minW = parseFloat(getComputedStyle(chat).minWidth) || 0;
         handle.classList.add('active');
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
         const onMove = (e) => {
-            const w = Math.max(240, Math.min(window.innerWidth * 0.5, startW + (e.clientX - startX)));
+            const w = Math.max(minW, Math.min(window.innerWidth * 0.5, startW + (e.clientX - startX)));
             chat.style.width = w + 'px';
         };
         const onUp = () => {

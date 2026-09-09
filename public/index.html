@@ -256,20 +256,20 @@
             <div class="chat-panel flex flex-col h-full border-r border-separator relative" id="chat">
                 <!-- Tab bar -->
                 <div class="panel-tabs shrink-0">
-                    <button id="tab-chat" class="panel-tab-btn active">
+                    <button id="tab-chat" class="panel-tab-btn active" data-tip="Chat">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
                             <path fill-rule="evenodd"
                                 d="M10 3c-4.31 0-8 3.033-8 7 0 2.024.978 3.825 2.499 5.085a3.478 3.478 0 0 1-.522 1.756.75.75 0 0 0 .584 1.143 5.976 5.976 0 0 0 3.243-1.053c.7.138 1.44.213 2.196.213 4.31 0 8-3.033 8-7s-3.69-7-8-7Z"
                                 clip-rule="evenodd" />
                         </svg>
-                        Chat
+                        <span class="panel-tab-label">Chat</span>
                     </button>
-                    <button id="tab-files" class="panel-tab-btn">
+                    <button id="tab-files" class="panel-tab-btn" data-tip="Files">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
                             <path
                                 d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" />
                         </svg>
-                        Files
+                        <span class="panel-tab-label">Files</span>
                         <span id="files-tab-badge"
                             class="hidden items-center justify-center text-[10px] rounded-full min-w-4.5 h-4.5 px-1 leading-none panel-tab-badge">0</span>
                     </button>
@@ -281,12 +281,12 @@
                          .hidden per the standing cascade-layers rule) since it should only ever
                          show once accounts are enabled and the viewer is logged in; App.js's
                          initRoomMessagesTab() reveals it via the same inline-style toggle. -->
-                    <button id="tab-messages" class="panel-tab-btn" style="display:none;">
+                    <button id="tab-messages" class="panel-tab-btn" style="display:none;" data-tip="Messages">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
                             <path d="M3 4a2 2 0 0 0-2 2v1.161l8.441 4.221a1.25 1.25 0 0 0 1.118 0L19 7.162V6a2 2 0 0 0-2-2H3Z" />
                             <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 0 1-2.46 0L1 8.839V14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.839Z" />
                         </svg>
-                        Messages
+                        <span class="panel-tab-label">Messages</span>
                         <span id="messages-tab-badge"
                             class="hidden flex items-center justify-center text-[10px] rounded-full min-w-4.5 h-4.5 px-1 leading-none panel-tab-badge">0</span>
                     </button>
@@ -339,6 +339,10 @@
                                                 clip-rule="evenodd" />
                                         </svg>
                                         Attach file
+                                    </button>
+                                    <button type="button" id="code-block-btn" class="composer-plus-option">
+                                        <span class="w-4 h-4 flex items-center justify-center material-symbols-rounded text-base leading-none">code</span>
+                                        Code block
                                     </button>
                                     <button type="button" id="poll-btn" class="composer-plus-option">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
@@ -425,6 +429,21 @@
                         </div>
                         <div id="messages-thread" class="messages-thread flex-1 overflow-auto"></div>
                         <div class="chat-composer">
+                            <div class="composer-plus-wrap">
+                                <button id="messages-composer-plus-btn" data-tip="Add" class="chat-composer-btn shrink-0">
+                                    <span class="material-symbols-rounded">add</span>
+                                </button>
+                                <div id="messages-composer-plus-menu" class="composer-plus-menu hidden">
+                                    <button type="button" id="messages-code-block-btn" class="composer-plus-option">
+                                        <span class="w-4 h-4 flex items-center justify-center material-symbols-rounded text-base leading-none">code</span>
+                                        Code block
+                                    </button>
+                                    <button type="button" id="messages-emoji-btn" class="composer-plus-option">
+                                        <span class="w-4 h-4 flex items-center justify-center text-base leading-none">😀</span>
+                                        Add emoji
+                                    </button>
+                                </div>
+                            </div>
                             <textarea id="messages-input" rows="1" placeholder="Message"
                                 class="chat-composer-input" maxlength="4000"></textarea>
                             <button type="button" id="messages-send-btn" data-tip="Send" class="chat-composer-send shrink-0">
