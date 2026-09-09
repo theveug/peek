@@ -119,17 +119,38 @@ export class UIController {
     _initFilesTab() {
         document.getElementById('tab-chat').addEventListener('click', () => this._switchTab('chat'));
         document.getElementById('tab-files').addEventListener('click', () => this._switchTab('files'));
+        // Trial (2026-09-09): Messages as a third chat-panel tab — see
+        // App.js's initRoomMessagesTab() for what actually shows/hides this
+        // button (accounts enabled + logged in) and constructs the
+        // MessagesPanel instance this switches into view.
+        document.getElementById('tab-messages').addEventListener('click', () => this._switchTab('messages'));
         document.getElementById('files-download-all').addEventListener('click', () => this._downloadAllFiles());
         document.getElementById('export-recap-btn')?.addEventListener('click', () => this.exportSessionRecap());
     }
 
-    /** @param {'chat'|'files'} tab */
+    /**
+     * Public wrapper for App.js's `peek:open-dm` listener — FriendsPanel.js's
+     * "Message" row action needs to bring this tab into view the same way
+     * SocialPanel.js's own modal used to, but from outside this class.
+     * @returns {void}
+     */
+    switchToMessagesTab() {
+        this._switchTab('messages');
+    }
+
+    /** @param {'chat'|'files'|'messages'} tab */
     _switchTab(tab) {
-        const toChat = tab === 'chat';
-        document.getElementById('chat-tab-content').classList.toggle('hidden', !toChat);
-        document.getElementById('files-tab-content').classList.toggle('hidden', toChat);
-        document.getElementById('tab-chat').classList.toggle('active', toChat);
-        document.getElementById('tab-files').classList.toggle('active', !toChat);
+        document.getElementById('chat-tab-content').classList.toggle('hidden', tab !== 'chat');
+        document.getElementById('files-tab-content').classList.toggle('hidden', tab !== 'files');
+        document.getElementById('messages-tab-content').classList.toggle('hidden', tab !== 'messages');
+        document.getElementById('tab-chat').classList.toggle('active', tab === 'chat');
+        document.getElementById('tab-files').classList.toggle('active', tab === 'files');
+        document.getElementById('tab-messages').classList.toggle('active', tab === 'messages');
+        // MessagesPanel.js has no other way to know it just became visible —
+        // same "dispatch a CustomEvent, no direct reference" shape as every
+        // other cross-module signal in this app (peek:account, etc.), since
+        // UIController.js has no reference to App.js's room-side instance.
+        if (tab === 'messages') window.dispatchEvent(new CustomEvent('peek:messages-tab-shown'));
     }
 
     /**

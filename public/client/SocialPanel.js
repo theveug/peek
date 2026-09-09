@@ -32,7 +32,17 @@ import { startPresencePolling } from './presencePoll.js';
 import { startMessagesPolling } from './messagesPoll.js';
 
 export class SocialPanel {
-    constructor() {
+    /**
+     * @param {{hideMessagesTab?: boolean}} [opts] Trial (2026-09-09,
+     *   owner-requested): the room page passes `hideMessagesTab: true` so
+     *   this becomes a Friends-only modal — Messages lives as a chat-panel
+     *   tab instead (App.js's initRoomMessagesTab()), reachable during a
+     *   call the way chat itself is, while Friends (a rarer, in-and-out
+     *   task) stays exactly the modal it already was. The lobby's own
+     *   instance is unaffected (default false, no chat panel to fold into).
+     */
+    constructor({ hideMessagesTab = false } = {}) {
+        this._hideMessagesTab = hideMessagesTab;
         this.modal = document.getElementById('social-modal') || this._buildModal();
         this.trigger = document.getElementById('social-button') || this._buildTrigger();
 
@@ -55,10 +65,10 @@ export class SocialPanel {
         // trick SettingsPanel.js's section controllers rely on to stay simple
         // regardless of which page built the modal.
         this.friendsPanel = new FriendsPanel();
-        this.messagesPanel = new MessagesPanel();
+        if (!this._hideMessagesTab) this.messagesPanel = new MessagesPanel();
 
         this._wireNav();
-        this._wireOpenDm();
+        if (!this._hideMessagesTab) this._wireOpenDm();
         document.addEventListener('peek:account', (e) => this._setLoggedIn(e.detail.loggedIn));
 
         // AccountPanel.js's own 'peek:account' dispatch (from its session
@@ -71,7 +81,17 @@ export class SocialPanel {
 
     _setLoggedIn(loggedIn) {
         this._loggedIn = loggedIn;
-        this.trigger.classList.toggle('hidden', !loggedIn);
+        // Bug fix (2026-09-09, owner-reported: "why do I see Friends if I'm
+        // not logged in?"): the trigger's `.topbar-icon-btn` class sets its
+        // own `display: flex` and is unlayered (a custom tailwind.css class,
+        // not a Tailwind utility) — per the standing cascade-layers rule,
+        // that unlayered rule always beats the layered `.hidden` utility
+        // regardless of whether this class is toggled on, so the button
+        // never actually hid in-room. `.lobby-icon-btn` (the lobby's own
+        // trigger class) doesn't set `display` at all, which is why this
+        // never showed up there. Inline style always wins over both, so it
+        // works for either host class.
+        this.trigger.style.display = loggedIn ? '' : 'none';
         if (!loggedIn) {
             this.close();
             document.getElementById('social-unread-badge')?.classList.add('hidden');
@@ -97,7 +117,49 @@ export class SocialPanel {
         const modal = document.createElement('div');
         modal.id = 'social-modal';
         modal.className = 'fixed inset-0 z-100 hidden';
-        modal.innerHTML = `
+        const friendsPanelHtml = `
+            <div id="friends-action-error" class="lobby-error hidden"></div>
+
+            <div class="settings-field">
+                <div class="settings-label">Add friend</div>
+                <input type="text" id="friends-add-username" class="settings-text-input"
+                    placeholder="Username" style="max-width:none;" />
+                <div id="friends-add-error" class="lobby-error hidden"></div>
+                <button type="button" id="friends-add-submit" class="lobby-btn-primary"
+                    style="width:100%;margin-top:0.5rem;">Send request</button>
+            </div>
+
+            <div class="settings-label" style="margin-top:1rem;">Requests</div>
+            <div id="friends-incoming-list" class="quick-banned-list"></div>
+
+            <div class="settings-label" style="margin-top:1rem;">Friends</div>
+            <div id="friends-list" class="quick-banned-list"></div>
+
+            <div class="settings-label" style="margin-top:1rem;">Sent</div>
+            <div id="friends-outgoing-list" class="quick-banned-list"></div>
+
+            <div class="settings-label" style="margin-top:1rem;">Blocked</div>
+            <div id="friends-blocked-list" class="quick-banned-list"></div>
+        `;
+        // Friends-only shape (no tab switcher, no Messages section at all)
+        // when this room-side instance hides Messages — see the constructor
+        // comment. The lobby's own instance (hideMessagesTab: false) keeps
+        // the original two-tab layout untouched.
+        modal.innerHTML = this._hideMessagesTab ? `
+            <div class="social-backdrop"></div>
+            <div class="social-drawer">
+                <div class="social-header">
+                    <h2 class="social-header-title">Friends</h2>
+                    <button type="button" id="close-social-panel" class="settings-close-btn" data-tip="Close">
+                        <span class="settings-close-btn-icon"><span class="material-symbols-rounded">close</span></span>
+                        <span class="settings-close-btn-esc">ESC</span>
+                    </button>
+                </div>
+                <div class="social-body">
+                    <div class="social-tab-panel active" data-social-panel="friends">${friendsPanelHtml}</div>
+                </div>
+            </div>
+        ` : `
             <div class="social-backdrop"></div>
             <div class="social-drawer">
                 <div class="social-header">
@@ -114,30 +176,7 @@ export class SocialPanel {
                 </div>
 
                 <div class="social-body">
-                    <div class="social-tab-panel" data-social-panel="friends">
-                        <div id="friends-action-error" class="lobby-error hidden"></div>
-
-                        <div class="settings-field">
-                            <div class="settings-label">Add friend</div>
-                            <input type="text" id="friends-add-username" class="settings-text-input"
-                                placeholder="Username" style="max-width:none;" />
-                            <div id="friends-add-error" class="lobby-error hidden"></div>
-                            <button type="button" id="friends-add-submit" class="lobby-btn-primary"
-                                style="width:100%;margin-top:0.5rem;">Send request</button>
-                        </div>
-
-                        <div class="settings-label" style="margin-top:1rem;">Requests</div>
-                        <div id="friends-incoming-list" class="quick-banned-list"></div>
-
-                        <div class="settings-label" style="margin-top:1rem;">Friends</div>
-                        <div id="friends-list" class="quick-banned-list"></div>
-
-                        <div class="settings-label" style="margin-top:1rem;">Sent</div>
-                        <div id="friends-outgoing-list" class="quick-banned-list"></div>
-
-                        <div class="settings-label" style="margin-top:1rem;">Blocked</div>
-                        <div id="friends-blocked-list" class="quick-banned-list"></div>
-                    </div>
+                    <div class="social-tab-panel" data-social-panel="friends">${friendsPanelHtml}</div>
 
                     <div class="social-tab-panel active" data-social-panel="messages">
                         <div class="quick-settings-header messages-section-header">
@@ -183,9 +222,11 @@ export class SocialPanel {
         const lobbyToolbar = document.querySelector('.lobby-toolbar');
         const btnClass = roomToolbar ? 'topbar-icon-btn' : 'lobby-icon-btn';
 
+        const tip = this._hideMessagesTab ? 'Friends' : 'Friends &amp; Messages';
+        const icon = this._hideMessagesTab ? 'group' : 'mail';
         wrap.innerHTML = `
-            <button type="button" id="social-button" class="${btnClass} hidden" data-tip="Friends &amp; Messages">
-                <span class="material-symbols-rounded">mail</span>
+            <button type="button" id="social-button" class="${btnClass}" style="display:none;" data-tip="${tip}">
+                <span class="material-symbols-rounded">${icon}</span>
                 <span id="social-unread-badge" class="hidden messages-unread-badge"></span>
             </button>
         `;
@@ -208,7 +249,7 @@ export class SocialPanel {
 
     open(tab = null) {
         if (!this.modal) return;
-        this._activateTab(tab || this.modal.querySelector('.social-tabs button.active')?.dataset.socialTab || 'messages');
+        this._activateTab(tab || this.modal.querySelector('.social-tabs button.active')?.dataset.socialTab || (this._hideMessagesTab ? 'friends' : 'messages'));
         this.modal.classList.remove('hidden');
         // Idempotence guard in case open() is ever called while already
         // open — don't stack a second trap (same guard SettingsPanel uses).
@@ -298,7 +339,7 @@ export class SocialPanel {
                     () => document.dispatchEvent(new CustomEvent('peek:force-logout')),
                 );
             }
-            if (!this._stopMessagesPolling) {
+            if (!this._hideMessagesTab && !this._stopMessagesPolling) {
                 this._stopMessagesPolling = startMessagesPolling(
                     (conversations) => this.messagesPanel.setConversations(conversations),
                     () => document.dispatchEvent(new CustomEvent('peek:force-logout')),

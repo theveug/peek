@@ -148,6 +148,27 @@ export class RoomRail {
         });
     }
 
+    // Same anchored-popover pattern as _confirmLeave() above, not a native
+    // confirm() (2026-09-09, owner-reported: removing a saved room had no
+    // confirmation at all — a stray click permanently forgot it, same
+    // "reversible action deserves no confirm, destructive one does" gap
+    // _confirmLeave() already covers for Home/"+"/joining another room).
+    _confirmRemove(anchorEl, room) {
+        this._showPopover(anchorEl, `
+            <div class="room-rail-popover-title">Remove "${escapeHtml(room.label)}"?</div>
+            <div class="room-rail-popover-status">Only forgets it on this device — the room itself is unaffected.</div>
+            <div class="room-rail-popover-row">
+                <button type="button" class="lobby-btn-secondary room-rail-popover-cancel">Cancel</button>
+                <button type="button" class="lobby-btn-secondary room-rail-popover-confirm">Remove</button>
+            </div>
+        `);
+        this.popover.querySelector('.room-rail-popover-cancel')?.addEventListener('click', () => this._closePopover());
+        this.popover.querySelector('.room-rail-popover-confirm')?.addEventListener('click', () => {
+            this._closePopover();
+            removeRoom(room.code); // re-renders via the 'peek:saved-rooms-changed' listener in the constructor
+        });
+    }
+
     render() {
         const rooms = getSavedRooms();
         this.listEl.innerHTML = '';
@@ -179,7 +200,7 @@ export class RoomRail {
             removeBtn.innerHTML = '<span class="material-symbols-rounded">close</span>';
             removeBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                removeRoom(room.code); // re-renders via the 'peek:saved-rooms-changed' listener above
+                this._confirmRemove(removeBtn, room);
             });
 
             item.appendChild(btn);

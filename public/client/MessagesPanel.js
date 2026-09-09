@@ -17,6 +17,14 @@
 // to bring the whole modal to the Messages tab; see openConversation()
 // below and onShow()'s header comment for how the two avoid racing.
 //
+// Trial (2026-09-09, owner-requested): on the room page this markup is now
+// instead built as a third tab in the chat panel (App.js's
+// initRoomMessagesTab(), UIController.js's _switchTab('messages')) rather
+// than living in SocialPanel.js's modal — a DM is worth keeping an eye on
+// mid-call the way chat itself is, unlike Friends management (rarer,
+// in-and-out, still a modal). Same class either way — the constructor's
+// `badgeId`/`isVisible` options are what let it not care which host it's in.
+//
 // Deliberately plain-text, not markdown: `_renderThread()` uses textContent
 // for every message body, not the marked/DOMPurify pipeline ChatUI.js uses
 // for room chat — free text from another account is exactly the kind of
@@ -27,9 +35,18 @@
 import { playSound } from './SoundPlayer.js';
 
 export class MessagesPanel {
-    constructor() {
-        // Defensive guard, shouldn't fire in practice — SocialPanel.js always
-        // builds this markup before constructing this class.
+    /**
+     * @param {{badgeId?: string, isVisible?: () => boolean}} [opts]
+     *   Both default to the SocialPanel.js-hosted modal shape (unchanged
+     *   lobby/Friends-and-Messages behavior). App.js's room-side "Messages as
+     *   a chat-panel tab" trial (2026-09-09) passes both instead, since that
+     *   markup has no `.social-tab-panel`/`#social-modal` to key visibility
+     *   off of and its badge lives on the tab button, not `#social-unread-badge`.
+     */
+    constructor({ badgeId = 'social-unread-badge', isVisible } = {}) {
+        // Defensive guard, shouldn't fire in practice — whichever host built
+        // this markup (SocialPanel.js's modal, or App.js's chat-panel tab)
+        // always does so before constructing this class.
         if (!document.getElementById('messages-thread')) return;
 
         this.backBtn = document.getElementById('messages-back-btn');
@@ -39,12 +56,13 @@ export class MessagesPanel {
         this.thread = document.getElementById('messages-thread');
         this.input = document.getElementById('messages-input');
         this.sendBtn = document.getElementById('messages-send-btn');
-        this.unreadBadge = document.getElementById('social-unread-badge');
+        this.unreadBadge = document.getElementById(badgeId);
         // Used only by _applyConversations() below to decide whether a live
-        // re-render is worth doing right now — SocialPanel.js owns actual
-        // visibility.
+        // re-render is worth doing right now — the host (SocialPanel.js, or
+        // App.js for the chat-tab trial) owns actual visibility.
         this._sectionEl = this.thread.closest('.social-tab-panel');
         this._modalEl = document.getElementById('social-modal');
+        this._isVisible = isVisible || (() => !!(this._sectionEl?.classList.contains('active') && !this._modalEl?.classList.contains('hidden')));
 
         this._conversations = []; // last fetched inbox, for cheap re-render on a poll tick
         this._activeUsername = null; // which conversation thread is open, if any
@@ -203,7 +221,7 @@ export class MessagesPanel {
         this._conversationsLoaded = true;
 
         this._conversations = conversations;
-        const visible = this._sectionEl?.classList.contains('active') && !this._modalEl?.classList.contains('hidden');
+        const visible = this._isVisible();
         if (visible && !this._activeUsername) this._renderInbox();
         this._updateBadge();
     }
@@ -232,8 +250,7 @@ export class MessagesPanel {
     }
 
     _isConversationViewOpen(username) {
-        const visible = this._sectionEl?.classList.contains('active') && !this._modalEl?.classList.contains('hidden');
-        return !!visible && this._activeUsername === username;
+        return this._isVisible() && this._activeUsername === username;
     }
 
     /** Throttled the same way as ChatUI.js's _playMessageSound() — a burst of

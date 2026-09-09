@@ -91,9 +91,26 @@
                     </div>
                 </div>
 
-                <button id="save-room-button" data-tip="Save this room" class="topbar-icon-btn topbar-save-btn">
-                    <span id="save-room-icon" class="material-symbols-rounded">star</span>
-                </button>
+                <div class="flex items-center relative">
+                    <button id="save-room-button" data-tip="Save this room" class="topbar-icon-btn topbar-save-btn">
+                        <span id="save-room-icon" class="material-symbols-rounded">star</span>
+                    </button>
+
+                    <div id="save-room-popover" class="quick-settings-popover topbar-popover hidden">
+                        <div class="quick-settings-header">Save this room</div>
+                        <div class="settings-field" style="margin-bottom:0.75rem;">
+                            <div class="settings-label">Label</div>
+                            <input type="text" id="save-room-label-input" class="settings-text-input"
+                                style="max-width:none;width:100%;" maxlength="50" placeholder="Room label" />
+                        </div>
+                        <div class="settings-field" style="margin-bottom:0;display:flex;gap:0.5rem;">
+                            <button type="button" id="save-room-cancel" class="lobby-btn-secondary"
+                                style="width:auto;padding:0.5625rem 0.875rem;">Cancel</button>
+                            <button type="button" id="save-room-confirm" class="lobby-btn-primary"
+                                style="width:auto;padding:0.5625rem 0.875rem;">Save</button>
+                        </div>
+                    </div>
+                </div>
 
                 <button id="leave-room-button" data-tip="Leave Room" class="topbar-leave-btn">
                     <span class="material-symbols-rounded">call_end</span>
@@ -256,6 +273,23 @@
                         <span id="files-tab-badge"
                             class="hidden items-center justify-center text-[10px] rounded-full min-w-4.5 h-4.5 px-1 leading-none panel-tab-badge">0</span>
                     </button>
+                    <!-- Trial (2026-09-09, owner-requested): Messages as a third chat-panel tab
+                         instead of living only in SocialPanel.js's Friends & Messages modal — a DM
+                         is worth keeping an eye on mid-call the way chat itself is. Starts
+                         display:none (not the `hidden` utility — .panel-tab-btn is an unlayered
+                         custom class that sets its own display:flex, which would beat the layered
+                         .hidden per the standing cascade-layers rule) since it should only ever
+                         show once accounts are enabled and the viewer is logged in; App.js's
+                         initRoomMessagesTab() reveals it via the same inline-style toggle. -->
+                    <button id="tab-messages" class="panel-tab-btn" style="display:none;">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+                            <path d="M3 4a2 2 0 0 0-2 2v1.161l8.441 4.221a1.25 1.25 0 0 0 1.118 0L19 7.162V6a2 2 0 0 0-2-2H3Z" />
+                            <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 0 1-2.46 0L1 8.839V14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.839Z" />
+                        </svg>
+                        Messages
+                        <span id="messages-tab-badge"
+                            class="hidden flex items-center justify-center text-[10px] rounded-full min-w-4.5 h-4.5 px-1 leading-none panel-tab-badge">0</span>
+                    </button>
                     <button id="chat-search-btn" data-tip="Search chat" type="button" class="panel-close-btn">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
                             <path fill-rule="evenodd" clip-rule="evenodd"
@@ -372,6 +406,31 @@
                             </svg>
                             Export session recap
                         </button>
+                    </div>
+                </div>
+                <!-- Messages tab (trial, 2026-09-09) — same markup shape MessagesPanel.js expects
+                     (previously only built by SocialPanel.js's modal), just fitted into a plain
+                     chat-panel tab instead of modal/drawer chrome. App.js's initRoomMessagesTab()
+                     constructs a MessagesPanel targeting this container. -->
+                <div id="messages-tab-content" class="hidden flex-col flex-1 min-h-0">
+                    <div id="messages-inbox-view" class="flex-1 overflow-auto">
+                        <div id="messages-inbox-list" class="quick-banned-list" style="padding:0.5rem;"></div>
+                    </div>
+                    <div id="messages-conversation-view" class="hidden flex-col flex-1 min-h-0">
+                        <div class="quick-settings-header messages-section-header" style="padding:0.5rem 0.75rem;margin:0;">
+                            <button type="button" id="messages-back-btn" class="hidden messages-back-btn" data-tip="Back to conversations">
+                                <span class="material-symbols-rounded">arrow_back</span>
+                            </button>
+                            <span id="messages-popover-title">Messages</span>
+                        </div>
+                        <div id="messages-thread" class="messages-thread flex-1 overflow-auto"></div>
+                        <div class="chat-composer">
+                            <textarea id="messages-input" rows="1" placeholder="Message"
+                                class="chat-composer-input" maxlength="4000"></textarea>
+                            <button type="button" id="messages-send-btn" data-tip="Send" class="chat-composer-send shrink-0">
+                                <span class="material-symbols-rounded">send</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <!-- Lives inside #chat, not #videos — decoupled 2026-09-09 so the stage toggle

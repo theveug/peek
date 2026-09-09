@@ -17,6 +17,8 @@ import { playSound } from './SoundPlayer.js';
 import { RoomRail } from './RoomRail.js';
 import { AccountPanel } from './AccountPanel.js';
 import { SocialPanel } from './SocialPanel.js';
+import { MessagesPanel } from './MessagesPanel.js';
+import { startMessagesPolling } from './messagesPoll.js';
 import { updateSavedRoomPassword, isRoomSaved, saveRoom, removeRoom } from './savedRooms.js';
 import { isModifierCode, comboFromEvent, isComboHeld } from './keybindUtils.js';
 import { CallRecorder } from './CallRecorder.js';
@@ -659,10 +661,8 @@ document.getElementById('leave-room-button').addEventListener('click', () => {
 new RoomRail({ currentRoomCode: sessionId, navigate: leaveSession });
 
 // Mirrors the lobby's "Save this room" checkbox for someone already in a
-// call — label defaults to the room's own name (falling back to its code,
-// same fallback lobby.js's create/join forms use) since there's no form
-// field here to type a custom one into; the room-rail's saved-room entries
-// have no rename affordance either, so this matches existing capability.
+// call — the room-rail's saved-room entries have no rename affordance
+// either, so a label typed here is the room's only name anywhere in the UI.
 //
 // Save-only, not a toggle (2026-09-09, owner-reported): a filled/clickable
 // "unsave" state here duplicated RoomRail.js's own per-room "Remove" (×)
@@ -670,12 +670,44 @@ new RoomRail({ currentRoomCode: sessionId, navigate: leaveSession });
 // to *add* the current room to the saved list; once it's there, the button
 // disappears entirely rather than switching to an unsave affordance —
 // removing a saved room is the rail's job alone now.
+//
+// Asks for a label instead of silently defaulting to the room's own name
+// (2026-09-09, owner-reported) — a small anchored popover, same
+// no-native-dialogs convention as everywhere else in this app (see
+// RoomRail.js's own `_confirmLeave()`/`_confirmRemove()` comments), input
+// pre-filled with the same default this used to save silently, so accepting
+// it is just Enter/click-Save with no extra typing required.
 const saveRoomBtn = document.getElementById('save-room-button');
+const saveRoomPopover = document.getElementById('save-room-popover');
+const saveRoomLabelInput = document.getElementById('save-room-label-input');
 function refreshSaveRoomButton() {
     saveRoomBtn.style.display = isRoomSaved(sessionId) ? 'none' : '';
 }
-saveRoomBtn.addEventListener('click', () => {
-    saveRoom({ code: sessionId, label: ui.roomName || sessionId, password: roomPassword });
+function closeSaveRoomPopover() {
+    saveRoomPopover.classList.add('hidden');
+}
+function confirmSaveRoom() {
+    const label = saveRoomLabelInput.value.trim() || ui.roomName || sessionId;
+    saveRoom({ code: sessionId, label, password: roomPassword });
+    closeSaveRoomPopover();
+}
+saveRoomBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    saveRoomLabelInput.value = ui.roomName || sessionId;
+    saveRoomPopover.classList.remove('hidden');
+    saveRoomLabelInput.focus();
+    saveRoomLabelInput.select();
+});
+document.getElementById('save-room-cancel').addEventListener('click', closeSaveRoomPopover);
+document.getElementById('save-room-confirm').addEventListener('click', confirmSaveRoom);
+saveRoomLabelInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') confirmSaveRoom();
+    else if (e.key === 'Escape') closeSaveRoomPopover();
+});
+document.addEventListener('click', (e) => {
+    if (saveRoomPopover.classList.contains('hidden')) return;
+    if (saveRoomPopover.contains(e.target) || e.target === saveRoomBtn) return;
+    closeSaveRoomPopover();
 });
 // RoomRail.js's remove ("x") button can also drop this room from the saved
 // list while it's the one currently open — same event keeps this button in
@@ -690,7 +722,73 @@ refreshSaveRoomButton();
 // (SocialPanel.js) — the two are independently constructed and talk only
 // via CustomEvents, see SocialPanel.js's header comment.
 new AccountPanel();
-new SocialPanel();
+// hideMessagesTab: true — trial (2026-09-09, owner-requested): Messages now
+// lives as a third chat-panel tab (initRoomMessagesTab() below) instead of
+// this modal, so this room-side instance is Friends-only. See
+// SocialPanel.js's constructor comment and MessagesPanel.js's header
+// comment for the full reasoning; the lobby's own instance (lobby.js)
+// still gets both, unchanged.
+const socialPanel = new SocialPanel({ hideMessagesTab: true });
+
+// Messages-as-a-chat-tab trial (2026-09-09) — same MessagesPanel.js class
+// SocialPanel.js's lobby-side modal uses, just targeting #messages-tab-content
+// (built in index.html) instead, via the constructor's badgeId/isVisible
+// options. Independently checks /api/trust + login state, same "each file
+// does its own async check, no guaranteed ordering" precedent SocialPanel.js
+// itself already establishes (see its _init()'s own comment) — there's no
+// shared reference between this and that file to hang a single check off of.
+let roomMessagesPanel = null;
+let stopRoomMessagesPolling = null;
+const tabMessagesBtn = document.getElementById('tab-messages');
+function setRoomMessagesLoggedIn(loggedIn) {
+    tabMessagesBtn.style.display = loggedIn ? '' : 'none'; // see the button's own HTML comment for why style, not .hidden
+    if (loggedIn) {
+        if (!roomMessagesPanel) {
+            roomMessagesPanel = new MessagesPanel({
+                badgeId: 'messages-tab-badge',
+                isVisible: () => !document.getElementById('messages-tab-content').classList.contains('hidden'),
+            });
+        }
+        if (!stopRoomMessagesPolling) {
+            stopRoomMessagesPolling = startMessagesPolling(
+                (conversations) => roomMessagesPanel.setConversations(conversations),
+                () => document.dispatchEvent(new CustomEvent('peek:force-logout')),
+            );
+        }
+    } else {
+        stopRoomMessagesPolling?.();
+        stopRoomMessagesPolling = null;
+        document.getElementById('messages-tab-badge')?.classList.add('hidden');
+        // A logged-out viewer can't be looking at someone else's DMs — if the
+        // Messages tab happened to be active, fall back to Chat rather than
+        // leaving a now-hidden tab's content showing.
+        if (!document.getElementById('messages-tab-content').classList.contains('hidden')) {
+            document.getElementById('tab-chat').click();
+        }
+    }
+}
+async function initRoomMessagesTab() {
+    const trust = await fetch('/api/trust').then(r => r.json()).catch(() => null);
+    if (!trust?.accounts) return;
+    const me = await fetch('/api/auth/me').then(r => r.ok ? r.json() : null).catch(() => null);
+    setRoomMessagesLoggedIn(!!me);
+    document.addEventListener('peek:account', (e) => setRoomMessagesLoggedIn(e.detail.loggedIn));
+}
+initRoomMessagesTab();
+// UIController.js's _switchTab('messages') dispatches this — the only way
+// this file's MessagesPanel instance learns it just became visible, since
+// neither class holds a reference to the other.
+window.addEventListener('peek:messages-tab-shown', () => roomMessagesPanel?.onShow());
+// FriendsPanel.js's "Message" row action (its own peek:open-dm dispatch) —
+// MessagesPanel.js's own listener on this same event opens the actual
+// conversation; this just has to bring the tab itself into view first, same
+// division of labor SocialPanel.js's own _wireOpenDm() used to have — plus
+// closing the Friends modal, which that version never needed to do since
+// Messages used to live inside the same modal being brought to front.
+document.addEventListener('peek:open-dm', () => {
+    ui.switchToMessagesTab();
+    socialPanel.close();
+});
 
 // Manual mic toggle — the mic button's click and the Toggle Mute keybind
 // (below) both call this. Mirrors toggleDeafen()'s click+keybind sharing.
