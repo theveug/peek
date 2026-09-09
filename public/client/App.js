@@ -663,21 +663,23 @@ new RoomRail({ currentRoomCode: sessionId, navigate: leaveSession });
 // same fallback lobby.js's create/join forms use) since there's no form
 // field here to type a custom one into; the room-rail's saved-room entries
 // have no rename affordance either, so this matches existing capability.
+//
+// Save-only, not a toggle (2026-09-09, owner-reported): a filled/clickable
+// "unsave" state here duplicated RoomRail.js's own per-room "Remove" (×)
+// button — two controls for the same action. This button now exists purely
+// to *add* the current room to the saved list; once it's there, the button
+// disappears entirely rather than switching to an unsave affordance —
+// removing a saved room is the rail's job alone now.
 const saveRoomBtn = document.getElementById('save-room-button');
-const saveRoomIcon = document.getElementById('save-room-icon');
 function refreshSaveRoomButton() {
-    const saved = isRoomSaved(sessionId);
-    saveRoomBtn.classList.toggle('saved', saved);
-    saveRoomIcon.classList.toggle('icon-filled', saved);
-    saveRoomBtn.dataset.tip = saved ? 'Saved — click to remove' : 'Save this room';
+    saveRoomBtn.style.display = isRoomSaved(sessionId) ? 'none' : '';
 }
 saveRoomBtn.addEventListener('click', () => {
-    if (isRoomSaved(sessionId)) removeRoom(sessionId);
-    else saveRoom({ code: sessionId, label: ui.roomName || sessionId, password: roomPassword });
+    saveRoom({ code: sessionId, label: ui.roomName || sessionId, password: roomPassword });
 });
 // RoomRail.js's remove ("x") button can also drop this room from the saved
 // list while it's the one currently open — same event keeps this button in
-// sync with that, not just its own clicks.
+// sync with that (reappearing), not just its own clicks.
 window.addEventListener('peek:saved-rooms-changed', refreshSaveRoomButton);
 refreshSaveRoomButton();
 
@@ -1313,6 +1315,101 @@ if (membersToggle && membersSidebar) {
         window.addEventListener('mouseup', onUp);
     });
 })();
+
+// Discord-style "hide the video stage" toggle (2026-09-09, redesigned same
+// day) — for a room that's never used for screen/cam sharing, #videos is
+// otherwise permanent wasted width. `body.stage-hidden` (tailwind.css's
+// "Stage toggle" section) hides #videos entirely and lets #chat flex-grow
+// to fill the freed space; #members-sidebar and its own resize handle are
+// untouched, so dragging it is the one remaining way to split the space and
+// chat adjusts to whatever's left. Not a per-room setting — deliberately
+// just a per-tab preference (`localStorage['stageHidden']`), same tier as
+// chatHidden/membersHidden above, since a room's *usage pattern* (chat-only
+// vs. video) isn't really a room-wide fact worth pushing to every peer.
+//
+// Closing and reopening are two separate elements — #stage-close-btn (in
+// #videos's own idle/no-stream state) and #toggle-stage-tab (an edge tab on
+// #chat's right edge, matching #togglechat/#toggle-members's own pattern) —
+// rather than one persistent toggle button, which the first version of this
+// used and which read as "control my camera" sitting next to the mic/cam
+// dock buttons rather than "toggle a layout mode".
+// #controls (the mic/cam/share/deafen/record dock) is a descendant of
+// #videos — display:none on an ancestor takes every descendant down with
+// it regardless of that descendant's own position/visibility (unlike
+// `visibility`, there's no CSS override for an ancestor's display:none), so
+// hiding the stage would otherwise take the call controls down with it too,
+// leaving no way to mute/deafen/leave-your-share/etc. while voice-only.
+// Moved to be the last child of `.room-shell` instead (a real sibling of
+// the chat/videos/members row) while the stage is hidden — already
+// `position:relative` and already inset for the room rail
+// (`margin-left: var(--room-rail-width)`), so #controls' own CSS (`width:
+// 100%`/`margin-top:auto`, neither of which depends on the specific parent)
+// reproduces the same "flush against the bottom" look, just spanning the
+// wider chat+members combined width instead of #videos's own. #controls-tab
+// (its reopen affordance, for when the dock itself is *also* manually
+// closed) has to move with it for the same reason. A comment node left in
+// #controls' exact original spot is the anchor for putting both back
+// exactly where they came from, rather than assuming "last child of
+// #videos" is still correct after some other change reorders that markup.
+let _controlsRelocationMarker = null;
+function relocateControlsForStage(hidden) {
+    const controls = document.getElementById('controls');
+    const controlsTab = document.getElementById('controls-tab');
+    const roomShell = document.querySelector('.room-shell');
+    if (!controls || !roomShell) return;
+    if (hidden) {
+        if (_controlsRelocationMarker) return; // already relocated
+        _controlsRelocationMarker = document.createComment('controls-original-position');
+        controls.before(_controlsRelocationMarker);
+        roomShell.appendChild(controls);
+        if (controlsTab) roomShell.appendChild(controlsTab);
+    } else if (_controlsRelocationMarker) {
+        _controlsRelocationMarker.after(controls);
+        if (controlsTab) controls.after(controlsTab);
+        _controlsRelocationMarker.remove();
+        _controlsRelocationMarker = null;
+    }
+}
+
+function setStageHidden(hidden) {
+    document.body.classList.toggle('stage-hidden', hidden);
+    localStorage.setItem('stageHidden', hidden ? '1' : '0');
+    relocateControlsForStage(hidden);
+    // #chat's inline width (set by initChatResize()'s drag handler) beats
+    // tailwind.css's `body.stage-hidden .chat-panel { width: auto; flex: 1 1
+    // auto }` regardless of specificity — must be cleared for that rule to
+    // actually take effect, and restored on the way back out so chat snaps
+    // back to wherever the user last dragged it rather than the CSS default.
+    if (chatBox) {
+        if (hidden) {
+            chatBox.style.width = '';
+        } else {
+            const savedW = localStorage.getItem('chatWidth');
+            if (savedW) chatBox.style.width = savedW + 'px';
+        }
+    }
+}
+setStageHidden(!isMobile() && localStorage.getItem('stageHidden') === '1');
+document.getElementById('stage-close-btn')?.addEventListener('click', () => {
+    if (isMobile()) return;
+    // CSS already hides this button while `body.stage-busy` (an active
+    // stream exists) via the hover-reveal opacity, but a *programmatic*
+    // `.click()` — peek-desktop's titlebar/thumbar relay, or any future
+    // caller — bypasses that regardless of visibility, so the guard has to
+    // be re-checked here too rather than trusted to CSS alone.
+    if (document.body.classList.contains('stage-busy')) return;
+    setStageHidden(true);
+});
+document.getElementById('toggle-stage-tab')?.addEventListener('click', () => {
+    if (isMobile()) return;
+    setStageHidden(false);
+});
+// A stream just started (self screen/cam, or a peer's) while the stage was
+// hidden — UIController.addStream() dispatches this so #chat's width syncs
+// back up through the same setStageHidden() path a manual reopen uses,
+// rather than a chat-only layout silently swallowing someone's video with
+// no way to know it's there.
+window.addEventListener('peek:stage-restored', () => setStageHidden(false));
 
 // Controls dock toggle (2026-08-29) — mirrors the chat/members panels'
 // hidden+edge-tab pattern above instead of the old hover-to-reveal behavior

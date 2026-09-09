@@ -1449,7 +1449,12 @@ body {
 }
 
 .panel-tab-btn {
-  flex: 1;
+  /* Was flex:1 (each of Chat/Files stretching to fill half the row) — sized
+     to content instead (2026-09-09, owner-reported visual request) so the
+     two tabs sit left-aligned and #chat-search-btn's margin-left:auto below
+     can push the search/pinned/close icon group to the right edge, Discord-
+     style, rather than the whole bar's five buttons spreading edge-to-edge. */
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1457,7 +1462,7 @@ body {
   border: none;
   border-radius: 0.5625rem;
   cursor: pointer;
-  padding: 0.5rem;
+  padding: 0.5rem 0.75rem;
   font-size: 0.8438rem;
   font-weight: 700;
   background: transparent;
@@ -1497,6 +1502,15 @@ body {
   background: transparent;
   color: var(--t3);
   cursor: pointer;
+}
+
+/* #chat-search-btn is the first of the trailing icon buttons (search/pinned/
+   close) in .panel-tabs — margin-left:auto on just this one pushes that
+   whole group to the row's right edge now that .panel-tab-btn (Chat/Files)
+   no longer stretches to fill the row (see that rule's comment), instead of
+   restructuring the row into two separate flex groups for a one-line fix. */
+#chat-search-btn {
+  margin-left: auto;
 }
 
 .panel-close-btn:hover {
@@ -1895,23 +1909,20 @@ body {
   background: var(--bg2);
 }
 
-/* Absolutely positioned inside #videos (2026-08-29, moved from being a flex
-   sibling between #chat and #videos) rather than its own flex column — a
-   dedicated layout column for a 4px drag strip left #videos's actual edge
-   (and everything positioned relative to it, like #controls or the panel
-   tabs) sitting 4px short of the chat panel it was supposed to be flush
-   against, which is what actually caused the "gap" the panel-tabs already
-   had to pull 4px back over (see .chat-tab's comment) and #controls'
-   corner/background fix earlier the same day still didn't close. Full height
-   via top:0/bottom:0, sits exactly at #videos's left edge (no negative
-   offset needed — it's genuinely #videos's own edge now, not a
-   compensating overlap). Hidden together with the chat panel via the
-   body:has() rule below, same mechanism .chat-tab's visibility already uses. */
+/* Absolutely positioned inside #chat itself (2026-09-09, moved off of #videos
+   — see "Stage toggle" below for why: #videos can now be hidden entirely for
+   a chat-only layout, and anything anchored to it disappears along with it).
+   Anchored to #chat's own right edge instead of #videos's left edge — the
+   same seam, just claimed from the other side, so the visual position is
+   unchanged. Full height via top:0/bottom:0. Hidden together with the chat
+   panel via the body:has() rule below (now technically redundant, since a
+   hidden #chat already hides its own child, but left in place as the
+   explicit statement of intent). */
 .chat-resize-handle {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 0;
+  right: 0;
   width: 0.25rem;
   cursor: col-resize;
   background: transparent;
@@ -1945,13 +1956,14 @@ body:has(#chat.hidden) .chat-resize-handle {
   padding: 0;
 }
 
-/* Same "lives inside #videos" move as .chat-resize-handle above, mirrored to
-   the right edge — see that rule's comment for the full reasoning. */
+/* Same "moved off #videos onto its own panel" change as .chat-resize-handle
+   above, mirrored to #members-sidebar's left edge — see that rule's comment
+   for the full reasoning. */
 .members-resize-handle {
   position: absolute;
   top: 0;
   bottom: 0;
-  right: 0;
+  left: 0;
   width: 0.25rem;
   cursor: col-resize;
   background: transparent;
@@ -1968,11 +1980,98 @@ body:has(#members-sidebar.collapsed) .members-resize-handle {
   display: none;
 }
 
+/* ===== Stage toggle (2026-09-09, redesigned same day) ===== */
+/* Discord-style "hide the video stage" (`body.stage-hidden`) — for a room
+   that's never used for screen/cam sharing, #videos is otherwise permanent
+   wasted width. #videos leaves the flex row outright (display:none, not
+   width:0 — nothing else in this row depends on it existing anymore, see
+   the resize-handle relocation above), #chat becomes the row's one
+   remaining flex-grow item so it fills whatever #members-sidebar's own
+   resize handle doesn't claim, and .chat-resize-handle is hidden — it only
+   ever negotiated width against #videos, which no longer exists in this
+   mode. #members-sidebar's own handle is the sole boundary left to drag;
+   App.js's setStageHidden() clears #chat's inline width so this flex-grow
+   rule can actually take effect (an inline style from a previous manual
+   drag would otherwise win over it) and restores that saved width again on
+   the way back out.
+
+   First version of this used a standalone topbar toggle button — dropped
+   the same day: sitting next to the mic/cam dock controls, a camera icon
+   read as "control my camera" rather than "toggle a layout mode". Replaced
+   with the same close-in-panel / reopen-via-edge-tab pattern #chat and
+   #members-sidebar already use (#stage-close-btn / .stage-tab below), so
+   the interaction matches learned behavior instead of introducing a third
+   one. */
+body.stage-hidden #videos {
+  display: none;
+}
+
+body.stage-hidden .chat-panel {
+  flex: 1 1 auto;
+  width: auto;
+  max-width: none;
+}
+
+body.stage-hidden .chat-resize-handle {
+  display: none;
+}
+
+/* #stage-close-btn only shows while idle (`body.stage-busy` — toggled by
+   UIController's addStream()/removeStream() off `Object.keys(this.streams)`
+   — hides it outright the instant any stream exists), since hiding the
+   stage mid-stream would waste the sender's bandwidth on video nobody's
+   watching rather than genuinely saving anything. Hover-revealed like
+   .controls-close-btn, same "notch you only notice when you're near it"
+   feel — not load-bearing for the overlap-with-a-live-tile's-own-controls
+   worry that motivated this (idle-gating already rules that out), just
+   visual polish so it isn't a permanent X floating over the empty stage. */
+.stage-close-btn {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 62;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+}
+
+#videos:hover .stage-close-btn,
+#videos:focus-within .stage-close-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+body.stage-busy .stage-close-btn {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .stage-close-btn,
+  .stage-tab {
+    display: none !important;
+  }
+}
+
 /* ===== Panel toggle tabs ===== */
-/* Tabs overlay the stage's edges (children of #videos, which is the
-   position:relative stacking context) instead of sitting in the flex row as
-   their own column — they shouldn't cost the layout 32px of width just to
-   host a toggle button. */
+/* Tabs overlay the row's edges (siblings of #chat/#videos/#members-sidebar
+   inside the shared `relative` row wrapper — moved off of #videos 2026-09-09
+   so they keep working when the stage is hidden, see the resize-handle
+   relocation comment above) instead of sitting in the flex row as their own
+   column — they shouldn't cost the layout 32px of width just to host a
+   toggle button. left:0/right:0 land in the same spot as before: a tab is
+   only ever visible while its own panel is hidden, and in that state the
+   panel took up zero width anyway, so the row wrapper's edge and the old
+   #videos edge were always the same point.
+   z-index must clear #videos's own z-index:61 now that the tabs are its
+   siblings rather than its children — while they lived inside #videos they
+   only had to out-stack other elements *within* it, but as of this move
+   #videos's whole box (still z-index:61, see that rule's comment) sits above
+   any lower-z-index sibling and silently ate every click/hover on the tabs
+   (confirmed via `npm run test:ui`, which failed on exactly this — #spinner,
+   an ordinary child of #videos, was intercepting pointer events meant for
+   #togglechat). 62 is #videos's z-index plus one, nothing more. */
 .panel-tab {
   position: absolute;
   top: 50%;
@@ -1982,7 +2081,7 @@ body:has(#members-sidebar.collapsed) .members-resize-handle {
   justify-content: center;
   width: 2rem;
   height: 3.5rem;
-  z-index: 20;
+  z-index: 62;
   color: var(--color-muted);
   cursor: pointer;
   /* Matches .chat-panel/.members-panel's own background (--bg2) — using --bg3
@@ -2004,14 +2103,12 @@ body.light .panel-tab:hover {
   background: rgba(0, 0, 0, 0.06);
 }
 
-/* left:0/right:0 sits flush against #videos's own edge, which (2026-08-29)
-   is now genuinely the same edge the chat/members panel sits against too —
-   .chat-resize-handle/.members-resize-handle moved from their own 4px-wide
-   flex column between the panel and #videos to living *inside* #videos
-   instead (see those rules' comments), so there's no gap width left to pull
-   back over here. A tab and its handle are also never visible at the same
-   time (the handle hides exactly when its panel does, exactly when the tab
-   shows), so there's no overlap needing z-index arbitration either. */
+/* left:0/right:0 sits flush against the shared row wrapper's own edge (see
+   the "Panel toggle tabs" comment above for why that's always the same
+   point as the adjacent panel's edge). A tab and its handle are also never
+   visible at the same time (the handle hides exactly when its panel does,
+   exactly when the tab shows), so there's no overlap needing z-index
+   arbitration either. */
 .chat-tab {
   left: 0;
   border-radius: 0 0.625rem 0.625rem 0;
@@ -2022,6 +2119,33 @@ body.light .panel-tab:hover {
   right: 0;
   border-radius: 0.625rem 0 0 0.625rem;
   border-right: none !important;
+}
+
+/* .stage-tab is anchored inside #chat (right:0 of #chat's own box, the same
+   spot .chat-resize-handle occupies — see that rule's comment), not the row
+   wrapper .chat-tab/.members-tab use — #chat's right edge is wherever the
+   stage would reappear, which moves as #chat/#members-sidebar are resized,
+   so a fixed left:0/right:0 against the row wrapper (correct for the other
+   two, which always collapse to zero width) wouldn't track it. Same outer/
+   inner rounding logic as .members-tab (its "outer," away-from-content side
+   is the right edge too) — reused verbatim rather than re-derived. `top: 38%`
+   instead of the base .panel-tab 50%: in the rare case #members-sidebar is
+   ALSO collapsed at the same time, #chat fills the full row and this tab's
+   right:0 lands on the exact same point as .members-tab's own right:0 —
+   nudging the vertical center keeps both independently clickable instead of
+   perfectly overlapping. Visibility is a plain `body.stage-hidden` class
+   check (set directly by App.js), not a `:has()` selector like the other
+   two — there's no separate element whose own class this needs to read. */
+.stage-tab {
+  right: 0;
+  top: 38%;
+  border-radius: 0.625rem 0 0 0.625rem;
+  border-right: none !important;
+  display: none;
+}
+
+body.stage-hidden .stage-tab {
+  display: flex;
 }
 
 /* Desktop only (mobile's tabs stay governed by the .mobile-open drawer rules
@@ -2048,16 +2172,20 @@ body.light .panel-tab:hover {
 }
 
 /* #videos has no z-index of its own (position:relative via a Tailwind
-   utility class, not this stylesheet). Originally added so the panel tabs
-   (children of #videos) would out-stack .chat-resize-handle/
-   .members-resize-handle, which used to live *outside* #videos as separate
-   flex siblings with their own higher z-index:60 — without it the tabs lost
-   that stacking fight and never received clicks in the strip they overlapped.
-   The handles moved inside #videos on 2026-08-29 (see their own rules'
-   comments) and are never visible at the same time as their tab anymore, so
-   that specific conflict is gone, but this is left in place as a general
-   "children of #videos predictably stack above the room-shell's other flex
-   items" guarantee rather than removed on the assumption nothing else needs it. */
+   utility class, not this stylesheet). Originally added so the panel tabs —
+   then children of #videos — would out-stack .chat-resize-handle/
+   .members-resize-handle, which at the time lived *outside* #videos as
+   separate flex siblings with their own higher z-index:60. The tabs and the
+   handles have since moved again (2026-09-09 — tabs are now row-wrapper
+   siblings, handles live on #chat/#members-sidebar themselves, see their own
+   rules' comments), so this exact conflict no longer applies — but this
+   property turned out to still very much matter, just inverted: with the
+   tabs now #videos's siblings instead of its children, #videos's own
+   z-index:61 started burying them (an ordinary child of #videos, like
+   #spinner, was left intercepting clicks meant for #togglechat — caught by
+   `npm run test:ui`). Fixed by bumping `.panel-tab` to z-index:62 (see that
+   rule's comment) rather than removing this — don't remove #videos's
+   z-index without re-running that test. */
 #videos {
   z-index: 61;
 }
@@ -5420,18 +5548,6 @@ body,
 .topbar-icon-btn:hover {
   background: var(--bg3);
   color: var(--t1);
-}
-
-/* Filled-star glyph swap is handled by fonts.css's existing .icon-filled
-   (the font's real FILL variable axis) — this just adds the accent color on
-   top, same "filled + colored" combo already used for other toggled icons. */
-.topbar-save-btn.saved {
-  color: var(--accent);
-}
-
-.topbar-save-btn.saved:hover {
-  color: var(--accent);
-  background: var(--accentSoft);
 }
 
 /* The whole avatar+name area is the single status/settings dropdown trigger

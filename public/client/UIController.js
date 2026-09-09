@@ -2576,6 +2576,39 @@ export class UIController {
     }
 
     /**
+     * A stream (self screen/cam, or a peer's) just started while App.js's
+     * "hide the video stage" toggle (`body.stage-hidden`) had #videos
+     * hidden — a chat-only layout must never silently swallow someone's
+     * video with no way to know it's there. Restores the stage and tells
+     * App.js to sync the toggle button + chat's width back, via a
+     * CustomEvent rather than a direct call — same cross-module pattern as
+     * `peek:account`/`peek:saved-rooms-changed` elsewhere in this app, since
+     * this module has no reference to App.js's DOM-scoped toggle state.
+     * @returns {void}
+     */
+    _autoShowStage() {
+        if (document.body.classList.contains('stage-hidden')) {
+            document.body.classList.remove('stage-hidden');
+            localStorage.setItem('stageHidden', '0');
+            window.dispatchEvent(new CustomEvent('peek:stage-restored'));
+        }
+    }
+
+    /**
+     * Toggles `body.stage-busy` to reflect whether any stream (self or
+     * peer) is currently active. App.js's `#stage-close-btn` — the "hide
+     * the video stage" toggle's close action — only shows/allows clicking
+     * while this is false; hiding an in-progress stream would waste the
+     * sender's bandwidth on video nobody's watching rather than genuinely
+     * saving anything. Called from both `addStream()` and `removeStream()`
+     * so it can never drift from the real stream count.
+     * @returns {void}
+     */
+    _refreshStageBusyState() {
+        document.body.classList.toggle('stage-busy', Object.keys(this.streams).length > 0);
+    }
+
+    /**
      * The room rail (`#room-rail`, RoomRail.js) is a `position: fixed` strip
      * pinned to the left edge of the room page. The drag clamp below only
      * ever bounded the PiP to the window edges, so it could be dragged with
@@ -2789,6 +2822,8 @@ export class UIController {
      */
     addStream(peerId, stream) {
         this.streams[peerId] = stream;
+        this._autoShowStage();
+        this._refreshStageBusyState();
         this._updateParticipantStreamIcons(this._realPeerIdForStreamKey(peerId));
 
         if (peerId === 'me' || peerId === 'me-cam') {
@@ -2861,6 +2896,7 @@ export class UIController {
         const hadStream = !!this.streams[peerId];
         const isSelf = peerId === 'me' || peerId === 'me-cam';
         delete this.streams[peerId];
+        this._refreshStageBusyState();
         this._updateParticipantStreamIcons(this._realPeerIdForStreamKey(peerId));
         this.watchedTiles.delete(peerId);
         this._watchSentState.delete(peerId);
