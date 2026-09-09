@@ -5,6 +5,7 @@ import { trapFocus } from './focusTrap.js';
 import * as chatHistoryStore from './chatHistoryStore.js';
 import { finalizeCodeBlocks } from './markdownCodeBlocks.js';
 import { colorForName, avatarHtml, messageHeaderHtml } from './chatMessageRow.js';
+import { isAtBottom, scrollToBottom, wireAutoScrollResize } from './chatAutoScroll.js';
 
 /**
  * Chat panel behavior: messages, typing indicators, reactions, polls,
@@ -64,25 +65,12 @@ export class ChatUI {
 
     /**
      * Keeps the log pinned to its bottom across a chat-panel drag-resize or a
-     * window resize — both reflow message text (word-wrap changes) and shift
-     * scrollHeight without firing a 'scroll' event, so a user who was reading
-     * live traffic at the bottom would otherwise drift away from it purely
-     * from the reflow. `_wasAtBottom` is updated only by real user scrolling
-     * (via the 'scroll' listener) and left untouched by our own corrective
-     * jumps below, so a user who'd deliberately scrolled up to read history
-     * is never yanked back down by a resize.
+     * window resize — delegates to chatAutoScroll.js's shared
+     * wireAutoScrollResize(), which MessagesPanel.js's DM thread now uses too.
      * @returns {void}
      */
     _wireAutoScrollResize() {
-        const chatLog = document.getElementById('chat-log');
-        if (!chatLog || typeof ResizeObserver === 'undefined') return;
-        this._wasAtBottom = true;
-        chatLog.addEventListener('scroll', () => {
-            this._wasAtBottom = this._isAtBottom(chatLog);
-        });
-        new ResizeObserver(() => {
-            if (this._wasAtBottom) chatLog.scrollTop = chatLog.scrollHeight;
-        }).observe(chatLog);
+        wireAutoScrollResize(document.getElementById('chat-log'), document.getElementById('chat-input'));
     }
 
     /**
@@ -1794,24 +1782,24 @@ export class ChatUI {
         return mentionedMe;
     }
 
-    /** @param {HTMLElement} chatLog @returns {boolean} */
+    /**
+     * @param {HTMLElement} chatLog @returns {boolean}
+     * Delegates to chatAutoScroll.js's shared isAtBottom() — this method just
+     * supplies `#chat-input` (the composer bar) as the threshold reference,
+     * since that lookup is room-specific.
+     */
     _isAtBottom(chatLog) {
-        const chatInput = document.getElementById('chat-input');
-        const threshold = (chatInput?.scrollHeight || 0) + 50;
-        return (chatLog.scrollTop + chatLog.clientHeight) >= (chatLog.scrollHeight - threshold);
+        return isAtBottom(chatLog, document.getElementById('chat-input'));
     }
 
     /**
-     * Scrolls chatLog to its current bottom. Downgrades to an instant jump
-     * (no 'smooth' behavior) when the OS/browser has reduced-motion enabled —
-     * an animated scrollTo() left mid-flight by a system-level "disable
-     * animations" setting is what made this feel unresponsive/stuck.
+     * Scrolls chatLog to its current bottom — delegates to chatAutoScroll.js's
+     * shared scrollToBottom().
      * @param {HTMLElement} chatLog
      * @returns {void}
      */
     _scrollToBottom(chatLog) {
-        const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-        requestAnimationFrame(() => chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' }));
+        scrollToBottom(chatLog);
     }
 
     /**

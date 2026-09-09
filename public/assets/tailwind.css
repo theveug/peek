@@ -2811,13 +2811,48 @@ button.participant-menu-row:hover {
    MessagesPanel.js's file header), the same shape room chat's #chat-log
    uses — no bubble-specific width/padding/background here, `.chat-message`'s
    own px-4 py-2 (Tailwind utility classes in the template) already spaces
-   rows out, same as #chat-log's children. */
+   rows out, same as #chat-log's children.
+   Fills its container's height rather than a fixed max-height (2026-09-10,
+   owner-reported: the room chat-panel tab's thread was capped at ~16rem
+   with a lot of dead space below the composer instead of filling the tab
+   like #chat-log does) — `min-height: 0` is needed for it to actually
+   shrink and scroll internally as a flex child, rather than growing to fit
+   all its content and pushing the composer down. Both host shapes — the
+   room-tab context fixed just below, and the
+   `.social-tab-panel[data-social-panel="messages"]` lobby/Friends-modal
+   context further down this file — already give this element's *parent*
+   real flex sizing, so one full-height rule here covers both, no
+   context-specific override needed. */
 .messages-thread {
   display: flex;
   flex-direction: column;
-  max-height: 16rem;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   margin-bottom: 0.75rem;
+}
+
+/* Room chat-panel tab context (App.js's initRoomMessagesTab trial): unlike
+   the lobby/Friends-modal case, #messages-tab-content/#messages-conversation-view
+   are toggled with a plain `.classList.toggle('hidden', ...)` and never carry
+   Tailwind's own `flex` utility class (`flex-col`/`flex-1`/`min-h-0` alone
+   don't set `display`), so unhiding them left `display` at its default
+   `block` — .messages-thread's `flex: 1` above (and #messages-inbox-view's
+   own `flex-1` utility class) both silently did nothing, since neither had
+   an actual flex container to grow inside. Same cascade-layers-adjacent fix
+   the lobby/Friends-modal case already needed (see the `:not(.hidden)` rule
+   further down this file) — an unlayered override supplying the missing
+   `display: flex`. */
+#messages-tab-content:not(.hidden) {
+  display: flex;
+  flex-direction: column;
+}
+
+#messages-conversation-view:not(.hidden) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .messages-inbox-name-group {
@@ -2937,11 +2972,6 @@ button.participant-menu-row:hover {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-}
-
-.social-tab-panel[data-social-panel="messages"] .messages-thread {
-  flex: 1;
-  max-height: none;
 }
 
 @media (max-width: 767px) {

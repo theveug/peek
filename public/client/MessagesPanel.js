@@ -74,6 +74,7 @@ import { playSound } from './SoundPlayer.js';
 import { wireComposerExtras, wireEnterToSend, autoGrowTextarea } from './composerUtils.js';
 import { finalizeCodeBlocks } from './markdownCodeBlocks.js';
 import { colorForName, avatarInitial, messageHeaderHtml } from './chatMessageRow.js';
+import { isAtBottom, scrollToBottom, wireAutoScrollResize } from './chatAutoScroll.js';
 
 export class MessagesPanel {
     /**
@@ -98,6 +99,10 @@ export class MessagesPanel {
         this.input = document.getElementById('messages-input');
         this.sendBtn = document.getElementById('messages-send-btn');
         this.unreadBadge = document.getElementById(badgeId);
+        // The composer bar sitting below the thread (outside it, as a flex
+        // sibling) — same "near enough to bottom" threshold reference
+        // ChatUI.js's #chat-input plays for #chat-log, see chatAutoScroll.js.
+        this._composerBar = this.input.closest('.chat-composer');
         // Used only by _applyConversations() below to decide whether a live
         // re-render is worth doing right now — the host (SocialPanel.js, or
         // App.js for the chat-tab trial) owns actual visibility.
@@ -114,6 +119,9 @@ export class MessagesPanel {
         this._wireBack();
         this._wireSend();
         this._wireComposerExtras();
+        // Keeps the thread pinned to bottom across a chat-panel drag-resize —
+        // same shared behavior room chat's #chat-log gets, see chatAutoScroll.js.
+        wireAutoScrollResize(this.thread, this._composerBar);
         document.addEventListener('peek:open-dm', (e) => this.openConversation(e.detail.username));
     }
 
@@ -222,7 +230,11 @@ export class MessagesPanel {
             return;
         }
         const { messages } = await res.json();
-        this._renderThread(messages);
+        // Opening/refreshing a conversation always lands at the newest
+        // message — same as ChatUI's own bulk-history-load behavior (one
+        // instant jump after the whole batch, never conditional on scroll
+        // position, since there's no "in-progress reading" to protect yet).
+        this._renderThread(messages, { forceScroll: true });
         // Reading the conversation just cleared its unread count server-side
         // (DirectMessagesManager.getConversation()'s side effect) — refresh
         // the inbox cache so a later _showInbox()/poll tick reflects that
@@ -241,8 +253,16 @@ export class MessagesPanel {
      * AccountPanel.js) and the same green self-color room chat uses, never a
      * "Me" sentinel (CLAUDE.md's standing "No 'Me' sentinel" rule) — the other
      * side of a DM is always this._activeUsername.
+     * @param {Array} messages
+     * @param {{forceScroll?: boolean}} [opts] - `forceScroll` always jumps to
+     *   the bottom (a fresh conversation open) instead of only scrolling when
+     *   the user was already there (a live poll-tick update, so a user who's
+     *   scrolled up to read history isn't yanked back down mid-read) — same
+     *   distinction ChatUI.js draws between its own bulk history load and a
+     *   single incoming message, via chatAutoScroll.js's shared helpers.
      */
-    _renderThread(messages) {
+    _renderThread(messages, { forceScroll = false } = {}) {
+        const shouldScroll = forceScroll || isAtBottom(this.thread, this._composerBar);
         this.thread.innerHTML = '';
         // See file header: markdown when the vendor libs are loaded (the room
         // page always has them; the lobby never does), plain text otherwise.
@@ -266,8 +286,15 @@ export class MessagesPanel {
             }
             this.thread.appendChild(row);
         }
-        this.thread.scrollTop = this.thread.scrollHeight;
         this._lastThreadLength = messages.length;
+        if (forceScroll) {
+            // Instant jump, not the smooth scrollToBottom() below — matches
+            // ChatUI's own bulk-history-load behavior (animating through a
+            // whole batch of messages would just be janky).
+            this.thread.scrollTop = this.thread.scrollHeight;
+        } else if (shouldScroll) {
+            scrollToBottom(this.thread);
+        }
     }
 
     /**
