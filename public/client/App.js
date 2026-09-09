@@ -8,9 +8,7 @@ import { QuickRoomSettings } from './QuickRoomSettings.js';
 import { InvitePopover } from './InvitePopover.js';
 import { TopbarIdentity } from './TopbarIdentity.js';
 import { initTooltips } from './Tooltip.js';
-import { openEmojiPicker } from './EmojiPicker.js';
-import { openCodeBlockPicker } from './CodeBlockPicker.js';
-import { insertAtCaret, wireComposerPlusMenu, isInsideOpenCodeFence, autoGrowTextarea } from './composerUtils.js';
+import { wireComposerExtras, wireEnterToSend, autoGrowTextarea } from './composerUtils.js';
 import { attachMentionAutocomplete } from './MentionAutocomplete.js';
 import { attachEmojiAutocomplete } from './EmojiAutocomplete.js';
 import { getOwnerToken, setOwnerToken } from './ownerTokens.js';
@@ -289,48 +287,18 @@ if (fileAttachBtn && fileInput) {
     });
 }
 
-// Composer "+" dropup — folds attach-file/create-poll into one menu instead of
-// two permanent buttons flanking the textarea. The two actions' own click
-// handlers (above, and in the poll IIFE below) are unchanged; wireComposerPlusMenu()
-// only owns opening/closing the menu around them (shared with MessagesPanel.js's
-// DM composer, see composerUtils.js).
-wireComposerPlusMenu(document.getElementById('composer-plus-btn'), document.getElementById('composer-plus-menu'));
-
-document.getElementById('composer-emoji-btn')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    // Anchor to the persistent "+" trigger, not this button itself — by the
-    // time this listener runs, initComposerPlusMenu's own generic
-    // close-on-any-option-click listener (registered first, so it runs
-    // first) has already hidden the menu this button lives in, which would
-    // zero out this button's own getBoundingClientRect().
-    openEmojiPicker(document.getElementById('composer-plus-btn'), (emoji) => {
-        insertAtCaret(input, emoji);
-        autoGrowMessageInput();
-        input.focus();
-    });
-});
-
-document.getElementById('code-block-btn')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    // Same anchor-to-the-persistent-trigger reasoning as the emoji button
-    // above — this button's own menu is already hidden by the time this
-    // listener runs.
-    openCodeBlockPicker(document.getElementById('composer-plus-btn'), (lang) => {
-        const start = input.selectionStart ?? input.value.length;
-        const end = input.selectionEnd ?? input.value.length;
-        const selected = input.value.slice(start, end);
-        const openFence = '```' + lang + '\n';
-        insertAtCaret(input, openFence + selected + '\n```');
-        if (!selected) {
-            // Nothing was selected to wrap — drop the caret on the blank
-            // line between the fences instead of after the closing one, so
-            // typing the code itself needs no extra navigation.
-            const caret = start + openFence.length;
-            input.selectionStart = input.selectionEnd = caret;
-        }
-        autoGrowMessageInput();
-        input.focus();
-    });
+// Composer "+" dropup — folds attach-file/create-poll/code-block/emoji into
+// one menu instead of permanent buttons flanking the textarea. Attach-file
+// and create-poll are room-only (wired just above / in the poll IIFE
+// below); wireComposerExtras() owns open/close plus the code-block/emoji
+// options shared with MessagesPanel.js's DM composer (composerUtils.js) —
+// a click on any button in the menu, shared or not, still closes it.
+wireComposerExtras({
+    plusBtn: document.getElementById('composer-plus-btn'),
+    plusMenu: document.getElementById('composer-plus-menu'),
+    codeBlockBtn: document.getElementById('code-block-btn'),
+    emojiBtn: document.getElementById('composer-emoji-btn'),
+    input: document.getElementById('message'),
 });
 
 document.getElementById('files-dropzone-card')?.addEventListener('click', () => fileInput?.click());
@@ -470,14 +438,10 @@ input.addEventListener('input', () => {
     typingTimer = setTimeout(() => sendTypingStatus(false), 2000);
 });
 
-// Handle enter + shift logic
-input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        if (isInsideOpenCodeFence(input.value, input.selectionStart)) return;
-        e.preventDefault();
-        sendMessage();
-    }
-});
+// Enter sends (Shift+Enter, or Enter inside an open code fence, inserts a
+// newline instead) — shared with MessagesPanel.js's DM composer, see
+// composerUtils.js's wireEnterToSend().
+wireEnterToSend(input, () => sendMessage());
 
 document.getElementById('send-message-btn').addEventListener('click', () => sendMessage());
 

@@ -5,6 +5,21 @@
 // owner-reported: "can we not reuse the same input area as chat"). Extracted
 // here once a second composer needed the identical mechanics, same
 // "extract on second use" precedent as composerCaret.js.
+//
+// wireComposerExtras()/wireEnterToSend() (2026-09-10) go a step further: they
+// own the actual wiring, not just the pieces it's built from — App.js and
+// MessagesPanel.js each used to hand-duplicate the "+" menu's code-block/
+// emoji click handlers and the code-fence-aware Enter-to-send keydown
+// listener almost verbatim (owner-reported the DM composer "wasn't quite
+// working right" after being cloned by hand; a real shared call site is
+// what keeps the two from drifting apart again as chat composer features
+// grow). App.js's file-attach/poll buttons stay wired separately by App.js
+// itself — those have no DM equivalent — wireComposerPlusMenu() (below)
+// already closes the menu generically on a click on *any* button inside it,
+// so mixing shared and composer-specific buttons in the same menu needs no
+// special-casing here.
+import { openEmojiPicker } from './EmojiPicker.js';
+import { openCodeBlockPicker } from './CodeBlockPicker.js';
 
 /**
  * Inserts `text` at `el`'s current caret position (replacing any selection),
@@ -81,5 +96,106 @@ export function wireComposerPlusMenu(btn, menu) {
     });
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && !menu.classList.contains('hidden')) close();
+    });
+}
+
+/**
+ * Wires a composer's "Code block" +-menu option: opens `CodeBlockPicker.js`'s
+ * language picker anchored at `anchorEl` (the persistent "+" trigger, not
+ * `btn` itself — see the anchor-to-the-trigger note in the callers this
+ * replaced) and inserts a ` ```lang ` fence at the caret, wrapping any
+ * current selection. Removes `btn` entirely on a page with no `hljs` global
+ * (the lobby never loads it) — a fence there would just be literal
+ * backticks with nothing to highlight them.
+ * @param {HTMLElement|null} btn
+ * @param {HTMLElement} anchorEl
+ * @param {HTMLTextAreaElement} input
+ * @returns {void}
+ */
+export function wireCodeBlockButton(btn, anchorEl, input) {
+    if (!btn) return;
+    if (typeof hljs === 'undefined') {
+        btn.remove();
+        return;
+    }
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openCodeBlockPicker(anchorEl, (lang) => {
+            const start = input.selectionStart ?? input.value.length;
+            const end = input.selectionEnd ?? input.value.length;
+            const selected = input.value.slice(start, end);
+            const openFence = '```' + lang + '\n';
+            insertAtCaret(input, openFence + selected + '\n```');
+            if (!selected) {
+                // Nothing was selected to wrap — drop the caret on the blank
+                // line between the fences instead of after the closing one,
+                // so typing the code itself needs no extra navigation.
+                const caret = start + openFence.length;
+                input.selectionStart = input.selectionEnd = caret;
+            }
+            // insertAtCaret mutates .value directly (no real 'input' event),
+            // so a plain input-event auto-grow listener never sees this.
+            autoGrowTextarea(input);
+            input.focus();
+        });
+    });
+}
+
+/**
+ * Wires a composer's "Add emoji" +-menu option: opens `EmojiPicker.js`
+ * anchored at `anchorEl` and inserts the picked emoji at the caret.
+ * @param {HTMLElement|null} btn
+ * @param {HTMLElement} anchorEl
+ * @param {HTMLTextAreaElement} input
+ * @returns {void}
+ */
+export function wireEmojiButton(btn, anchorEl, input) {
+    if (!btn) return;
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openEmojiPicker(anchorEl, (emoji) => {
+            insertAtCaret(input, emoji);
+            autoGrowTextarea(input);
+            input.focus();
+        });
+    });
+}
+
+/**
+ * The full "+" composer menu wiring shared by the room composer (App.js) and
+ * MessagesPanel.js's DM composer: open/close (`wireComposerPlusMenu`) plus
+ * the code-block and emoji options, both anchored back at `plusBtn` (not
+ * `codeBlockBtn`/`emojiBtn` themselves — by the time either option's click
+ * handler runs, the menu's own close-on-option-click listener has already
+ * hidden it, which would zero out that button's own
+ * `getBoundingClientRect()`). `codeBlockBtn`/`emojiBtn` are optional so a
+ * composer without one (there isn't one today, but a future minimal
+ * composer might omit either) can just not pass it.
+ * @param {{plusBtn: HTMLElement, plusMenu: HTMLElement, codeBlockBtn?: HTMLElement|null, emojiBtn?: HTMLElement|null, input: HTMLTextAreaElement}} opts
+ * @returns {void}
+ */
+export function wireComposerExtras({ plusBtn, plusMenu, codeBlockBtn, emojiBtn, input }) {
+    wireComposerPlusMenu(plusBtn, plusMenu);
+    wireCodeBlockButton(codeBlockBtn, plusBtn, input);
+    wireEmojiButton(emojiBtn, plusBtn, input);
+}
+
+/**
+ * Discord-style Enter-to-send: plain Enter sends, Shift+Enter always inserts
+ * a newline (default textarea behavior, left alone), and Enter inside an
+ * unclosed ``` fence also inserts a newline rather than sending (see
+ * `isInsideOpenCodeFence` above) — shared by the room composer and
+ * MessagesPanel.js's DM composer so both composers' send-on-Enter rules stay
+ * identical as they evolve, rather than each keeping its own hand-copy.
+ * @param {HTMLTextAreaElement} input
+ * @param {() => void} onSend
+ * @returns {void}
+ */
+export function wireEnterToSend(input, onSend) {
+    input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' || e.shiftKey) return;
+        if (isInsideOpenCodeFence(input.value, input.selectionStart)) return;
+        e.preventDefault();
+        onSend();
     });
 }

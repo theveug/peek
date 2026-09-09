@@ -50,11 +50,30 @@
 // Deliberately NOT reused: `ChatUI._processMentions()` (a DM thread has no
 // participant list to mention against) and link-preview processing (never
 // built app-wide to begin with, see CLAUDE.md's own standing rule on that).
+//
+// Real chat-log look, not a separate bubble style (2026-09-10, owner-
+// reported: "this just needs to mimic the chat panel rather than have a
+// different style and input area... these will more than likely need to be
+// done for messages also" — the hand-cloned composer from 2026-09-09 above
+// wasn't quite matching room chat's behavior, and there was no shared code
+// path to keep it in sync as chat composer features grow). `_renderThread()`
+// now builds each message as a real `.chat-message` row (avatar + sender +
+// timestamp header, markdown body below) via `chatMessageRow.js`'s
+// `messageHeaderHtml()` — the exact same function ChatUI.js's
+// `addChatMessage()` builds its own header through — instead of the old
+// two-sided `.messages-bubble` styling, so a DM thread looks and behaves
+// like a small room chat log rather than a separately-maintained messenger
+// UI. The composer itself is wired through `composerUtils.js`'s
+// `wireComposerExtras()`/`wireEnterToSend()`, the same shared functions
+// App.js's room composer uses — a future composer change (a new +-menu
+// option, a new Enter-key rule) now only needs to change one place to reach
+// both surfaces. What's still deliberately NOT shared, because DMs don't
+// have the concept at all: reactions, replies, @mentions, pins, edit/delete,
+// history persistence — see `chatMessageRow.js`'s own header comment.
 import { playSound } from './SoundPlayer.js';
-import { openEmojiPicker } from './EmojiPicker.js';
-import { openCodeBlockPicker } from './CodeBlockPicker.js';
-import { insertAtCaret, wireComposerPlusMenu, isInsideOpenCodeFence, autoGrowTextarea } from './composerUtils.js';
+import { wireComposerExtras, wireEnterToSend, autoGrowTextarea } from './composerUtils.js';
 import { finalizeCodeBlocks } from './markdownCodeBlocks.js';
+import { colorForName, avatarInitial, messageHeaderHtml } from './chatMessageRow.js';
 
 export class MessagesPanel {
     /**
@@ -99,54 +118,20 @@ export class MessagesPanel {
     }
 
     /**
-     * "+" composer menu (code block / emoji), added 2026-09-09 so DMs get
-     * the same composer affordances room chat has — see the file header's
-     * "renders markdown when available" note for why the code-block button
-     * specifically is hidden on a page that never loaded `hljs` (the lobby).
+     * "+" composer menu (code block / emoji) — same shared wiring as the
+     * room composer (App.js), see composerUtils.js's `wireComposerExtras()`.
+     * It removes the code-block button entirely on a page with no `hljs`
+     * global (the lobby never loads it) — a fence there would just be
+     * literal backticks with nothing to highlight them.
      * @returns {void}
      */
     _wireComposerExtras() {
-        const plusBtn = document.getElementById('messages-composer-plus-btn');
-        const plusMenu = document.getElementById('messages-composer-plus-menu');
-        wireComposerPlusMenu(plusBtn, plusMenu);
-
-        const codeBlockBtn = document.getElementById('messages-code-block-btn');
-        if (typeof hljs === 'undefined') {
-            // No vendor libs on this page (the lobby doesn't load them) —
-            // a code fence would just render as literal backticks with
-            // nothing to highlight it, so there's no point offering it.
-            codeBlockBtn?.remove();
-        } else {
-            codeBlockBtn?.addEventListener('click', (e) => {
-                e.stopPropagation();
-                // Anchor to the persistent "+" trigger, not this button itself —
-                // its own menu is already hidden by wireComposerPlusMenu's
-                // close-on-option-click by the time this listener runs, same
-                // reasoning as App.js's identical composer-emoji-btn handler.
-                openCodeBlockPicker(plusBtn, (lang) => {
-                    const start = this.input.selectionStart ?? this.input.value.length;
-                    const end = this.input.selectionEnd ?? this.input.value.length;
-                    const selected = this.input.value.slice(start, end);
-                    const openFence = '```' + lang + '\n';
-                    insertAtCaret(this.input, openFence + selected + '\n```');
-                    if (!selected) {
-                        const caret = start + openFence.length;
-                        this.input.selectionStart = this.input.selectionEnd = caret;
-                    }
-                    // insertAtCaret mutates .value directly (no real 'input'
-                    // event), so the auto-grow listener above never sees this.
-                    autoGrowTextarea(this.input);
-                    this.input.focus();
-                });
-            });
-        }
-
-        document.getElementById('messages-emoji-btn')?.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openEmojiPicker(plusBtn, (emoji) => {
-                insertAtCaret(this.input, emoji);
-                this.input.focus();
-            });
+        wireComposerExtras({
+            plusBtn: document.getElementById('messages-composer-plus-btn'),
+            plusMenu: document.getElementById('messages-composer-plus-menu'),
+            codeBlockBtn: document.getElementById('messages-code-block-btn'),
+            emojiBtn: document.getElementById('messages-emoji-btn'),
+            input: this.input,
         });
     }
 
@@ -200,17 +185,9 @@ export class MessagesPanel {
         // can hold real multi-line content (a code fence), not just a
         // one-line message.
         this.input.addEventListener('input', () => autoGrowTextarea(this.input));
-        this.input.addEventListener('keydown', (e) => {
-            // Shift+Enter always inserts a newline (default textarea behavior,
-            // not intercepted); plain Enter mid-fence does too — see
-            // composerUtils.js's isInsideOpenCodeFence for why this matters
-            // now that the "Code block" +-menu option can put a real
-            // multi-line fence in this composer.
-            if (e.key !== 'Enter' || e.shiftKey) return;
-            if (isInsideOpenCodeFence(this.input.value, this.input.selectionStart)) return;
-            e.preventDefault();
-            submit();
-        });
+        // Shared with the room composer (App.js) — see composerUtils.js's
+        // wireEnterToSend() for the Shift+Enter / open-code-fence rules.
+        wireEnterToSend(this.input, submit);
     }
 
     _showInbox() {
@@ -253,24 +230,41 @@ export class MessagesPanel {
         this._refreshInbox();
     }
 
+    /**
+     * Renders each DM as a real `.chat-message` row (avatar+sender+timestamp
+     * header, markdown body below) via chatMessageRow.js's messageHeaderHtml()
+     * — the same function ChatUI.js's addChatMessage() builds its own header
+     * through, so a DM thread looks and scrolls like a small room chat log
+     * rather than a separately-styled bubble list (see file header). "Self"
+     * messages use the real logged-in username (from localStorage['nickname'],
+     * unconditionally synced to the account's username on login/logout — see
+     * AccountPanel.js) and the same green self-color room chat uses, never a
+     * "Me" sentinel (CLAUDE.md's standing "No 'Me' sentinel" rule) — the other
+     * side of a DM is always this._activeUsername.
+     */
     _renderThread(messages) {
         this.thread.innerHTML = '';
         // See file header: markdown when the vendor libs are loaded (the room
         // page always has them; the lobby never does), plain text otherwise.
         const canRenderMarkdown = typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined';
-        for (const { body, fromMe } of messages) {
-            const bubble = document.createElement('div');
-            bubble.className = 'messages-bubble' + (fromMe ? ' messages-bubble-mine' : '');
+        const myUsername = (localStorage.getItem('nickname') || 'You').trim();
+        for (const { body, fromMe, createdAt } of messages) {
+            const sender = fromMe ? myUsername : this._activeUsername;
+            const timestamp = new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const initial = avatarInitial(sender);
+            const color = fromMe ? '#22c55e' : colorForName(sender);
+            const row = document.createElement('div');
+            row.className = 'chat-message px-4 py-2 text-sm';
+            row.innerHTML = messageHeaderHtml({ avatarUrl: null, initial, color, sender, timestamp })
+                + '<div class="chat-markdown chat-body prose ml-7"></div>';
+            const markdownEl = row.querySelector('.chat-markdown');
             if (canRenderMarkdown) {
-                const markdownEl = document.createElement('div');
-                markdownEl.className = 'chat-markdown prose';
                 markdownEl.innerHTML = DOMPurify.sanitize(marked.parse(body));
-                bubble.appendChild(markdownEl);
                 if (typeof hljs !== 'undefined') finalizeCodeBlocks(markdownEl);
             } else {
-                bubble.textContent = body; // plain text only — see file header for why
+                markdownEl.textContent = body; // plain text only — see file header for why
             }
-            this.thread.appendChild(bubble);
+            this.thread.appendChild(row);
         }
         this.thread.scrollTop = this.thread.scrollHeight;
         this._lastThreadLength = messages.length;

@@ -4,6 +4,7 @@ import { openEmojiPicker } from './EmojiPicker.js';
 import { trapFocus } from './focusTrap.js';
 import * as chatHistoryStore from './chatHistoryStore.js';
 import { finalizeCodeBlocks } from './markdownCodeBlocks.js';
+import { colorForName, avatarHtml, messageHeaderHtml } from './chatMessageRow.js';
 
 /**
  * Chat panel behavior: messages, typing indicators, reactions, polls,
@@ -1293,19 +1294,13 @@ export class ChatUI {
         });
     }
 
-    _chatAvatarColors = [
-        '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e',
-        '#f97316', '#eab308', '#22c55e', '#14b8a6',
-        '#06b6d4', '#3b82f6', '#a855f7', '#e11d48',
-    ];
-
-    /** @param {string} name @returns {string} a deterministic avatar color hashed from the name. */
+    /**
+     * @param {string} name @returns {string} a deterministic avatar color hashed from the name.
+     * Delegates to chatMessageRow.js's shared hash so MessagesPanel.js's DM
+     * thread picks the exact same colors for the exact same names.
+     */
     _colorForName(name) {
-        let hash = 0;
-        for (let i = 0; i < name.length; i++) {
-            hash = name.charCodeAt(i) + ((hash << 5) - hash);
-        }
-        return this._chatAvatarColors[Math.abs(hash) % this._chatAvatarColors.length];
+        return colorForName(name);
     }
 
     // Matches one emoji "unit" — a pictograph with optional variation selector
@@ -1350,6 +1345,9 @@ export class ChatUI {
      * `UIController._renderAvatarInto()` convention for participant
      * cards/the top-bar pill), which a solid color square behind it would
      * otherwise defeat.
+     * Delegates to chatMessageRow.js's shared avatarHtml() — this method just
+     * resolves `peerId` to an avatar URL first, since that lookup is
+     * room-specific (`getAvatar` dep / `UIController.peerAvatars`).
      * @param {string|null|undefined} peerId
      * @param {string} initial
      * @param {string} color
@@ -1357,9 +1355,7 @@ export class ChatUI {
      */
     _avatarHtml(peerId, initial, color) {
         const avatarUrl = peerId ? this._getAvatar(peerId) : null;
-        return avatarUrl
-            ? `<span class="chat-avatar"><img class="avatar-img" src="${avatarUrl}" alt="" /></span>`
-            : `<span class="chat-avatar" style="background:${color}">${escapeHtml(initial)}</span>`;
+        return avatarHtml({ avatarUrl, initial, color });
     }
 
     /**
@@ -1393,8 +1389,9 @@ export class ChatUI {
         const color = isSelf ? '#22c55e' : this._colorForName(sender);
         const replyHtml = this._replyQuoteHtml(replyData);
         const emojiOnlyClass = this._isEmojiOnly(text) ? ' chat-emoji-only' : '';
+        const headerHtml = messageHeaderHtml({ avatarUrl: senderPeerId ? this._getAvatar(senderPeerId) : null, initial, color, sender, timestamp });
 
-        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm${isHistorical ? ' chat-message-history' : ''}"><div class="flex items-center gap-2 mb-0.5">${this._avatarHtml(senderPeerId, initial, color)}<span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}<div class="chat-markdown chat-body prose ml-7${emojiOnlyClass}">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm${isHistorical ? ' chat-message-history' : ''}">${headerHtml}${replyHtml}<div class="chat-markdown chat-body prose ml-7${emojiOnlyClass}">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
 
         this._wireReplyQuote(msgContainer);
 
