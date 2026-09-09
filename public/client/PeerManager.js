@@ -143,6 +143,9 @@ export class PeerManager {
         this.peerIncomingNoiseSuppressors = new Map(); // peerId -> live NoiseSuppressor instance
         this.peerNoiseSuppressionOverrides = new Map(); // peerId -> true|false (absent = follow global default)
         this._peerRawMicTracks = new Map(); // peerId -> raw incoming mic track, so overrides can re-derive without a new ontrack
+        // Hidden/muted keep-alive <audio> per suppressed peer — see
+        // _ensureRawTrackKeepAlive() below for why this exists.
+        this._peerRawKeepAliveAudio = new Map(); // peerId -> <audio> element
         this.senders = {};
         this._statsInterval = null;
 
@@ -2432,6 +2435,7 @@ export class PeerManager {
         this.peerIncomingNoiseSuppressors.delete(peerId);
         this.peerNoiseSuppressionOverrides.delete(peerId);
         this._peerRawMicTracks.delete(peerId);
+        this._releaseRawTrackKeepAlive(peerId);
         delete this.senders[peerId];
         delete this._sendQueues[peerId];
         this.peerRecordingConsent.delete(peerId);
@@ -2709,8 +2713,22 @@ export class PeerManager {
         this._peerRawMicTracks.set(peerId, rawTrack);
         this.peerIncomingNoiseSuppressors.get(peerId)?.stop();
         this.peerIncomingNoiseSuppressors.delete(peerId);
-        if (!this._effectiveIncomingNoiseSuppression(peerId)) return rawTrack;
+        if (!this._effectiveIncomingNoiseSuppression(peerId)) {
+            this._releaseRawTrackKeepAlive(peerId);
+            return rawTrack;
+        }
         try {
+            // Turning suppression on repoints the real audio-${peerId}
+            // element at the *processed* track (via UIController.addAudio()),
+            // which detaches rawTrack from the only <audio>/<video> element
+            // it was attached to. Chromium stops decoding a remote WebRTC
+            // audio track once nothing is actually playing it -- a Web Audio
+            // tap alone doesn't keep it flowing -- so without this the
+            // NoiseSuppressor's input starves the instant it's switched on,
+            // producing total silence rather than denoised audio. This
+            // hidden, muted element exists purely to keep the raw track
+            // alive for the worklet to read from.
+            this._ensureRawTrackKeepAlive(peerId, rawTrack);
             const { NoiseSuppressor } = await import('./NoiseSuppressor.js');
             const suppressor = new NoiseSuppressor();
             this.peerIncomingNoiseSuppressors.set(peerId, suppressor);
@@ -2719,8 +2737,44 @@ export class PeerManager {
         } catch (err) {
             console.warn('Incoming noise suppression unavailable for peer, using raw track:', err);
             this.peerIncomingNoiseSuppressors.delete(peerId);
+            this._releaseRawTrackKeepAlive(peerId);
             return rawTrack;
         }
+    }
+
+    /**
+     * Creates (or reuses) a hidden, muted, autoplaying `<audio>` element
+     * whose sole purpose is to keep a remote peer's raw mic track "claimed"
+     * by a real media element -- see the comment in
+     * _applyIncomingNoiseSuppression() above for why this is necessary.
+     * @param {string} peerId
+     * @param {MediaStreamTrack} rawTrack
+     * @returns {void}
+     */
+    _ensureRawTrackKeepAlive(peerId, rawTrack) {
+        let el = this._peerRawKeepAliveAudio.get(peerId);
+        if (!el) {
+            el = document.createElement('audio');
+            el.autoplay = true;
+            el.muted = true;
+            document.body.appendChild(el);
+            this._peerRawKeepAliveAudio.set(peerId, el);
+        }
+        el.srcObject = new MediaStream([rawTrack]);
+    }
+
+    /**
+     * Tears down the keep-alive element from _ensureRawTrackKeepAlive()
+     * above, once it's no longer needed (suppression turned back off, the
+     * WASM/worklet failed to load, or the peer disconnected).
+     * @param {string} peerId
+     * @returns {void}
+     */
+    _releaseRawTrackKeepAlive(peerId) {
+        const el = this._peerRawKeepAliveAudio.get(peerId);
+        if (!el) return;
+        el.remove();
+        this._peerRawKeepAliveAudio.delete(peerId);
     }
 
     /**
