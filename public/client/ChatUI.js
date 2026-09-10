@@ -4,7 +4,7 @@ import { openEmojiPicker } from './EmojiPicker.js';
 import { trapFocus } from './focusTrap.js';
 import * as chatHistoryStore from './chatHistoryStore.js';
 import { finalizeCodeBlocks } from './markdownCodeBlocks.js';
-import { colorForName, avatarHtml, messageHeaderHtml } from './chatMessageRow.js';
+import { colorForName, colorFor, avatarHtml, messageHeaderHtml } from './chatMessageRow.js';
 import { isAtBottom, scrollToBottom, wireAutoScrollResize } from './chatAutoScroll.js';
 
 /**
@@ -37,6 +37,16 @@ export class ChatUI {
         this._getAvatar = getAvatar || (() => null);
         this._getRoomCode = getRoomCode || (() => null);
         this.maxMessages = 100;
+        // Discord-style consecutive-message grouping (2026-09-10, owner-
+        // requested): the author key (senderPeerId, falling back to the
+        // nickname string when there's no peerId — polls' myPeerId/historical
+        // entries) of the last plain chat message rendered, so the next one
+        // from the SAME author can skip re-rendering its avatar/name/timestamp
+        // header. Reset to null (breaking the group) by anything that isn't a
+        // plain chat message continuing that exact run — see
+        // breakMessageGrouping() and addPollMessage()/ensureFileGroup()/
+        // addSystemMessage() below.
+        this._lastGroupKey = null;
         this._typingPeers = new Set();
         this._reactions = new Map();
         this._onReaction = null;
@@ -71,6 +81,20 @@ export class ChatUI {
      */
     _wireAutoScrollResize() {
         wireAutoScrollResize(document.getElementById('chat-log'), document.getElementById('chat-input'));
+    }
+
+    /**
+     * Ends the current consecutive-same-author message-grouping run (see
+     * `_lastGroupKey`'s constructor comment) so the next plain chat message
+     * always shows its own full header, regardless of who sent it. Called by
+     * every non-plain-chat-message render (polls, file groups, system
+     * messages) and by `UIController._loadChatHistory()` after appending the
+     * "Today" divider — a divider inserted directly into `#chat-log` from
+     * outside this class, so it can't update `_lastGroupKey` on its own.
+     * @returns {void}
+     */
+    breakMessageGrouping() {
+        this._lastGroupKey = null;
     }
 
     /**
@@ -576,9 +600,13 @@ export class ChatUI {
      * @returns {void}
      */
     addPollMessage(sender, pollId, question, options, myPeerId, isSelf = false, senderPeerId = null) {
+        // Polls always show their own full header (not part of the plain-chat-
+        // message grouping run) and interrupt any group in progress around
+        // them — see _lastGroupKey's constructor comment.
+        this.breakMessageGrouping();
         const chatLog = document.getElementById('chat-log');
         const initial = sender.charAt(0).toUpperCase();
-        const color = isSelf ? '#22c55e' : this._colorForName(sender);
+        const color = this._colorFor(sender, isSelf);
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         this._polls.set(pollId, {
@@ -588,7 +616,7 @@ export class ChatUI {
 
         const container = document.createElement('div');
         container.dataset.pollId = pollId;
-        container.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-2">${this._avatarHtml(senderPeerId, initial, color)}<span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="poll-badge px-1.5 py-0.5 rounded-full font-medium leading-none">Poll</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="ml-7"><div class="font-medium mb-3">${escapeHtml(question)}</div><div class="poll-options flex flex-col gap-2"></div><div class="poll-footer text-[10px] text-muted mt-2">0 votes</div></div></div>`;
+        container.innerHTML = `<div class="chat-message px-4 py-2 text-sm${isSelf ? ' chat-message-self' : ''}"><div class="flex items-center gap-2 mb-2">${this._avatarHtml(senderPeerId, initial, color)}<span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="poll-badge px-1.5 py-0.5 rounded-full font-medium leading-none">Poll</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div><div class="ml-7"><div class="font-medium mb-3">${escapeHtml(question)}</div><div class="poll-options flex flex-col gap-2"></div><div class="poll-footer text-[10px] text-muted mt-2">0 votes</div></div></div>`;
 
         this._renderPollOptions(container, pollId);
         chatLog.appendChild(container);
@@ -716,13 +744,18 @@ export class ChatUI {
     ensureFileGroup(sender, groupInfo, isSelf = false, senderPeerId = null) {
         const { groupId, caption, replyTo, messageId } = groupInfo;
         if (this._fileGroups[groupId]) return;
+        // A new file group always shows its own full header and interrupts any
+        // plain-chat-message grouping run — see _lastGroupKey's constructor
+        // comment. (Only on the group's actual creation — later files joining
+        // an existing group via _fileSlot() don't add a new row at all.)
+        this.breakMessageGrouping();
 
         const chatLog = document.getElementById('chat-log');
         const msgContainer = document.createElement('div');
         if (messageId) msgContainer.dataset.messageId = messageId;
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const initial = this._avatarInitials(sender);
-        const color = isSelf ? '#22c55e' : this._colorForName(sender);
+        const color = this._colorFor(sender, isSelf);
 
         const replyHtml = this._replyQuoteHtml(replyTo);
         // Same markdown pipeline as a plain chat message — a caption is peer-controlled
@@ -736,7 +769,7 @@ export class ChatUI {
         // messageId, which every send mints regardless of caption.
         const reactionBarHtml = messageId ? '<div class="reaction-bar ml-7"></div>' : '';
 
-        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm"><div class="flex items-center gap-2 mb-0.5">${this._avatarHtml(senderPeerId, initial, color)}<span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}${captionHtml}<div class="chat-file-group ml-7"></div>${reactionBarHtml}</div>`;
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm${isSelf ? ' chat-message-self' : ''}"><div class="flex items-center gap-2 mb-0.5">${this._avatarHtml(senderPeerId, initial, color)}<span class="chat-sender font-medium text-xs" style="color:${color}">${escapeHtml(sender)}</span><span class="chat-timestamp text-[10px] ml-auto shrink-0">${timestamp}</span></div>${replyHtml}${captionHtml}<div class="chat-file-group ml-7"></div>${reactionBarHtml}</div>`;
 
         this._wireReplyQuote(msgContainer);
         let mentionedMe = false;
@@ -921,6 +954,10 @@ export class ChatUI {
      * @returns {void}
      */
     addSystemMessage(text, type = 'info') {
+        // A system pill isn't shaped like a chat-message row at all — always
+        // interrupts any plain-chat-message grouping run in progress around
+        // it, see _lastGroupKey's constructor comment.
+        this.breakMessageGrouping();
         const chatLog = document.getElementById('chat-log');
         const el = document.createElement('div');
         el.className = 'chat-system-message';
@@ -1291,6 +1328,19 @@ export class ChatUI {
         return colorForName(name);
     }
 
+    /**
+     * `isSelf ? SELF_COLOR : this._colorForName(name)` — the one ternary every
+     * message-header call site in this file needs. Delegates to
+     * chatMessageRow.js's shared `colorFor()` so the reserved self-color stays
+     * a single source of truth (2026-09-10 safeguard — see that module's
+     * `SELF_COLOR` comment): no peer's hashed color can ever equal it, since
+     * `colorForName()`'s palette excludes it outright.
+     * @param {string} name @param {boolean} isSelf @returns {string}
+     */
+    _colorFor(name, isSelf) {
+        return colorFor(name, isSelf);
+    }
+
     // Matches one emoji "unit" — a pictograph with optional variation selector
     // and ZWJ-joined sequences (👨‍👩‍👧, 🏳️‍🌈), or a flag (two regional indicators).
     // \p{Extended_Pictographic} (not \p{Emoji}) deliberately excludes bare digits/
@@ -1374,17 +1424,30 @@ export class ChatUI {
         const raw = DOMPurify.sanitize(marked.parse(text));
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const initial = this._avatarInitials(sender);
-        const color = isSelf ? '#22c55e' : this._colorForName(sender);
+        const color = this._colorFor(sender, isSelf);
         const replyHtml = this._replyQuoteHtml(replyData);
         const emojiOnlyClass = this._isEmojiOnly(text) ? ' chat-emoji-only' : '';
-        const headerHtml = messageHeaderHtml({ avatarUrl: senderPeerId ? this._getAvatar(senderPeerId) : null, initial, color, sender, timestamp });
 
-        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm${isHistorical ? ' chat-message-history' : ''}">${headerHtml}${replyHtml}<div class="chat-markdown chat-body prose ml-7${emojiOnlyClass}">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
+        // Discord-style consecutive-message grouping (2026-09-10, owner-
+        // requested — see _lastGroupKey's constructor comment): a reply
+        // always shows its own full header regardless of the run in
+        // progress, since the reply-quote block above it already makes this
+        // message visually distinct from a plain continuation line.
+        const authorKey = senderPeerId || sender;
+        const grouped = !replyData && this._lastGroupKey === authorKey;
+        this._lastGroupKey = authorKey;
+        const headerHtml = grouped ? '' : messageHeaderHtml({ avatarUrl: senderPeerId ? this._getAvatar(senderPeerId) : null, initial, color, sender, timestamp });
+
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm${isHistorical ? ' chat-message-history' : ''}${isSelf ? ' chat-message-self' : ''}${grouped ? ' chat-message-grouped' : ''}">${headerHtml}${replyHtml}<div class="chat-markdown chat-body prose ml-7${emojiOnlyClass}">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
 
         this._wireReplyQuote(msgContainer);
 
         const msg = msgContainer.querySelector('.chat-message');
-        this._messageMeta.set(messageId, { isSelf, rawText: text, sender, timestamp });
+        // senderPeerId is stored here too (2026-09-10) solely so
+        // _promoteNextGroupedIfOrphaned() can rebuild a correct avatar if
+        // this message's successor in a grouped run needs to be promoted
+        // after this one gets deleted.
+        this._messageMeta.set(messageId, { isSelf, rawText: text, sender, timestamp, senderPeerId });
         // Cap independently of the DOM prune below — other message types
         // (system/file/poll) also evict chat messages from the log's front,
         // so DOM pruning alone would let the map grow all session.
@@ -1532,11 +1595,55 @@ export class ChatUI {
      * @returns {void}
      */
     applyChatDelete(messageId) {
-        document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`)?.remove();
+        const container = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+        if (container && !container.nextElementSibling) {
+            // Deleting the newest message in the log — _lastGroupKey still
+            // points at it, which would otherwise make the *next new*
+            // message from the same author wrongly render as a headerless
+            // continuation of a message that no longer exists. Simplest safe
+            // reset: the next message just shows its own header again (a
+            // cosmetic "one extra header" at worst), rather than trying to
+            // work out whether some earlier still-visible message could
+            // legitimately continue the run.
+            this.breakMessageGrouping();
+        } else {
+            this._promoteNextGroupedIfOrphaned(container);
+        }
+        container?.remove();
         this._messageMeta.delete(messageId);
         this._reactions.delete(messageId);
         if (this._pinned.delete(messageId)) this._renderPinnedPanel();
         if (localStorage.getItem('chatHistoryEnabled') === '1') chatHistoryStore.deleteMessage(messageId);
+    }
+
+    /**
+     * Consecutive-message grouping (2026-09-10, see `_lastGroupKey`'s
+     * constructor comment) means a message can be rendered with no header of
+     * its own, relying on the message *before* it in the DOM to show the
+     * avatar/sender/timestamp. Deleting that header-bearing message (no
+     * tombstone — see `applyChatDelete()`'s own comment) would otherwise
+     * leave its grouped successor as an orphaned, sender-less continuation
+     * line. Called right before the actual removal so `container` is still
+     * in the DOM to find its next sibling.
+     * @param {Element|null} container - the wrapper about to be removed.
+     * @returns {void}
+     */
+    _promoteNextGroupedIfOrphaned(container) {
+        const msg = container?.querySelector('.chat-message');
+        if (!msg || msg.classList.contains('chat-message-grouped')) return; // not a group leader
+        const nextWrapper = container.nextElementSibling;
+        const nextMsg = nextWrapper?.querySelector('.chat-message.chat-message-grouped');
+        if (!nextMsg) return;
+        const meta = this._messageMeta.get(nextWrapper.dataset.messageId);
+        if (!meta) return;
+        const initial = this._avatarInitials(meta.sender);
+        const color = this._colorFor(meta.sender, meta.isSelf);
+        const headerHtml = messageHeaderHtml({
+            avatarUrl: meta.senderPeerId ? this._getAvatar(meta.senderPeerId) : null,
+            initial, color, sender: meta.sender, timestamp: meta.timestamp,
+        });
+        nextMsg.insertAdjacentHTML('afterbegin', headerHtml);
+        nextMsg.classList.remove('chat-message-grouped');
     }
 
     /**
@@ -1691,7 +1798,7 @@ export class ChatUI {
     _replyQuoteHtml(replyData) {
         if (!replyData || !replyData.sender || !replyData.text) return '';
         const myNickname = (localStorage.getItem('nickname') || 'Anonymous').trim();
-        const rColor = replyData.sender === myNickname ? '#22c55e' : this._colorForName(replyData.sender);
+        const rColor = this._colorFor(replyData.sender, replyData.sender === myNickname);
         const rText = escapeHtml(replyData.text.length > 80 ? replyData.text.substring(0, 80) + '...' : replyData.text);
         return `<div class="chat-reply-quote ml-7" data-reply-to="${escapeHtml(replyData.messageId || '')}"><span class="chat-reply-sender" style="color:${rColor}">${escapeHtml(replyData.sender)}</span> ${rText}</div>`;
     }

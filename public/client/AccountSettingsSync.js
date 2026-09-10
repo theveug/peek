@@ -85,6 +85,29 @@ export function syncPreference() {
     pendingTimer = setTimeout(() => { pendingTimer = null; pushNow(); }, DEBOUNCE_MS);
 }
 
+/**
+ * Call after SettingsPanel.js's avatar picker sets or clears
+ * `localStorage['avatarDataUrl']` (2026-09-10, owner-reported: a locally-set
+ * avatar never carried over into an account, so DMs — which have no P2P
+ * broadcast to fall back on — showed initials only even for an account
+ * whose owner clearly had a custom avatar set). Deliberately NOT bundled
+ * into `syncPreference()`/`pushNow()` above: an avatar data URL can be up to
+ * ~40,000 chars (a real photo, not a tiny string), so resending it on every
+ * unrelated theme/accent/device change would be wasteful — this fires its
+ * own request instead, immediately (no debounce needed — an avatar pick is
+ * a deliberate one-off action, not a rapid-fire slider like accent swatches).
+ * @returns {void}
+ */
+export function syncAvatar() {
+    if (!accountsEnabled) return;
+    fetch('/api/auth/avatar', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar: localStorage.getItem('avatarDataUrl') || null }),
+        keepalive: true,
+    }).catch(() => {}); // best-effort: 401 (not logged in) or a network error both silently no-op
+}
+
 // Flushes a pending debounced push when the tab is going away — otherwise a
 // swatch click immediately followed by closing the tab loses that final
 // change. 'pagehide' (not 'beforeunload', which defeats bfcache) +
@@ -106,16 +129,21 @@ export async function pullAndApplySettings() {
     await trustReady;
     if (!accountsEnabled) return;
 
-    // Two independent bootstrap checks, not one: an account might already
+    // Three independent bootstrap checks, not one: an account might already
     // have global settings from a previous device's first login, while THIS
-    // device has never saved its own device-settings row yet, or vice versa.
-    const [globalSettings, deviceSettings] = await Promise.all([
+    // device has never saved its own device-settings row yet (or vice
+    // versa), and separately again for the avatar (2026-09-10) — a room-only
+    // avatar set before ever registering has nowhere else to have reached
+    // the account from.
+    const [globalSettings, deviceSettings, avatarResult] = await Promise.all([
         fetch('/api/auth/settings').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch(`/api/auth/device-settings?deviceId=${encodeURIComponent(getOrCreateDeviceId())}`)
             .then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/auth/avatar').then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
 
     let bootstrapNeeded = false;
+    let avatarBootstrapNeeded = false;
 
     if (globalSettings === null) {
         // 401 or network error — leave local state as-is.
@@ -143,5 +171,21 @@ export async function pullAndApplySettings() {
         if (deviceSettings.speakerDeviceId !== undefined) localStorage.setItem('speakerDeviceId', deviceSettings.speakerDeviceId);
     }
 
+    if (avatarResult === null) {
+        // 401 or network error — leave local state as-is.
+    } else if (!avatarResult.avatar) {
+        // Account has no avatar saved yet — if this device already has a
+        // local one (the exact gap that prompted this feature: a room-only
+        // avatar set before ever registering, or set on a device that never
+        // pushed it up), push it as a one-time bootstrap instead of the
+        // account silently staying avatar-less forever.
+        if (localStorage.getItem('avatarDataUrl')) avatarBootstrapNeeded = true;
+    } else {
+        // The account already has one — it's the cross-device source of
+        // truth, so it wins over whatever (if anything) this device had.
+        localStorage.setItem('avatarDataUrl', avatarResult.avatar);
+    }
+
     if (bootstrapNeeded) syncPreference();
+    if (avatarBootstrapNeeded) syncAvatar();
 }

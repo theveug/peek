@@ -163,4 +163,32 @@ export function mountAuthRoutes(app, authManager) {
         }
         res.status(200).json(result.settings);
     });
+
+    // Account avatar (2026-09-10) — a separate small pair from
+    // GET/PUT /api/auth/settings above rather than a 4th GLOBAL_KEYS entry:
+    // an avatar data URL can be up to 40,000 chars (a real photo, not a tiny
+    // string), so bundling it into that endpoint's payload would mean
+    // resending the whole image on every unrelated theme/accent change. See
+    // AccountSettingsSync.js's syncAvatar() for the client-side push.
+    app.get('/api/auth/avatar', (req, res) => {
+        const token = readCookie(req, COOKIE_NAME);
+        const session = token ? authManager.validateSessionToken(token) : null;
+        if (!session) {
+            return res.status(401).json({ error: 'Not logged in' });
+        }
+        res.status(200).json(authManager.getAvatar(session.userId));
+    });
+
+    app.put('/api/auth/avatar', rateLimit(60_000, 20), (req, res) => {
+        const token = readCookie(req, COOKIE_NAME);
+        const session = token ? authManager.validateSessionToken(token) : null;
+        if (!session) {
+            return res.status(401).json({ error: 'Not logged in' });
+        }
+        const result = authManager.saveAvatar(session.userId, req.body?.avatar);
+        if (!result) {
+            return res.status(400).json({ error: 'Invalid avatar payload' });
+        }
+        res.status(200).json(result);
+    });
 }

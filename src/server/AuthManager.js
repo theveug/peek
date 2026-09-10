@@ -20,6 +20,19 @@ let DUMMY_HASH = null;
 const SETTINGS_KEYS = ['theme', 'accentHue', 'bgTint'];
 const DEVICE_SETTINGS_KEYS = ['camDeviceId', 'micDeviceId', 'speakerDeviceId'];
 
+// Account avatar (2026-09-10, owner-reported: a room-only custom avatar set
+// via Settings never carried over into DMs, since there was no account-side
+// place for it to live — the `users.avatar` column was reserved from day
+// one but nothing ever wrote to it). Mirrors PeerManager.js's client-side
+// `_avatarDataUrlPattern`/`_maxAvatarDataUrlLength` exactly — same
+// canvas-round-tripped webp/jpeg/png-only, size-capped data URL, just
+// persisted server-side now instead of only ever broadcast P2P, so it's a
+// real trust boundary: never trust a client-sent value verbatim, same
+// "validate on receive" discipline as saveSettings()'s SETTINGS_KEYS
+// allowlist just above.
+const AVATAR_DATA_URL_RE = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/;
+const MAX_AVATAR_DATA_URL_LEN = 40000;
+
 // Mirrors SessionManager.js's method style: every mutator re-checks its own
 // invariants and returns falsy on failure, a small result object on success
 // (never bare `true`, so a success carrying no other data doesn't read as
@@ -201,6 +214,32 @@ class AuthManager {
             ON CONFLICT(user_id, device_id) DO UPDATE SET settings = excluded.settings, updated_at = excluded.updated_at
         `).run(userId, deviceId, JSON.stringify(clean), now);
         return { settings: clean };
+    }
+
+    /**
+     * @param {number} userId
+     * @returns {{avatar: string|null}}
+     */
+    getAvatar(userId) {
+        const row = this.db.prepare('SELECT avatar FROM users WHERE id = ?').get(userId);
+        return { avatar: row?.avatar || null };
+    }
+
+    /**
+     * @param {number} userId
+     * @param {unknown} avatar client-supplied data URL, or null/''/undefined to remove
+     * @returns {{avatar: string|null}|false}
+     */
+    saveAvatar(userId, avatar) {
+        let clean = null;
+        if (avatar !== null && avatar !== undefined && avatar !== '') {
+            if (typeof avatar !== 'string' || avatar.length > MAX_AVATAR_DATA_URL_LEN || !AVATAR_DATA_URL_RE.test(avatar)) {
+                return false;
+            }
+            clean = avatar;
+        }
+        this.db.prepare('UPDATE users SET avatar = ?, updated_at = ? WHERE id = ?').run(clean, Date.now(), userId);
+        return { avatar: clean };
     }
 }
 

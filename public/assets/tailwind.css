@@ -306,6 +306,32 @@ body {
 .chat-message:hover {
   background: var(--card-hover);
 }
+/* Own-message background tint (2026-09-10, owner-suggested second cue on
+   top of the reserved self-color: "at least my messages could have a
+   different shade for the background") — a subtle wash using the same
+   reserved SELF_COLOR (chatMessageRow.js) every own-message header already
+   uses, so "which messages are mine" survives even for someone who can't
+   easily tell the sender-name/avatar color apart. Hover still wins (kept
+   above this rule, unchanged) — a transient hover highlight overriding a
+   standing self-tint is expected, not a bug. Applied by ChatUI.js's own
+   addChatMessage()/addPollMessage()/ensureFileGroup() (isSelf) and
+   MessagesPanel.js's _renderThread() (fromMe). */
+.chat-message-self {
+  background: color-mix(in srgb, var(--green) 8%, transparent);
+}
+/* Discord-style consecutive-message grouping (2026-09-10, owner-requested):
+   a message continuing the same author's run (ChatUI.js's `_lastGroupKey`,
+   MessagesPanel.js's local `lastFromMe` loop var) renders with no header of
+   its own (avatar/sender/timestamp omitted entirely, see messageHeaderHtml()
+   call sites) — this just tightens the vertical gap so the continuation
+   line sits close to the one above it rather than at the same spacing a
+   fresh header would need. `padding-top` only (not the whole `py-2`
+   utility) — unlayered, so it beats the Tailwind `py-2` utility's top
+   component per this file's standing cascade-layers rule regardless of
+   source order. */
+.chat-message-grouped {
+  padding-top: 0.125rem;
+}
 .chat-sender {
   color: var(--chat-sender);
 }

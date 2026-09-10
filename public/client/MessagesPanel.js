@@ -73,7 +73,7 @@
 import { playSound } from './SoundPlayer.js';
 import { wireComposerExtras, wireEnterToSend, autoGrowTextarea } from './composerUtils.js';
 import { finalizeCodeBlocks } from './markdownCodeBlocks.js';
-import { colorForName, avatarInitial, messageHeaderHtml } from './chatMessageRow.js';
+import { colorFor, colorForName, avatarInitial, avatarHtml, messageHeaderHtml } from './chatMessageRow.js';
 import { isAtBottom, scrollToBottom, wireAutoScrollResize } from './chatAutoScroll.js';
 
 export class MessagesPanel {
@@ -229,7 +229,8 @@ export class MessagesPanel {
             this.thread.appendChild(empty);
             return;
         }
-        const { messages } = await res.json();
+        const { messages, partnerAvatar } = await res.json();
+        this._partnerAvatar = partnerAvatar || null;
         // Opening/refreshing a conversation always lands at the newest
         // message — same as ChatUI's own bulk-history-load behavior (one
         // instant jump after the whole batch, never conditional on scroll
@@ -260,6 +261,15 @@ export class MessagesPanel {
      *   scrolled up to read history isn't yanked back down mid-read) — same
      *   distinction ChatUI.js draws between its own bulk history load and a
      *   single incoming message, via chatAutoScroll.js's shared helpers.
+     *
+     * Discord-style consecutive-message grouping (2026-09-10, owner-
+     * requested): a message from the same side as the one directly before it
+     * renders with no header of its own (`chat-message-grouped`, tailwind.css)
+     * — same visual treatment as ChatUI.js's own grouping, just simpler to
+     * compute here since the whole thread is rebuilt fresh on every render
+     * (no incremental-append state to track across calls — a local loop
+     * variable is enough) and there are only ever two possible senders, so
+     * `fromMe` alone is a complete author key.
      */
     _renderThread(messages, { forceScroll = false } = {}) {
         const shouldScroll = forceScroll || isAtBottom(this.thread, this._composerBar);
@@ -268,14 +278,25 @@ export class MessagesPanel {
         // page always has them; the lobby never does), plain text otherwise.
         const canRenderMarkdown = typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined';
         const myUsername = (localStorage.getItem('nickname') || 'You').trim();
+        let lastFromMe = null;
         for (const { body, fromMe, createdAt } of messages) {
+            const grouped = lastFromMe === fromMe;
+            lastFromMe = fromMe;
             const sender = fromMe ? myUsername : this._activeUsername;
             const timestamp = new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const initial = avatarInitial(sender);
-            const color = fromMe ? '#22c55e' : colorForName(sender);
+            const color = colorFor(sender, fromMe);
+            // Own avatar comes straight from localStorage (same source
+            // SettingsPanel.js's preview reads) — no server round-trip
+            // needed for your own account. The other party's comes from
+            // whatever _loadConversation()/_pollActiveThread() last fetched
+            // via GET /api/messages/:username's partnerAvatar field.
+            const avatarUrl = fromMe ? localStorage.getItem('avatarDataUrl') : this._partnerAvatar;
             const row = document.createElement('div');
-            row.className = 'chat-message px-4 py-2 text-sm';
-            row.innerHTML = messageHeaderHtml({ avatarUrl: null, initial, color, sender, timestamp })
+            row.className = 'chat-message px-4 py-2 text-sm'
+                + (fromMe ? ' chat-message-self' : '')
+                + (grouped ? ' chat-message-grouped' : '');
+            row.innerHTML = (grouped ? '' : messageHeaderHtml({ avatarUrl, initial, color, sender, timestamp }))
                 + '<div class="chat-markdown chat-body prose ml-7"></div>';
             const markdownEl = row.querySelector('.chat-markdown');
             if (canRenderMarkdown) {
@@ -317,7 +338,8 @@ export class MessagesPanel {
         if (!this._activeUsername) return;
         const res = await fetch(`/api/messages/${encodeURIComponent(this._activeUsername)}`).catch(() => null);
         if (!res?.ok) return;
-        const { messages } = await res.json();
+        const { messages, partnerAvatar } = await res.json();
+        this._partnerAvatar = partnerAvatar || null;
         if (messages.length === this._lastThreadLength) return;
         this._renderThread(messages);
     }
@@ -441,6 +463,10 @@ export class MessagesPanel {
             row.className = 'quick-banned-row';
             row.style.cursor = 'pointer';
             row.tabIndex = 0;
+
+            const avatarWrap = document.createElement('div');
+            avatarWrap.innerHTML = avatarHtml({ avatarUrl: user.avatar || null, initial: avatarInitial(user.username), color: colorForName(user.username) });
+            row.appendChild(avatarWrap.firstElementChild);
 
             const nameGroup = document.createElement('div');
             nameGroup.className = 'messages-inbox-name-group';

@@ -43,7 +43,7 @@ export function mountMessagesRoutes(app, authManager, messagesManager) {
         if (!session) return res.status(401).json({ error: 'Not logged in' });
         const result = messagesManager.getConversation(session.userId, req.params.username);
         if (!result.ok) return res.status(404).json({ error: REASON_MESSAGES[result.reason] || 'Not found' });
-        res.status(200).json({ messages: result.messages });
+        res.status(200).json({ messages: result.messages, partnerAvatar: result.partnerAvatar });
     });
 
     app.post('/api/messages/:username', rateLimit(60_000, 30, byAccount), (req, res) => {

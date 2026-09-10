@@ -18,19 +18,55 @@
 // genuinely need identically.
 import { escapeHtml } from './escapeHtml.js';
 
+/**
+ * The local user's own message color in both room chat and DMs — reserved,
+ * never handed out by colorForName() (2026-09-10, owner-reported: wanted a
+ * safeguard that "the client always has its own unique color that can not
+ * be picked by participants" — a message-color hash landing on the same
+ * green some peer/DM-partner is using could read as your own message).
+ * `SELF_COLOR` is the single source of truth every call site should use
+ * instead of a hand-typed literal, so a future palette change can't
+ * reintroduce the collision by drifting the two out of sync.
+ *
+ * A CSS variable reference, not a hex literal (2026-09-10, owner-reported:
+ * wanted the avatar/sender-name color and `.chat-message-self`'s background
+ * tint — tailwind.css, `color-mix(in srgb, var(--green) 8%, transparent)` —
+ * to actually be the same green, not two independently-hardcoded values
+ * that happen to look close) — `var(--green)` works fine as an inline style
+ * value, and it's the same token used everywhere else in this app "green"
+ * means something (mic-on, speaking ring, "online").
+ */
+export const SELF_COLOR = 'var(--green)';
+
+// Deliberately excludes the *literal hex* SELF_COLOR would otherwise
+// resolve to (oklch(0.66-0.8 0.16-0.17 150), i.e. the same green family as
+// the old hardcoded '#22c55e') — colorForName() below can never return
+// something in that family, so no peer's hashed nickname (room chat) or DM
+// partner's username can ever land on a color close enough to read as "you."
 const AVATAR_COLORS = [
     '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e',
-    '#f97316', '#eab308', '#22c55e', '#14b8a6',
-    '#06b6d4', '#3b82f6', '#a855f7', '#e11d48',
+    '#f97316', '#eab308', '#14b8a6', '#06b6d4',
+    '#3b82f6', '#a855f7', '#e11d48',
 ];
 
-/** @param {string} name @returns {string} a deterministic avatar color hashed from the name. */
+/** @param {string} name @returns {string} a deterministic avatar color hashed from the name — never SELF_COLOR, see above. */
 export function colorForName(name) {
     let hash = 0;
     for (let i = 0; i < name.length; i++) {
         hash = name.charCodeAt(i) + ((hash << 5) - hash);
     }
     return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+/**
+ * The one ternary every message-header call site needs: your own messages
+ * always get the reserved SELF_COLOR, anyone else's hash to a color that can
+ * never collide with it. Use this instead of hand-writing
+ * `isSelf ? '#22c55e' : colorForName(sender)` at a new call site.
+ * @param {string} name @param {boolean} isSelf @returns {string}
+ */
+export function colorFor(name, isSelf) {
+    return isSelf ? SELF_COLOR : colorForName(name);
 }
 
 /**

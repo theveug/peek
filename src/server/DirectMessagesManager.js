@@ -68,11 +68,11 @@ class DirectMessagesManager {
      * "mark read" call the client has to remember to make.
      * @param {number} userId
      * @param {string} otherUsername
-     * @returns {{ok:true, messages:Array<object>}|{ok:false, reason:'not_found'}}
+     * @returns {{ok:true, messages:Array<object>, partnerAvatar:string|null}|{ok:false, reason:'not_found'}}
      */
     getConversation(userId, otherUsername) {
         const other = this.db.prepare(
-            'SELECT id FROM users WHERE username = ? COLLATE NOCASE'
+            'SELECT id, avatar FROM users WHERE username = ? COLLATE NOCASE'
         ).get(otherUsername);
         if (!other) return { ok: false, reason: 'not_found' };
 
@@ -91,6 +91,7 @@ class DirectMessagesManager {
         return {
             ok: true,
             messages: rows.map(r => ({ id: r.id, body: r.body, createdAt: r.created_at, fromMe: r.sender_id === userId })),
+            partnerAvatar: other.avatar || null,
         };
     }
 

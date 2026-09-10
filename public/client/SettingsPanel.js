@@ -11,6 +11,7 @@ import { trapFocus } from './focusTrap.js';
 import { getCustomStatuses, getCustomStatus, upsertCustomStatus, deleteCustomStatus, SWATCHES } from './CustomStatuses.js';
 import * as chatHistoryStore from './chatHistoryStore.js';
 import { isModifierCode, comboFromEvent } from './keybindUtils.js';
+import { syncAvatar } from './AccountSettingsSync.js';
 
 // Labels for the tri-state mute/deafen pickers in the custom-status form —
 // 'none' means "leave as-is," so a status can just as easily auto-unmute/
@@ -1062,6 +1063,7 @@ export class SettingsPanel {
             if (this.peerManager?.peerId) {
                 this.ui.updateParticipantAvatar(this.peerManager.peerId, dataUrl);
             }
+            syncAvatar();
         });
 
         removeBtn.addEventListener('click', () => {
@@ -1071,6 +1073,7 @@ export class SettingsPanel {
             if (this.peerManager?.peerId) {
                 this.ui.updateParticipantAvatar(this.peerManager.peerId, '');
             }
+            syncAvatar();
         });
     }
 
