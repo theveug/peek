@@ -101,17 +101,29 @@ export class SettingsPanel {
                     <button type="button" class="settings-nav-item" data-settings-section="appearance" data-settings-label="Appearance">
                         <span class="material-symbols-rounded">palette</span>Appearance
                     </button>
-                    <button type="button" class="settings-nav-item" data-settings-section="video" data-settings-label="Screen &amp; Video">
-                        <span class="material-symbols-rounded">screen_share</span>Screen &amp; Video
+                    <button type="button" class="settings-nav-item" data-settings-section="video-camera" data-settings-label="Video &amp; Camera">
+                        <span class="material-symbols-rounded">videocam</span>Video &amp; Camera
                     </button>
-                    <button type="button" class="settings-nav-item" data-settings-section="audio" data-settings-label="Audio &amp; Mic">
-                        <span class="material-symbols-rounded">mic</span>Audio &amp; Mic
+                    <button type="button" class="settings-nav-item" data-settings-section="screen-sharing" data-settings-label="Screen Sharing">
+                        <span class="material-symbols-rounded">screen_share</span>Screen Sharing
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="audio-devices" data-settings-label="Audio Devices">
+                        <span class="material-symbols-rounded">speaker</span>Audio Devices
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="mic-voice" data-settings-label="Microphone &amp; Voice Detection">
+                        <span class="material-symbols-rounded">mic</span>Microphone &amp; Voice Detection
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="notifications-chat" data-settings-label="Notifications &amp; Chat">
+                        <span class="material-symbols-rounded">notifications</span>Notifications &amp; Chat
                     </button>
                     <button type="button" class="settings-nav-item" data-settings-section="keybinds" data-settings-label="Keybinds">
                         <span class="material-symbols-rounded">keyboard</span>Keybinds
                     </button>
                     <button type="button" class="settings-nav-item" data-settings-section="privacy" data-settings-label="Privacy &amp; P2P">
                         <span class="material-symbols-rounded">shield</span>Privacy &amp; P2P
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="data-storage" data-settings-label="Data &amp; Storage">
+                        <span class="material-symbols-rounded">database</span>Data &amp; Storage
                     </button>
                     <div class="settings-nav-spacer"></div>
                     <div class="settings-nav-footer"><b>Peek</b><br>No account. No database. Settings stay on this device.
@@ -254,8 +266,8 @@ export class SettingsPanel {
                             </div>
                         </div>
 
-                        <!-- Screen & Video -->
-                        <div class="settings-section" data-settings-panel="video">
+                        <!-- Video & Camera -->
+                        <div class="settings-section" data-settings-panel="video-camera">
                             <p class="settings-section-subcopy">Quality auto-caps as the room grows, and restores when peers
                                 leave.</p>
                             <div class="settings-field">
@@ -266,17 +278,6 @@ export class SettingsPanel {
                             </div>
                             <div class="settings-toggle-row">
                                 <div>
-                                    <div class="settings-toggle-row-title">Voice-only mode</div>
-                                    <div class="settings-toggle-row-desc">Don't automatically watch anyone's video —
-                                        saves bandwidth if you're just here for the call. You can still click any tile to
-                                        watch it.</div>
-                                </div>
-                                <label class="settings-switch"><input type="checkbox"
-                                        id="settings-audio-only-mode" /><span
-                                        class="settings-switch-track"></span></label>
-                            </div>
-                            <div class="settings-toggle-row">
-                                <div>
                                     <div class="settings-toggle-row-title">Hide my own preview</div>
                                     <div class="settings-toggle-row-desc">Don't show your own camera/screen to
                                         yourself at all — you still send it to everyone else normally. Unlike some
@@ -284,35 +285,6 @@ export class SettingsPanel {
                                 </div>
                                 <label class="settings-switch"><input type="checkbox"
                                         id="settings-hide-self-view" /><span
-                                        class="settings-switch-track"></span></label>
-                            </div>
-                            <div class="settings-field">
-                                <div class="settings-label">Screen share resolution</div>
-                                <div class="settings-segmented" id="settings-res-picker">
-                                    <button type="button" data-value="1280x720">720p</button>
-                                    <button type="button" data-value="1920x1080">1080p</button>
-                                    <button type="button" data-value="2560x1440">1440p</button>
-                                    <button type="button" data-value="source">Source</button>
-                                </div>
-                            </div>
-                            <div class="settings-field">
-                                <div class="settings-label">Screen share frame rate</div>
-                                <div class="settings-segmented" id="settings-fps-picker">
-                                    <button type="button" data-value="10">10 fps</button>
-                                    <button type="button" data-value="15">15 fps</button>
-                                    <button type="button" data-value="30">30 fps</button>
-                                    <button type="button" data-value="60">60 fps</button>
-                                </div>
-                            </div>
-                            <div class="settings-toggle-row">
-                                <div>
-                                    <div class="settings-toggle-row-title">Share system audio</div>
-                                    <div class="settings-toggle-row-desc">Off by default — when on, whatever's playing
-                                        through your speakers (video/game audio, notification sounds, etc.) is sent
-                                        along with your screen share. Leave this off if you don't want peers to hear
-                                        things like your own volume-change chime or other app sounds.</div>
-                                </div>
-                                <label class="settings-switch"><input type="checkbox" id="settings-share-system-audio" /><span
                                         class="settings-switch-track"></span></label>
                             </div>
                             <div class="settings-field">
@@ -350,15 +322,56 @@ export class SettingsPanel {
                                 <label class="settings-switch"><input type="checkbox" id="settings-follow-speaker" /><span
                                         class="settings-switch-track"></span></label>
                             </div>
+                        </div>
+
+                        <!-- Screen Sharing -->
+                        <div class="settings-section" data-settings-panel="screen-sharing">
+                            <p class="settings-section-subcopy">Quality auto-caps as the room grows, and restores when peers
+                                leave.</p>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Voice-only mode</div>
+                                    <div class="settings-toggle-row-desc">Don't automatically watch anyone's video —
+                                        saves bandwidth if you're just here for the call. You can still click any tile to
+                                        watch it.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox"
+                                        id="settings-audio-only-mode" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
                             <div class="settings-field">
-                                <label for="settings-max-messages" class="settings-label">Max chat messages kept</label>
-                                <input type="number" id="settings-max-messages" class="settings-text-input"
-                                    style="max-width:7.5rem;" min="10" max="500" />
+                                <div class="settings-label">Screen share resolution</div>
+                                <div class="settings-segmented" id="settings-res-picker">
+                                    <button type="button" data-value="1280x720">720p</button>
+                                    <button type="button" data-value="1920x1080">1080p</button>
+                                    <button type="button" data-value="2560x1440">1440p</button>
+                                    <button type="button" data-value="source">Source</button>
+                                </div>
+                            </div>
+                            <div class="settings-field">
+                                <div class="settings-label">Screen share frame rate</div>
+                                <div class="settings-segmented" id="settings-fps-picker">
+                                    <button type="button" data-value="10">10 fps</button>
+                                    <button type="button" data-value="15">15 fps</button>
+                                    <button type="button" data-value="30">30 fps</button>
+                                    <button type="button" data-value="60">60 fps</button>
+                                </div>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Share system audio</div>
+                                    <div class="settings-toggle-row-desc">Off by default — when on, whatever's playing
+                                        through your speakers (video/game audio, notification sounds, etc.) is sent
+                                        along with your screen share. Leave this off if you don't want peers to hear
+                                        things like your own volume-change chime or other app sounds.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-share-system-audio" /><span
+                                        class="settings-switch-track"></span></label>
                             </div>
                         </div>
 
-                        <!-- Audio & Mic -->
-                        <div class="settings-section" data-settings-panel="audio">
+                        <!-- Audio Devices -->
+                        <div class="settings-section" data-settings-panel="audio-devices">
                             <p class="settings-section-subcopy">Audio keeps flowing when the tab is backgrounded — only
                                 video pauses.</p>
                             <div class="settings-field">
@@ -375,57 +388,6 @@ export class SettingsPanel {
                             </div>
                             <div class="settings-toggle-row">
                                 <div>
-                                    <div class="settings-toggle-row-title">Mute notification sounds</div>
-                                </div>
-                                <label class="settings-switch"><input type="checkbox" id="settings-mute" /><span
-                                        class="settings-switch-track"></span></label>
-                            </div>
-                            <div class="settings-toggle-row">
-                                <div>
-                                    <div class="settings-toggle-row-title">Desktop notifications for mentions & DMs</div>
-                                    <div class="settings-toggle-row-desc">Shows an OS notification when someone @mentions
-                                        you or sends you a direct message while this window isn't focused. Handled
-                                        entirely by your browser — nothing leaves your device.</div>
-                                </div>
-                                <label class="settings-switch"><input type="checkbox"
-                                        id="settings-desktop-notifications" /><span
-                                        class="settings-switch-track"></span></label>
-                            </div>
-                            <div class="settings-toggle-row settings-live-only">
-                                <div>
-                                    <div class="settings-toggle-row-title">Noise suppression</div>
-                                    <div class="settings-toggle-row-desc">Filters background noise out of your mic (RNNoise).
-                                        Runs entirely in your browser before your audio is ever sent — nothing leaves your
-                                        device.</div>
-                                </div>
-                                <label class="settings-switch"><input type="checkbox" id="settings-noise-suppression" /><span
-                                        class="settings-switch-track"></span></label>
-                            </div>
-                            <div class="settings-toggle-row settings-live-only">
-                                <div>
-                                    <div class="settings-toggle-row-title">Noise suppression (incoming)</div>
-                                    <div class="settings-toggle-row-desc">Filters background noise out of what you hear from
-                                        others' mics — never applied to screen-share audio. Off by default; can also be
-                                        turned on/off for just one person from their card's menu regardless of this
-                                        setting.</div>
-                                </div>
-                                <label class="settings-switch"><input type="checkbox"
-                                        id="settings-noise-suppression-incoming" /><span
-                                        class="settings-switch-track"></span></label>
-                            </div>
-                            <div class="settings-toggle-row settings-live-only">
-                                <div>
-                                    <div class="settings-toggle-row-title">Auto-deafen when away</div>
-                                    <div class="settings-toggle-row-desc">Mutes your mic and incoming audio automatically
-                                        once you're marked Away (see Profile → "Away after" for the timeout), and undoes
-                                        it when you come back — unless you deafened yourself manually, which this leaves
-                                        alone.</div>
-                                </div>
-                                <label class="settings-switch"><input type="checkbox" id="settings-auto-deafen-away" /><span
-                                        class="settings-switch-track"></span></label>
-                            </div>
-                            <div class="settings-toggle-row">
-                                <div>
                                     <div class="settings-toggle-row-title">Play audio from screen shares</div>
                                     <div class="settings-toggle-row-desc">Off by default. Turn on to hear system audio
                                         from peers who've opted in to sharing it — this is separate from hearing them
@@ -434,17 +396,18 @@ export class SettingsPanel {
                                 <label class="settings-switch"><input type="checkbox" id="settings-play-share-audio" /><span
                                         class="settings-switch-track"></span></label>
                             </div>
-                            <div class="settings-field">
-                                <label for="settings-volume" class="settings-label">Notification volume — <span
-                                        id="settings-volume-value">30%</span></label>
-                                <input id="settings-volume" type="range" min="0" max="1" step="0.01" class="w-full" />
-                            </div>
                             <div class="settings-field settings-live-only">
                                 <label for="settings-master-volume" class="settings-label">Call volume — <span
                                         id="settings-master-volume-value">100%</span></label>
                                 <input id="settings-master-volume" type="range" min="0" max="1" step="0.01"
                                     class="w-full" />
                             </div>
+                        </div>
+
+                        <!-- Microphone & Voice Detection -->
+                        <div class="settings-section" data-settings-panel="mic-voice">
+                            <p class="settings-section-subcopy">How your mic decides when to transmit, and what gets
+                                filtered out of it.</p>
                             <div class="settings-field">
                                 <div class="settings-label">Mic mode</div>
                                 <div id="settings-mic-room-rule" class="dock-popover-note" style="display:none">This room
@@ -485,6 +448,72 @@ export class SettingsPanel {
                                 </div>
                                 <p class="text-[10px] text-muted mt-1" id="mic-meter-hint">Speak normally — the bar should
                                     clear the vertical line while talking and settle below it at rest.</p>
+                            </div>
+                            <div class="settings-toggle-row settings-live-only">
+                                <div>
+                                    <div class="settings-toggle-row-title">Noise suppression</div>
+                                    <div class="settings-toggle-row-desc">Filters background noise out of your mic (RNNoise).
+                                        Runs entirely in your browser before your audio is ever sent — nothing leaves your
+                                        device.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-noise-suppression" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row settings-live-only">
+                                <div>
+                                    <div class="settings-toggle-row-title">Noise suppression (incoming)</div>
+                                    <div class="settings-toggle-row-desc">Filters background noise out of what you hear from
+                                        others' mics — never applied to screen-share audio. Off by default; can also be
+                                        turned on/off for just one person from their card's menu regardless of this
+                                        setting.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox"
+                                        id="settings-noise-suppression-incoming" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row settings-live-only">
+                                <div>
+                                    <div class="settings-toggle-row-title">Auto-deafen when away</div>
+                                    <div class="settings-toggle-row-desc">Mutes your mic and incoming audio automatically
+                                        once you're marked Away (see Profile → "Away after" for the timeout), and undoes
+                                        it when you come back — unless you deafened yourself manually, which this leaves
+                                        alone.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-auto-deafen-away" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                        </div>
+
+                        <!-- Notifications & Chat -->
+                        <div class="settings-section" data-settings-panel="notifications-chat">
+                            <p class="settings-section-subcopy">Sounds, OS notifications, and chat-panel behavior.</p>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Mute notification sounds</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox" id="settings-mute" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
+                                    <div class="settings-toggle-row-title">Desktop notifications for mentions & DMs</div>
+                                    <div class="settings-toggle-row-desc">Shows an OS notification when someone @mentions
+                                        you or sends you a direct message while this window isn't focused. Handled
+                                        entirely by your browser — nothing leaves your device.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox"
+                                        id="settings-desktop-notifications" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-volume" class="settings-label">Notification volume — <span
+                                        id="settings-volume-value">30%</span></label>
+                                <input id="settings-volume" type="range" min="0" max="1" step="0.01" class="w-full" />
+                            </div>
+                            <div class="settings-field">
+                                <label for="settings-max-messages" class="settings-label">Max chat messages kept</label>
+                                <input type="number" id="settings-max-messages" class="settings-text-input"
+                                    style="max-width:7.5rem;" min="10" max="500" />
                             </div>
                         </div>
 
@@ -560,6 +589,12 @@ export class SettingsPanel {
                                         id="settings-reveal-account" /><span
                                         class="settings-switch-track"></span></label>
                             </div>
+                        </div>
+
+                        <!-- Data & Storage -->
+                        <div class="settings-section" data-settings-panel="data-storage">
+                            <p class="settings-section-subcopy">Everything Peek saves lives in this browser — nothing
+                                is ever sent to a server.</p>
                             <div class="settings-toggle-row">
                                 <div>
                                     <div class="settings-toggle-row-title">Save chat history on this device</div>
