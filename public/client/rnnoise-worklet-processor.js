@@ -88,9 +88,16 @@ class NoiseSuppressorProcessor extends AudioWorkletProcessor {
     }
 
     process(inputs, outputs) {
-        // Mono only -- if a stereo track is ever passed in, only channel 0 gets denoised.
+        // Only channel 0 is ever denoised -- but the result is written to every
+        // output channel (below), not just channel 0. A remote WebRTC audio track
+        // can be decoded with more than one channel even when the source was mono,
+        // and Web Audio zero-fills any output channel this callback doesn't write
+        // to -- so writing only outData left every channel but 0 silent, which for
+        // incoming (receive-side) suppression on a 2-channel track meant the
+        // denoised peer was only audible in one ear. Fixed 2026-09-14.
         const inData = inputs[0][0];
-        const outData = outputs[0][0];
+        const outChannels = outputs[0];
+        const outData = outChannels[0];
         if (!inData) return true; // input node not connected/disconnected yet
 
         this._circularBuffer.set(inData, this._inputBufferLength);
@@ -115,7 +122,7 @@ class NoiseSuppressorProcessor extends AudioWorkletProcessor {
             const denoisedFrame = this._circularBuffer.subarray(
                 this._denoisedBufferIndx, this._denoisedBufferIndx + outData.length
             );
-            outData.set(denoisedFrame, 0);
+            for (let ch = 0; ch < outChannels.length; ch++) outChannels[ch].set(denoisedFrame, 0);
             this._denoisedBufferIndx += outData.length;
         }
 
