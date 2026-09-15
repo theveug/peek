@@ -1101,14 +1101,6 @@ document.getElementById('mic-options-keybinds-link')?.addEventListener('click', 
     settingsPanel.open('keybinds');
 });
 
-// Self-view placeholder on any focus loss (window blur or tab hidden)
-const handleFocusChange = () => {
-    const blurred = document.hidden || !document.hasFocus();
-    ui.handleVisibilityChange(blurred);
-};
-window.addEventListener('blur', handleFocusChange);
-window.addEventListener('focus', handleFocusChange);
-
 // Video pause + auto-away ONLY when tab is actually hidden (switched tabs),
 // NOT when the window just loses focus (alt-tabbing to another app)
 document.addEventListener('visibilitychange', () => {

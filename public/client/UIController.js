@@ -3032,9 +3032,6 @@ export class UIController {
             }
         }
 
-        const placeholder = document.getElementById('stream-placeholder');
-        if (placeholder) placeholder.remove();
-
         this.updateLayout();
     }
 
@@ -3133,46 +3130,4 @@ export class UIController {
         badge.classList.toggle('hidden', !text);
     }
 
-    /**
-     * Shows/hides self-view PiPs and the "Still Streaming..." placeholder
-     * badge when the window loses/regains focus (or the tab is hidden)
-     * while actively streaming.
-     * @param {boolean} blurred
-     * @returns {void}
-     */
-    handleVisibilityChange(blurred) {
-        const myVideo = document.getElementById('self-view');
-        const myCamVideo = document.getElementById('self-cam-view');
-        let placeholder = document.getElementById('stream-placeholder');
-
-        const isStreaming = (!!myVideo && !!myVideo.srcObject) || (!!myCamVideo && !!myCamVideo.srcObject);
-
-        if (!isStreaming) {
-            if (placeholder) placeholder.remove();
-            return;
-        }
-
-        if (blurred) {
-            if (myVideo) myVideo.style.display = 'none';
-            if (myCamVideo) myCamVideo.style.display = 'none';
-
-            if (!placeholder) {
-                placeholder = document.createElement('div');
-                placeholder.id = 'stream-placeholder';
-                placeholder.textContent = '\u{1F7E2} Still Streaming...';
-                placeholder.style.cssText = 'position:fixed; bottom:0.625rem; right:0.625rem; padding:0.625rem 0.9375rem; background:#000; color:#fff; border-radius:0.25rem; font-size:0.875rem; z-index:1000;';
-                this.videoContainer.appendChild(placeholder);
-            }
-        } else {
-            if (myVideo) myVideo.style.display = 'block';
-            if (myCamVideo) myCamVideo.style.display = 'block';
-            if (placeholder) placeholder.remove();
-            this._updateSelfViewPositions();
-
-            if (document.hasFocus()) {
-                const indicator = document.getElementById('new-message-indicator');
-                if (indicator) indicator.classList.add('hidden');
-            }
-        }
-    }
 }
