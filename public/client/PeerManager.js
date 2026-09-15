@@ -826,6 +826,8 @@ export class PeerManager {
     async _pollConnectionStats() {
         const rttSamples = [];
         let worstTier = 'unknown';
+        let totalBytesSent = 0;
+        let totalBytesReceived = 0;
         for (const [peerId, pc] of Object.entries(this.peers)) {
             try {
                 const stats = await pc.getStats();
@@ -833,7 +835,15 @@ export class PeerManager {
                 let packetsLost = 0;
                 let packetsReceived = 0;
                 stats.forEach(r => {
-                    if (r.type === 'candidate-pair' && r.nominated) rtt = r.currentRoundTripTime ?? null;
+                    if (r.type === 'candidate-pair' && r.nominated) {
+                        rtt = r.currentRoundTripTime ?? null;
+                        // Transport-level totals (RTP + RTCP + data channel, i.e. the
+                        // whole DTLS connection) rather than summing inbound-rtp/
+                        // outbound-rtp separately — that would miss data-channel bytes
+                        // (chat, file transfers) and double-count with RTCP overhead.
+                        totalBytesSent += r.bytesSent || 0;
+                        totalBytesReceived += r.bytesReceived || 0;
+                    }
                     if (r.type === 'inbound-rtp') {
                         packetsLost += r.packetsLost || 0;
                         packetsReceived += r.packetsReceived || 0;
@@ -849,6 +859,31 @@ export class PeerManager {
         }
         const avgMs = rttSamples.length ? rttSamples.reduce((a, b) => a + b, 0) / rttSamples.length : null;
         this.ui.updateMeshSignal?.(avgMs, worstTier);
+        this._reportBandwidth(totalBytesSent, totalBytesReceived);
+    }
+
+    /**
+     * Derives instantaneous up/down throughput from the cumulative transport
+     * byte counters `_pollConnectionStats` just summed, and pushes it to the
+     * members-panel bandwidth footer. First call just establishes a baseline
+     * (no prior sample to diff against) rather than reporting a bogus spike.
+     * A peer joining/leaving between ticks will show as a one-tick jump/drop
+     * in the totals rather than a smooth rate change — acceptable, this is a
+     * rough live indicator, not a precise metering feature.
+     * @param {number} totalBytesSent
+     * @param {number} totalBytesReceived
+     * @returns {void}
+     */
+    _reportBandwidth(totalBytesSent, totalBytesReceived) {
+        const now = Date.now();
+        const prev = this._lastBandwidthSample;
+        this._lastBandwidthSample = { time: now, sent: totalBytesSent, received: totalBytesReceived };
+        if (!prev) return;
+        const elapsedSec = (now - prev.time) / 1000;
+        if (elapsedSec <= 0) return;
+        const upBps = Math.max(0, (totalBytesSent - prev.sent) / elapsedSec);
+        const downBps = Math.max(0, (totalBytesReceived - prev.received) / elapsedSec);
+        this.ui.updateBandwidth?.(upBps, downBps);
     }
 
     /** Starts the 3s connection-quality poll (idempotent). */

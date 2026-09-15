@@ -1490,6 +1490,10 @@ if (!isMobile() && localStorage.getItem('controlsHidden') === '1') {
     controlsBar?.classList.add('hidden');
 }
 
+// Bandwidth stats footer (opt-in, Settings > Privacy & P2P) — apply the stored
+// preference on load; live toggling is handled by SettingsPanel itself.
+ui.setShowBandwidthStats(localStorage.getItem('showBandwidthStats') === '1');
+
 // Close mobile panels on resize to desktop
 window.addEventListener('resize', () => {
     if (!isMobile()) {

@@ -2052,6 +2052,35 @@ export class UIController {
         wrap.classList.remove('hidden');
     }
 
+    /**
+     * Shows/hides the members-panel bandwidth footer (opt-in, Settings > Privacy & P2P).
+     * A separate control from per-card connection quality (`updateConnectionQuality`) —
+     * quality answers "which peer's connection is bad," this answers "how much data am
+     * I actually pushing," which is mesh-wide rather than per-peer. Called once at
+     * startup (App.js) and live from the Settings toggle.
+     * @param {boolean} enabled
+     * @returns {void}
+     */
+    setShowBandwidthStats(enabled) {
+        const section = document.getElementById('bandwidth-stat-section');
+        if (section) section.style.display = enabled ? 'flex' : 'none';
+    }
+
+    /**
+     * Updates the bandwidth footer's throughput readout. Writes the values
+     * unconditionally (cheap) even while the section is hidden, so it's already
+     * current the moment the Settings toggle turns it on.
+     * @param {number} upBytesPerSec
+     * @param {number} downBytesPerSec
+     * @returns {void}
+     */
+    updateBandwidth(upBytesPerSec, downBytesPerSec) {
+        const up = document.getElementById('bandwidth-stat-up');
+        const down = document.getElementById('bandwidth-stat-down');
+        if (up) up.textContent = `${this._formatFileSize(Math.round(upBytesPerSec))}/s`;
+        if (down) down.textContent = `${this._formatFileSize(Math.round(downBytesPerSec))}/s`;
+    }
+
     /** @returns {string} mic-on icon SVG markup. */
     _micOnSvg() {
         return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 1 1-6 0V4Z" /><path d="M5.5 9.643a.75.75 0 0 1 .75.75v.357a3.75 3.75 0 0 0 7.5 0v-.357a.75.75 0 0 1 1.5 0v.357a5.25 5.25 0 0 1-4.5 5.196V17.5a.75.75 0 0 1-1.5 0v-1.554a5.25 5.25 0 0 1-4.5-5.196v-.357a.75.75 0 0 1 .75-.75Z" /></svg>`;

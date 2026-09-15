@@ -579,6 +579,17 @@ export class SettingsPanel {
                             </div>
                             <div class="settings-toggle-row">
                                 <div>
+                                    <div class="settings-toggle-row-title">Show bandwidth stats</div>
+                                    <div class="settings-toggle-row-desc">Adds a small upload/download throughput
+                                        readout to the bottom of the participants panel — local only, nothing
+                                        broadcast to peers.</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox"
+                                        id="settings-show-bandwidth" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
                                     <div class="settings-toggle-row-title">Reveal my account to peers in this room</div>
                                     <div class="settings-toggle-row-desc">Lets other logged-in peers in a call see your
                                         account username and send you a friend request without leaving the room. Off
@@ -1827,6 +1838,11 @@ export class SettingsPanel {
             this.peerManager?.broadcastRecordingConsent();
         });
 
+        document.getElementById('settings-show-bandwidth')?.addEventListener('change', (e) => {
+            localStorage.setItem('showBandwidthStats', e.target.checked ? '1' : '0');
+            this.ui?.setShowBandwidthStats(e.target.checked);
+        });
+
         document.getElementById('settings-reveal-account')?.addEventListener('change', (e) => {
             localStorage.setItem('revealAccountInRoom', e.target.checked ? '1' : '0');
             // Re-evaluate immediately (fetches /api/auth/me and broadcasts, or
@@ -1923,6 +1939,9 @@ export class SettingsPanel {
         // consent toggle.
         const allowRecording = document.getElementById('settings-allow-recording');
         if (allowRecording) allowRecording.checked = localStorage.getItem('allowRecording') !== '0';
+
+        const showBandwidth = document.getElementById('settings-show-bandwidth');
+        if (showBandwidth) showBandwidth.checked = localStorage.getItem('showBandwidthStats') === '1';
 
         const revealAccount = document.getElementById('settings-reveal-account');
         if (revealAccount) revealAccount.checked = localStorage.getItem('revealAccountInRoom') === '1';

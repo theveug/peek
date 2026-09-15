@@ -783,6 +783,25 @@
                     <ol id="raised-hands-list" class="raised-hands-list"></ol>
                 </div>
 
+                <!-- Bandwidth throughput footer: opt-in (localStorage['showBandwidthStats'],
+                     off by default, Settings > Privacy & P2P). Hidden via inline style like
+                     #raised-hands-section above (an unlayered custom class would beat .hidden).
+                     Populated every 3s by PeerManager._pollConnectionStats() via
+                     UIController.updateBandwidth() — reuses the same getStats() poll that
+                     already drives the per-card connection-quality dots. -->
+                <div id="bandwidth-stat-section"
+                    class="flex items-center justify-between gap-3 px-4 py-2 border-t border-separator text-[11px] text-muted font-mono-app"
+                    style="display:none">
+                    <span class="flex items-center gap-1" data-tip="Upload">
+                        <span class="material-symbols-rounded text-sm leading-none">arrow_upward</span>
+                        <span id="bandwidth-stat-up">0 B/s</span>
+                    </span>
+                    <span class="flex items-center gap-1" data-tip="Download">
+                        <span class="material-symbols-rounded text-sm leading-none">arrow_downward</span>
+                        <span id="bandwidth-stat-down">0 B/s</span>
+                    </span>
+                </div>
+
                 <!-- <div class="sidebar-trust-card">
                     <div class="sidebar-trust-title">
                         <span class="material-symbols-rounded">verified_user</span>Fully meshed
