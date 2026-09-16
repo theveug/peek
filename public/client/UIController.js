@@ -2070,28 +2070,31 @@ export class UIController {
      * Updates the bandwidth footer's throughput readout. Writes the values
      * unconditionally (cheap) even while the section is hidden, so it's already
      * current the moment the Settings toggle turns it on. The footer itself
-     * shows a compact "up ⇅ down (session total)" line; the full breakdown
-     * (with labels) is set as the element's own `data-tip`, so hovering the
-     * whole small/dense line shows one easy-to-read popover instead of relying
-     * on the compact text alone.
+     * shows a compact "up ⇅ down (session total)" rate line; the popover (the
+     * element's own `data-tip`) pairs each direction's rate with its own
+     * running total — "Upload: rate (total)" / "Download: rate (total)" —
+     * with "Session total" derived as the sum of the two totals.
      * @param {number} upBytesPerSec
      * @param {number} downBytesPerSec
-     * @param {number} sessionTotalBytes cumulative bytes sent+received this session
+     * @param {number} sessionBytesUploaded cumulative bytes sent this session
+     * @param {number} sessionBytesDownloaded cumulative bytes received this session
      * @returns {void}
      */
-    updateBandwidth(upBytesPerSec, downBytesPerSec, sessionTotalBytes) {
+    updateBandwidth(upBytesPerSec, downBytesPerSec, sessionBytesUploaded, sessionBytesDownloaded) {
         const section = document.getElementById('bandwidth-stat-section');
         const up = document.getElementById('bandwidth-stat-up');
         const down = document.getElementById('bandwidth-stat-down');
         const total = document.getElementById('bandwidth-stat-total');
         const upText = `${this._formatFileSize(Math.round(upBytesPerSec))}/s`;
         const downText = `${this._formatFileSize(Math.round(downBytesPerSec))}/s`;
-        const totalText = this._formatFileSize(Math.round(sessionTotalBytes || 0));
+        const uploadedText = this._formatFileSize(Math.round(sessionBytesUploaded || 0));
+        const downloadedText = this._formatFileSize(Math.round(sessionBytesDownloaded || 0));
+        const totalText = this._formatFileSize(Math.round((sessionBytesUploaded || 0) + (sessionBytesDownloaded || 0)));
         if (up) up.textContent = upText;
         if (down) down.textContent = downText;
         if (total) total.textContent = `(${totalText})`;
         if (section) {
-            section.dataset.tip = `Upload: ${upText}\nDownload: ${downText}\nSession total: ${totalText}`;
+            section.dataset.tip = `Upload: ${upText} (${uploadedText})\nDownload: ${downText} (${downloadedText})\nSession total: ${totalText}`;
         }
     }
 

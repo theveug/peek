@@ -864,14 +864,17 @@ export class PeerManager {
 
     /**
      * Derives instantaneous up/down throughput from the cumulative transport
-     * byte counters `_pollConnectionStats` just summed, and pushes it (plus a
-     * running `_sessionBandwidthTotal`) to the members-panel bandwidth footer.
-     * First call just establishes a baseline (no prior sample to diff against)
-     * rather than reporting a bogus spike. A peer joining/leaving between ticks
-     * will show as a one-tick jump/drop in the rate reading rather than a
-     * smooth rate change — acceptable, this is a rough live indicator, not a
-     * precise metering feature. The session total itself stays monotonic
-     * regardless (only ever adds clamped-non-negative deltas).
+     * byte counters `_pollConnectionStats` just summed, and pushes it (plus
+     * running per-direction session totals) to the members-panel bandwidth
+     * footer. First call just establishes a baseline (no prior sample to diff
+     * against) rather than reporting a bogus spike. A peer joining/leaving
+     * between ticks will show as a one-tick jump/drop in the rate reading
+     * rather than a smooth rate change — acceptable, this is a rough live
+     * indicator, not a precise metering feature. The session totals
+     * themselves stay monotonic regardless (only ever add clamped
+     * non-negative deltas), tracked separately per direction so the footer's
+     * popover can show "Total uploaded"/"Total downloaded" individually, with
+     * "Session total" derived as their sum rather than a third accumulator.
      * @param {number} totalBytesSent
      * @param {number} totalBytesReceived
      * @returns {void}
@@ -883,15 +886,17 @@ export class PeerManager {
         if (!prev) return;
         const elapsedSec = (now - prev.time) / 1000;
         if (elapsedSec <= 0) return;
-        // Clamped per-tick deltas (not just the resulting bps) also feed a running
-        // session total — a peer leaving can make the aggregate byte counters dip,
-        // but the total itself must only ever grow, never count that dip as negative.
+        // Clamped per-tick deltas (not just the resulting bps) also feed running
+        // per-direction session totals — a peer leaving can make the aggregate
+        // byte counters dip, but the totals themselves must only ever grow,
+        // never count that dip as negative.
         const deltaSent = Math.max(0, totalBytesSent - prev.sent);
         const deltaReceived = Math.max(0, totalBytesReceived - prev.received);
-        this._sessionBandwidthTotal = (this._sessionBandwidthTotal || 0) + deltaSent + deltaReceived;
+        this._sessionBytesUploaded = (this._sessionBytesUploaded || 0) + deltaSent;
+        this._sessionBytesDownloaded = (this._sessionBytesDownloaded || 0) + deltaReceived;
         const upBps = deltaSent / elapsedSec;
         const downBps = deltaReceived / elapsedSec;
-        this.ui.updateBandwidth?.(upBps, downBps, this._sessionBandwidthTotal);
+        this.ui.updateBandwidth?.(upBps, downBps, this._sessionBytesUploaded, this._sessionBytesDownloaded);
     }
 
     /** Starts the 3s connection-quality poll (idempotent). */
