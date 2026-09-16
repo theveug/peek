@@ -1447,10 +1447,35 @@ function relocateControlsForStage(hidden) {
     }
 }
 
+// #controls also needs relocating on a small screen, independent of the
+// stage-hidden state above — #videos carries its own `z-index: 61` (needed
+// so .panel-tab can out-stack #videos's other children, see that rule's
+// comment) and, being position:relative with a non-auto z-index, that makes
+// #videos a stacking context. A position:fixed descendant's z-index is only
+// ever compared against siblings *within* its nearest ancestor stacking
+// context — it can never escape one by raising its own z-index — so #controls
+// (position:fixed on mobile, z-index:90) stayed capped at #videos's z-index:61
+// the whole time, losing to the mobile chat/members drawers (z-index:80,
+// true top-level siblings of #videos, not nested inside it) despite its own
+// z-index nominally being higher. Confirmed via direct DOM inspection
+// (computed z-index 90 vs 80, yet the drawer still won elementFromPoint checks
+// over the dock's own buttons) before reaching for this fix — a plain z-index
+// bump on either side could not have fixed it; only escaping #videos's DOM
+// subtree does. Reuses the exact reparent-to-.room-shell mechanism the stage
+// toggle above already relies on (a real sibling of #videos, not nested in
+// its stacking context), since #controls' own layout CSS already doesn't
+// depend on which of the two it's nested under. Owner-reported 2026-09-16:
+// bottom-bar popovers (mic options, screen/cam quality) rendering behind an
+// open side panel on a small screen.
+function updateControlsRelocation() {
+    const stageHidden = document.body.classList.contains('stage-hidden');
+    relocateControlsForStage(stageHidden || isMobile());
+}
+
 function setStageHidden(hidden) {
     document.body.classList.toggle('stage-hidden', hidden);
     localStorage.setItem('stageHidden', hidden ? '1' : '0');
-    relocateControlsForStage(hidden);
+    updateControlsRelocation();
     // #chat's inline width (set by initChatResize()'s drag handler) beats
     // tailwind.css's `body.stage-hidden .chat-panel { width: auto; flex: 1 1
     // auto }` regardless of specificity — must be cleared for that rule to
@@ -1514,6 +1539,11 @@ window.addEventListener('resize', () => {
     if (!isMobile()) {
         closeMobilePanels();
     }
+    // Re-evaluate #controls' relocation on every breakpoint crossing, not
+    // just when the stage toggle itself changes — see updateControlsRelocation()'s
+    // own comment for why a plain resize can flip which side of the mobile
+    // z-index trap #controls needs to be on.
+    updateControlsRelocation();
 });
 
 // --- Settings panel (redesign Phase 3 — see public/client/SettingsPanel.js) ---

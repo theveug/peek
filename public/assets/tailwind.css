@@ -4685,8 +4685,23 @@ body,
 
 /* ===== Mobile responsive ===== */
 @media (max-width: 767px) {
-  /* Controls always visible, fixed to bottom of viewport on mobile */
-  .controls-bar {
+  /* Controls always visible, fixed to bottom of viewport on mobile.
+     Selector must be `#controls.controls-bar`, not just `.controls-bar` —
+     the base (desktop) rule at `#controls.controls-bar` (ID+class,
+     specificity 1-1-0) otherwise beats this plain class selector
+     (0-1-0) regardless of media query or source order, silently keeping
+     `position: relative` at every viewport width. That left the whole dock
+     (not just its quick popovers) painted as ordinary in-flow content
+     nested inside #videos's own stacking context instead of a real
+     viewport-fixed layer, so any position:fixed side-panel drawer
+     (.chat-panel/.members-panel, z-index 80) painted over it — including
+     swallowing clicks on the dock's own buttons — no matter how high a
+     z-index this rule gave it, since z-index only orders elements within
+     the same stacking context and a non-fixed nested element never
+     reaches the root-level one a fixed drawer competes in. Found
+     2026-09-16, owner-reported the bottom-bar popovers were hidden behind
+     an open side panel on a small screen. */
+  #controls.controls-bar {
     display: flex;
     position: fixed;
     bottom: 0;
