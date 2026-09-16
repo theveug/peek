@@ -506,12 +506,14 @@ document.getElementById('cam-toggle').addEventListener('click', async () => {
     saveMediaState(sessionId, { camEnabled: enabled });
 });
 
-// Re-applies mic/cam/screen-share state saved (below) from before a refresh —
-// only called once, for the very first 'init' this page load sees. Mic/cam
-// use getUserMedia(), which browsers don't gate behind a fresh user gesture
-// once permission's already granted to this origin, so both can be silently
-// re-acquired here. Screen share is different: getDisplayMedia() always
-// requires a real click, so it can only be nudged back on via a toast.
+// Re-applies mic/cam/screen-share/deafen state saved (below) from before a
+// refresh — only called once, for the very first 'init' this page load sees.
+// Mic/cam use getUserMedia(), which browsers don't gate behind a fresh user
+// gesture once permission's already granted to this origin, so both can be
+// silently re-acquired here. Screen share is different: getDisplayMedia()
+// always requires a real click, so it can only be nudged back on via a
+// toast. Deafen is applied last (see the check below) so it correctly
+// re-mutes a mic this same function just turned back on.
 async function restoreMediaState() {
     const state = getMediaState(sessionId);
     if (!state) return;
@@ -534,6 +536,15 @@ async function restoreMediaState() {
 
     if (state.wasSharing) {
         ui.showToast('You were sharing your screen before refreshing — click Share screen to resume');
+    }
+
+    // Applied last, after mic/cam restore above — setDeafened(true) re-hard-mutes
+    // whatever mic state was just restored, so a reload can't resurrect a stale
+    // pre-deafen "mic was on" flag as a live, transmitting mic (see
+    // mediaStateStore.js's header comment).
+    if (state.deafened) {
+        peerManager.setDeafened(true);
+        setDeafenUI(true);
     }
 }
 
@@ -793,6 +804,7 @@ function setDeafenUI(deafened) {
 function toggleDeafen() {
     peerManager.setDeafened(!peerManager.deafened);
     setDeafenUI(peerManager.deafened);
+    saveMediaState(sessionId, { deafened: peerManager.deafened });
 }
 
 document.getElementById('deafen-toggle').addEventListener('click', toggleDeafen);
@@ -1117,12 +1129,21 @@ document.addEventListener('visibilitychange', () => {
 // already called clearMediaState) so this can't resurrect what was just
 // cleared. pagehide fires more reliably than beforeunload, including on
 // mobile bfcache navigations.
+//
+// While deafened, peerManager.micEnabled is the hard-muted *effective* value
+// (false), not the user's underlying manual choice — saving it verbatim here
+// would silently clobber the correct micEnabled:true a prior toggleDeafen()
+// call already persisted, discarding exactly the distinction
+// restoreMediaState() depends on to re-mute (rather than just leave off) a
+// mic that was on before deafening. Falls back to _micEnabledBeforeDeafen
+// while deafened so a reload-then-undeafen doesn't leave the mic stuck off.
 window.addEventListener('pagehide', () => {
     if (leavingRoom) return;
     saveMediaState(sessionId, {
-        micEnabled: peerManager.micEnabled,
+        micEnabled: peerManager.deafened ? !!peerManager._micEnabledBeforeDeafen : peerManager.micEnabled,
         camEnabled: peerManager.camEnabled,
         wasSharing: peerManager.isSharing,
+        deafened: peerManager.deafened,
     });
 });
 
@@ -1151,6 +1172,7 @@ function resetIdleTimer() {
         if (peerManager._autoDeafened) {
             peerManager.setDeafened(false, { auto: true });
             setDeafenUI(false);
+            saveMediaState(sessionId, { deafened: false });
         }
     }
     clearTimeout(idleTimer);
@@ -1163,6 +1185,7 @@ function resetIdleTimer() {
         if (localStorage.getItem('autoDeafenOnAway') === '1' && !peerManager.deafened) {
             peerManager.setDeafened(true, { auto: true });
             setDeafenUI(true);
+            saveMediaState(sessionId, { deafened: true });
         }
     }, getIdleTimeoutMs());
 }

@@ -44,7 +44,8 @@
     "test:account-settings": "node tests/account-settings.mjs",
     "test:friends": "node tests/friends.mjs",
     "test:presence": "node tests/presence.mjs",
-    "test:messages": "node tests/messages.mjs"
+    "test:messages": "node tests/messages.mjs",
+    "test:deafen-persist": "node tests/deafen-persistence.mjs"
   },
   "author": "",
   "license": "ISC",
