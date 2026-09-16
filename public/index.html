@@ -788,18 +788,18 @@
                      #raised-hands-section above (an unlayered custom class would beat .hidden).
                      Populated every 3s by PeerManager._pollConnectionStats() via
                      UIController.updateBandwidth() — reuses the same getStats() poll that
-                     already drives the per-card connection-quality dots. -->
+                     already drives the per-card connection-quality dots. One element (not two
+                     separate up/down ones) with a single "swap_vert" (up/down arrows) icon
+                     dividing the two numbers, session total in parens after — data-tip on the
+                     whole element carries the full "Upload:/Download:/Session total:" breakdown
+                     as one popover, since the compact inline text alone is small/dense. -->
                 <div id="bandwidth-stat-section"
-                    class="flex items-center justify-between gap-3 px-4 py-2 border-t border-separator text-[11px] text-muted font-mono-app"
-                    style="display:none">
-                    <span class="flex items-center gap-1" data-tip="Upload">
-                        <span class="material-symbols-rounded text-sm leading-none">arrow_upward</span>
-                        <span id="bandwidth-stat-up">0 B/s</span>
-                    </span>
-                    <span class="flex items-center gap-1" data-tip="Download">
-                        <span class="material-symbols-rounded text-sm leading-none">arrow_downward</span>
-                        <span id="bandwidth-stat-down">0 B/s</span>
-                    </span>
+                    class="flex items-center justify-center gap-1.5 px-4 py-2 border-t border-separator text-[11px] text-muted font-mono-app"
+                    style="display:none" data-tip-pos="top">
+                    <span id="bandwidth-stat-up">0 B/s</span>
+                    <span class="material-symbols-rounded text-sm leading-none">swap_vert</span>
+                    <span id="bandwidth-stat-down">0 B/s</span>
+                    <span id="bandwidth-stat-total" class="opacity-70">(0 B)</span>
                 </div>
 
                 <!-- <div class="sidebar-trust-card">

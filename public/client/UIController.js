@@ -2069,16 +2069,30 @@ export class UIController {
     /**
      * Updates the bandwidth footer's throughput readout. Writes the values
      * unconditionally (cheap) even while the section is hidden, so it's already
-     * current the moment the Settings toggle turns it on.
+     * current the moment the Settings toggle turns it on. The footer itself
+     * shows a compact "up ⇅ down (session total)" line; the full breakdown
+     * (with labels) is set as the element's own `data-tip`, so hovering the
+     * whole small/dense line shows one easy-to-read popover instead of relying
+     * on the compact text alone.
      * @param {number} upBytesPerSec
      * @param {number} downBytesPerSec
+     * @param {number} sessionTotalBytes cumulative bytes sent+received this session
      * @returns {void}
      */
-    updateBandwidth(upBytesPerSec, downBytesPerSec) {
+    updateBandwidth(upBytesPerSec, downBytesPerSec, sessionTotalBytes) {
+        const section = document.getElementById('bandwidth-stat-section');
         const up = document.getElementById('bandwidth-stat-up');
         const down = document.getElementById('bandwidth-stat-down');
-        if (up) up.textContent = `${this._formatFileSize(Math.round(upBytesPerSec))}/s`;
-        if (down) down.textContent = `${this._formatFileSize(Math.round(downBytesPerSec))}/s`;
+        const total = document.getElementById('bandwidth-stat-total');
+        const upText = `${this._formatFileSize(Math.round(upBytesPerSec))}/s`;
+        const downText = `${this._formatFileSize(Math.round(downBytesPerSec))}/s`;
+        const totalText = this._formatFileSize(Math.round(sessionTotalBytes || 0));
+        if (up) up.textContent = upText;
+        if (down) down.textContent = downText;
+        if (total) total.textContent = `(${totalText})`;
+        if (section) {
+            section.dataset.tip = `Upload: ${upText}\nDownload: ${downText}\nSession total: ${totalText}`;
+        }
     }
 
     /** @returns {string} mic-on icon SVG markup. */

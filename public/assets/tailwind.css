@@ -1888,6 +1888,10 @@ body {
   font-weight: 500;
   cursor: pointer;
   transition: border-color 0.15s;
+  /* A long unbroken string (no spaces/hyphens) has nowhere to wrap by
+     default, forcing #chat-log itself to scroll horizontally in a narrow
+     chat panel instead of the chip just wrapping. */
+  overflow-wrap: anywhere;
 }
 
 .chat-markdown :not(pre) > code:hover {
@@ -2291,7 +2295,11 @@ body.stage-hidden .stage-tab {
 /* ===== Participant card ===== */
 /* ===== Tooltips (data-tip, see client/Tooltip.js) ===== */
 /* One fixed-position singleton bubble, styled like the app's popovers.
-   pointer-events:none so it can never trap the cursor or eat a click. */
+   pointer-events:none so it can never trap the cursor or eat a click.
+   white-space:pre-line lets a data-tip with embedded \n render as real
+   line breaks (e.g. the bandwidth footer's Upload/Download/Session-total
+   breakdown) while still collapsing runs of spaces like normal text — a
+   plain one-line tip with no \n in it renders identically to before. */
 .app-tooltip {
   position: fixed;
   z-index: 100;
@@ -2306,6 +2314,7 @@ body.stage-hidden .stage-tab {
   font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.35;
+  white-space: pre-line;
   pointer-events: none;
   animation: tooltip-in 0.08s ease-out;
 }
@@ -3753,13 +3762,13 @@ body,
 }
 
 .dock-btn-wrap > button:first-of-type {
-  border-top-left-radius: 0.75rem;
-  border-bottom-left-radius: 0.75rem;
+  border-top-left-radius: var(--radius-lg);
+  border-bottom-left-radius: var(--radius-lg);
 }
 
 .dock-btn-wrap > button:last-of-type {
-  border-top-right-radius: 0.75rem;
-  border-bottom-right-radius: 0.75rem;
+  border-top-right-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
 }
 
 /* Was an absolutely-positioned 1rem corner badge overlapping the main

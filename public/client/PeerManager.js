@@ -864,12 +864,14 @@ export class PeerManager {
 
     /**
      * Derives instantaneous up/down throughput from the cumulative transport
-     * byte counters `_pollConnectionStats` just summed, and pushes it to the
-     * members-panel bandwidth footer. First call just establishes a baseline
-     * (no prior sample to diff against) rather than reporting a bogus spike.
-     * A peer joining/leaving between ticks will show as a one-tick jump/drop
-     * in the totals rather than a smooth rate change — acceptable, this is a
-     * rough live indicator, not a precise metering feature.
+     * byte counters `_pollConnectionStats` just summed, and pushes it (plus a
+     * running `_sessionBandwidthTotal`) to the members-panel bandwidth footer.
+     * First call just establishes a baseline (no prior sample to diff against)
+     * rather than reporting a bogus spike. A peer joining/leaving between ticks
+     * will show as a one-tick jump/drop in the rate reading rather than a
+     * smooth rate change — acceptable, this is a rough live indicator, not a
+     * precise metering feature. The session total itself stays monotonic
+     * regardless (only ever adds clamped-non-negative deltas).
      * @param {number} totalBytesSent
      * @param {number} totalBytesReceived
      * @returns {void}
@@ -881,9 +883,15 @@ export class PeerManager {
         if (!prev) return;
         const elapsedSec = (now - prev.time) / 1000;
         if (elapsedSec <= 0) return;
-        const upBps = Math.max(0, (totalBytesSent - prev.sent) / elapsedSec);
-        const downBps = Math.max(0, (totalBytesReceived - prev.received) / elapsedSec);
-        this.ui.updateBandwidth?.(upBps, downBps);
+        // Clamped per-tick deltas (not just the resulting bps) also feed a running
+        // session total — a peer leaving can make the aggregate byte counters dip,
+        // but the total itself must only ever grow, never count that dip as negative.
+        const deltaSent = Math.max(0, totalBytesSent - prev.sent);
+        const deltaReceived = Math.max(0, totalBytesReceived - prev.received);
+        this._sessionBandwidthTotal = (this._sessionBandwidthTotal || 0) + deltaSent + deltaReceived;
+        const upBps = deltaSent / elapsedSec;
+        const downBps = deltaReceived / elapsedSec;
+        this.ui.updateBandwidth?.(upBps, downBps, this._sessionBandwidthTotal);
     }
 
     /** Starts the 3s connection-quality poll (idempotent). */
