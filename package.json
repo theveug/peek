@@ -47,7 +47,8 @@
     "test:messages": "node tests/messages.mjs",
     "test:deafen-persist": "node tests/deafen-persistence.mjs",
     "test:mobile-controls-stacking": "node tests/mobile-controls-stacking.mjs",
-    "test:quick-popover-clamp": "node tests/quick-popover-clamp.mjs"
+    "test:quick-popover-clamp": "node tests/quick-popover-clamp.mjs",
+    "test:chat-autoscroll": "node tests/chat-autoscroll.mjs"
   },
   "author": "",
   "license": "ISC",

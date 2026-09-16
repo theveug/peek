@@ -542,6 +542,9 @@ export class ChatUI {
         if (!msgEl) return;
         const bar = msgEl.querySelector('.reaction-bar');
         if (!bar) return;
+        // See addChatMessage's identical capture for why this must happen
+        // before _renderReactionBar mutates the DOM below, not after.
+        const wasAtBottom = this._isAtBottom(document.getElementById('chat-log'));
 
         if (!this._reactions.has(messageId)) this._reactions.set(messageId, new Map());
         const msgReactions = this._reactions.get(messageId);
@@ -560,7 +563,7 @@ export class ChatUI {
         }
 
         this._renderReactionBar(bar, messageId);
-        this._scrollIfAtBottom(document.getElementById('chat-log'));
+        if (wasAtBottom) this._scrollToBottom(document.getElementById('chat-log'));
     }
 
     /** Repaints one message's reaction-badge bar from `_reactions`. */
@@ -751,6 +754,9 @@ export class ChatUI {
         this.breakMessageGrouping();
 
         const chatLog = document.getElementById('chat-log');
+        // See addChatMessage's identical capture for why this must happen
+        // before any DOM mutation below, not after.
+        const wasAtBottom = this._isAtBottom(chatLog);
         const msgContainer = document.createElement('div');
         if (messageId) msgContainer.dataset.messageId = messageId;
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -794,7 +800,7 @@ export class ChatUI {
         while (chatLog.children.length > this.maxMessages) {
             chatLog.removeChild(chatLog.firstChild);
         }
-        this._scrollIfAtBottom(chatLog);
+        if (wasAtBottom) this._scrollToBottom(chatLog);
 
         this._fileGroups[groupId] = { el: msgContainer, slotsEl: msgContainer.querySelector('.chat-file-group') };
 
@@ -867,9 +873,12 @@ export class ChatUI {
         const slot = this._fileSlot(groupId, fileId);
         if (!slot) return;
         const content = slot.querySelector('.chat-file-slot-content');
+        // See addChatMessage's identical capture for why this must happen
+        // before the innerHTML mutation below, not after.
+        const wasAtBottom = this._isAtBottom(document.getElementById('chat-log'));
         const sizeStr = this._formatFileSize(fileSize);
         content.innerHTML = `<div class="file-offer"><div class="file-offer-info">Wants to send <span class="file-offer-name">${escapeHtml(fileName)}</span> <span class="file-offer-size">(${sizeStr})</span></div><div class="file-offer-actions"><button type="button" class="file-offer-accept">Accept</button><button type="button" class="file-offer-decline">Decline</button></div><div class="file-offer-ttl"><div class="file-offer-ttl-track"><div class="file-offer-ttl-fill"></div></div><span class="file-offer-ttl-label"></span></div></div>`;
-        this._scrollIfAtBottom(document.getElementById('chat-log'));
+        if (wasAtBottom) this._scrollToBottom(document.getElementById('chat-log'));
 
         // Countdown to expiry: shrinking bar + seconds label, ticked every
         // second. The tick also self-cancels if the card's content got
@@ -922,10 +931,13 @@ export class ChatUI {
         const progressEl = slot.querySelector('.chat-file-slot-progress');
         let fill = progressEl.querySelector('.file-progress-fill');
         if (!fill) {
+            // See addChatMessage's identical capture for why this must happen
+            // before the innerHTML mutation below, not after.
+            const wasAtBottom = this._isAtBottom(document.getElementById('chat-log'));
             const label = direction === 'upload' ? 'Sending' : 'Receiving';
             progressEl.innerHTML = `<div class="file-progress"><span class="file-progress-label">${label}: ${escapeHtml(fileName)}</span><div class="file-progress-track"><div class="file-progress-fill"></div></div></div>`;
             fill = progressEl.querySelector('.file-progress-fill');
-            this._scrollIfAtBottom(document.getElementById('chat-log'));
+            if (wasAtBottom) this._scrollToBottom(document.getElementById('chat-log'));
         }
         fill.style.width = (progress * 100) + '%';
     }
@@ -999,6 +1011,9 @@ export class ChatUI {
         const slot = this._fileSlot(groupId, fileId);
         if (!slot) return;
         const content = slot.querySelector('.chat-file-slot-content');
+        // See addChatMessage's identical capture for why this must happen
+        // before the innerHTML mutation below, not after.
+        const wasAtBottom = this._isAtBottom(document.getElementById('chat-log'));
 
         const sizeStr = this._formatFileSize(fileSize);
         const isImage = /^image\//i.test(fileType);
@@ -1027,7 +1042,7 @@ export class ChatUI {
             }
         }
 
-        this._scrollIfAtBottom(document.getElementById('chat-log'));
+        if (wasAtBottom) this._scrollToBottom(document.getElementById('chat-log'));
 
         if (!isSelf && (!document.hasFocus() || this._isChatViewClosed())) {
             document.getElementById('new-message-indicator')?.classList.remove('hidden');
@@ -1417,6 +1432,13 @@ export class ChatUI {
      */
     addChatMessage(sender, text, messageId, replyData, isSelf = false, senderPeerId = null, isHistorical = false) {
         const chatLog = document.getElementById('chat-log');
+        // Captured *before* the new message is appended below — isAtBottom()'s
+        // threshold-based fudge factor only accounts for a small height delta,
+        // so checking it post-append (against the new, taller scrollHeight but
+        // the old, not-yet-scrolled scrollTop) silently fails auto-scroll for
+        // anything taller than that fudge factor: a multi-line message, a
+        // fenced code block, an embedded image. See CLAUDE.md's autoscroll entry.
+        const wasAtBottom = this._isAtBottom(chatLog);
         const msgContainer = document.createElement('div');
         if (!messageId) messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
         msgContainer.dataset.messageId = messageId;
@@ -1492,7 +1514,7 @@ export class ChatUI {
             newMessageIndicator.classList.add('hidden');
         }
 
-        this._scrollIfAtBottom(chatLog);
+        if (wasAtBottom) this._scrollToBottom(chatLog);
     }
 
     /**
@@ -1907,17 +1929,5 @@ export class ChatUI {
      */
     _scrollToBottom(chatLog) {
         scrollToBottom(chatLog);
-    }
-
-    /**
-     * Shared by addChatMessage, addReaction, and the grouped file-message
-     * renderers — only auto-scrolls if the user was already at (or near) the
-     * bottom, so a message (or a reaction badge) arriving while they've
-     * scrolled up to read history doesn't yank them back down.
-     * @param {HTMLElement} chatLog
-     * @returns {void}
-     */
-    _scrollIfAtBottom(chatLog) {
-        if (this._isAtBottom(chatLog)) this._scrollToBottom(chatLog);
     }
 }
