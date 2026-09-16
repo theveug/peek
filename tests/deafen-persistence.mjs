@@ -18,6 +18,12 @@
 //      badge again once the post-reload broadcast lands.
 //   3. Undeafening, then reloading, does NOT spuriously restore deafened —
 //      guards against a fix that always re-applies deafened on restore.
+//   4. Same reload-while-deafened scenario with "release mic when off"
+//      enabled — restoreMediaState()'s mic-restore always re-acquires via a
+//      fresh getUserMedia() on the first restore of a page load (micReleased
+//      defaults false on every fresh instance), never the _reacquireMic()
+//      path, so the setDeafened(true) applied afterward still finds a live
+//      micStream to hard-mute. Guards against that interaction regressing.
 //
 // Run with: npm run test:deafen-persist
 
@@ -123,6 +129,30 @@ async function main() {
         assert(!(await aPage.evaluate(isDeafened)), 'a reload after undeafening does not spuriously restore deafened');
         assert(!(await aPage.evaluate(isMicMuted)), 'mic correctly restores to live/unmuted when the last saved state was not deafened');
         console.log('STEP 3 - undeafen-then-reload does not resurrect a false deafened state: PASS');
+
+        // --- Same scenario again, but with "release mic when off" enabled ---
+        // A separate peer/room so the setting (and its localStorage key) is
+        // set before this page's very first load, matching how a real user
+        // would have it configured going in.
+        const cCtx = await browser.newContext({ ignoreHTTPSErrors: true, permissions: ['camera', 'microphone'] });
+        await cCtx.addInitScript(() => localStorage.setItem('releaseMicWhenOff', '1'));
+        const cPage = await cCtx.newPage();
+        const createResp2 = await cPage.request.post(`${BASE_URL}/api/create-room`, { data: { maxPeers: 6 } });
+        const { code: code2 } = await createResp2.json();
+        await cPage.goto(`${BASE_URL}/${code2}`);
+        await cPage.waitForSelector('.participant-card[data-self]', { state: 'attached', timeout: 10000 });
+
+        await cPage.click('#mic-toggle');
+        await cPage.waitForFunction(isMicOn, null, { timeout: 5000 });
+        await cPage.click('#deafen-toggle');
+        await cPage.waitForFunction(isDeafened, null, { timeout: 5000 });
+
+        await cPage.reload();
+        await cPage.waitForSelector('.participant-card[data-self]', { state: 'attached', timeout: 10000 });
+        await cPage.waitForFunction(isDeafened, null, { timeout: 10000 });
+        assert(await cPage.evaluate(isMicMuted), 'REGRESSION: "release mic when off" caused the mic to come back live/unmuted after a reload while deafened');
+        console.log('STEP 4 - reload-while-deafened still re-mutes correctly with "release mic when off" enabled: PASS');
+        await cCtx.close();
 
         console.log('All deafen-persistence checks passed.');
     } finally {
