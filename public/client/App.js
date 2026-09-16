@@ -841,6 +841,47 @@ const _quickPopovers = [];
  * @param {() => void} [onOpen]
  * @returns {void}
  */
+// #videos carries the `overflow-hidden` Tailwind utility (needed to contain
+// video/grid content) — a quick popover's default CSS centering
+// (`left: 50%; transform: translateX(-50%)`, relative to its `.dock-btn-wrap`
+// ancestor) silently clips against that boundary once the video column gets
+// narrow enough (wide chat + wide members panel on a modest window width),
+// truncating the popover's edge instead of just looking a bit off-center.
+// Recomputed on every open (not cached) since the available width changes
+// with window size and panel widths. Owner-reported 2026-09-16 via a
+// screenshot of "Screen share quality" cut off against the members panel;
+// same root cause as the mobile stacking fix's neighboring "#controls
+// escapes #videos" entry, but this one is a clipping (overflow) problem, not
+// a stacking one, and isn't mobile-specific — a plain reparent doesn't apply
+// here since the popover still needs to visually anchor near its own caret.
+function _clampPopoverHorizontally(popover) {
+    const wrap = popover.parentElement;
+    const videos = document.getElementById('videos');
+    if (!wrap || !videos) return;
+    const wrapRect = wrap.getBoundingClientRect();
+    const videosRect = videos.getBoundingClientRect();
+    const margin = 8;
+    // Repositioning alone isn't enough once #videos itself is narrower than
+    // the popover's own natural width plus margins — clamping the left edge
+    // in that case still leaves the right edge overflowing, since there's
+    // genuinely not enough room either way. Shrink the popover to fit rather
+    // than let it overflow by even a few px.
+    const availableWidth = videosRect.width - margin * 2;
+    let popWidth = popover.offsetWidth;
+    if (popWidth > availableWidth) {
+        popover.style.width = availableWidth + 'px';
+        popWidth = availableWidth;
+    } else {
+        popover.style.width = '';
+    }
+    const desiredLeft = wrapRect.left + wrapRect.width / 2 - popWidth / 2;
+    const minLeft = videosRect.left + margin;
+    const maxLeft = videosRect.right - popWidth - margin;
+    const clampedLeft = Math.max(minLeft, Math.min(desiredLeft, maxLeft));
+    popover.style.left = (clampedLeft - wrapRect.left) + 'px';
+    popover.style.transform = 'none';
+}
+
 function wireQuickPopover(caretId, popoverId, onOpen) {
     const caret = document.getElementById(caretId);
     const popover = document.getElementById(popoverId);
@@ -853,6 +894,7 @@ function wireQuickPopover(caretId, popoverId, onOpen) {
         if (opening) {
             onOpen?.();
             popover.classList.remove('hidden');
+            _clampPopoverHorizontally(popover);
         } else {
             popover.classList.add('hidden');
         }

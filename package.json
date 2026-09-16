@@ -46,7 +46,8 @@
     "test:presence": "node tests/presence.mjs",
     "test:messages": "node tests/messages.mjs",
     "test:deafen-persist": "node tests/deafen-persistence.mjs",
-    "test:mobile-controls-stacking": "node tests/mobile-controls-stacking.mjs"
+    "test:mobile-controls-stacking": "node tests/mobile-controls-stacking.mjs",
+    "test:quick-popover-clamp": "node tests/quick-popover-clamp.mjs"
   },
   "author": "",
   "license": "ISC",
