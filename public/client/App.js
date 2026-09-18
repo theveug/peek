@@ -1158,7 +1158,6 @@ document.getElementById('mic-options-keybinds-link')?.addEventListener('click', 
 // Video pause + auto-away ONLY when tab is actually hidden (switched tabs),
 // NOT when the window just loses focus (alt-tabbing to another app)
 document.addEventListener('visibilitychange', () => {
-    handleFocusChange();
     peerManager.handleTabVisibility(document.hidden);
     if (!document.hidden) acquireWakeLock();
 });

@@ -699,15 +699,21 @@ export class ChatUI {
     }
 
     /**
-     * True when the chat panel isn't actually on screen for the local user —
-     * either collapsed via its tab (desktop) or the mobile drawer is closed.
+     * True when the chat log isn't actually on screen for the local user —
+     * either the whole panel is collapsed via its tab (desktop) / the mobile
+     * drawer is closed, or the panel is open but showing the Files/Messages
+     * tab instead of Chat (2026-09-09 three-tab redesign — the panel being
+     * "open" no longer implies the chat log itself is visible).
      * @returns {boolean}
      */
     _isChatViewClosed() {
         const chatPanel = document.getElementById('chat');
         if (!chatPanel) return false;
-        if (window.innerWidth < 768) return !chatPanel.classList.contains('mobile-open');
-        return chatPanel.classList.contains('hidden');
+        const panelClosed = window.innerWidth < 768
+            ? !chatPanel.classList.contains('mobile-open')
+            : chatPanel.classList.contains('hidden');
+        if (panelClosed) return true;
+        return !!document.getElementById('chat-tab-content')?.classList.contains('hidden');
     }
 
     /** @param {number} bytes @returns {string} human-readable size, e.g. "1.2 MB". */
@@ -1128,7 +1134,7 @@ export class ChatUI {
         el = document.createElement('div');
         el.id = 'chat-lightbox';
         el.className = 'chat-lightbox';
-        el.innerHTML = `<div class="chat-lightbox-backdrop"></div><div class="chat-lightbox-content"><div class="chat-lightbox-actions"><a class="chat-lightbox-action" data-tip="Open in new tab" target="_blank" rel="noopener"><span class="material-symbols-rounded">open_in_new</span></a><a class="chat-lightbox-action" data-tip="Download"><span class="material-symbols-rounded">download</span></a><button type="button" class="chat-lightbox-action" data-tip="Close"><span class="material-symbols-rounded">close</span></button></div><img class="chat-lightbox-img" src="" alt="" /></div>`;
+        el.innerHTML = `<div class="chat-lightbox-backdrop"></div><div class="chat-lightbox-content"><div class="chat-lightbox-actions"><a class="chat-lightbox-action" data-tip="Open in new tab" target="_blank" rel="noreferrer"><span class="material-symbols-rounded">open_in_new</span></a><a class="chat-lightbox-action" data-tip="Download"><span class="material-symbols-rounded">download</span></a><button type="button" class="chat-lightbox-action" data-tip="Close"><span class="material-symbols-rounded">close</span></button></div><img class="chat-lightbox-img" src="" alt="" /></div>`;
         document.body.appendChild(el);
 
         const close = () => {
@@ -1227,7 +1233,7 @@ export class ChatUI {
         el = document.createElement('div');
         el.id = 'chat-code-viewer';
         el.className = 'chat-lightbox chat-code-viewer';
-        el.innerHTML = `<div class="chat-lightbox-backdrop"></div><div class="chat-code-viewer-content"><div class="chat-lightbox-actions"><a class="chat-lightbox-action" data-tip="Open in new tab" target="_blank" rel="noopener"><span class="material-symbols-rounded">open_in_new</span></a><a class="chat-lightbox-action" data-tip="Download"><span class="material-symbols-rounded">download</span></a><button type="button" class="chat-lightbox-action" data-tip="Close"><span class="material-symbols-rounded">close</span></button></div><div class="chat-code-viewer-header"></div><div class="chat-code-viewer-body"></div></div>`;
+        el.innerHTML = `<div class="chat-lightbox-backdrop"></div><div class="chat-code-viewer-content"><div class="chat-lightbox-actions"><a class="chat-lightbox-action" data-tip="Open in new tab" target="_blank" rel="noreferrer"><span class="material-symbols-rounded">open_in_new</span></a><a class="chat-lightbox-action" data-tip="Download"><span class="material-symbols-rounded">download</span></a><button type="button" class="chat-lightbox-action" data-tip="Close"><span class="material-symbols-rounded">close</span></button></div><div class="chat-code-viewer-header"></div><div class="chat-code-viewer-body"></div></div>`;
         document.body.appendChild(el);
 
         const close = () => {

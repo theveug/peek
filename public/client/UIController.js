@@ -202,6 +202,17 @@ export class UIController {
         // other cross-module signal in this app (peek:account, etc.), since
         // UIController.js has no reference to App.js's room-side instance.
         if (tab === 'messages') window.dispatchEvent(new CustomEvent('peek:messages-tab-shown'));
+        // Switching into Chat is the other way (besides opening the whole
+        // panel via #togglechat) the chat log actually becomes visible —
+        // without this, landing here from Files/Messages while the panel was
+        // already open left the unread dot (and the desktop app's tray/
+        // taskbar badge, which polls this element) lit indefinitely, since
+        // nothing else clears it once the panel-open toggle's own "opening"
+        // branch doesn't fire (see App.js's togglechat handler).
+        if (tab === 'chat') {
+            document.getElementById('new-message-indicator')?.classList.add('hidden');
+            document.getElementById('mention-indicator')?.classList.add('hidden');
+        }
     }
 
     /**
