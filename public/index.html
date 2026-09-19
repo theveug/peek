@@ -254,6 +254,12 @@
 
         <div class="flex-grow flex h-full min-h-0 text-foreground relative">
             <div class="chat-panel flex flex-col h-full border-r border-separator relative" id="chat">
+                <!-- Stacked-avatar roster strip: shown only when the stage and
+                     members panel are both hidden (tailwind.css), so who's in
+                     the room / who's talking stays visible with every other
+                     participant indicator out of view. Populated by
+                     UIController._refreshRosterStrip(). -->
+                <div class="chat-roster-strip" id="chat-roster-strip"></div>
                 <!-- Tab bar -->
                 <div class="panel-tabs shrink-0">
                     <button id="tab-chat" class="panel-tab-btn active" data-tip="Chat">

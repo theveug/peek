@@ -1492,6 +1492,67 @@ body {
   line-height: 1;
 }
 
+/* ===== Chat roster strip (2026-09-19) =====
+   Stacked-avatar strip at the top of the chat panel — a Discord/Flowbite-
+   style "who's actually in here" glance for when both the video stage
+   (`body.stage-hidden`) and the members panel (`#members-sidebar.collapsed`)
+   are hidden, so participant presence/speaking isn't fully invisible.
+   Visibility is pure CSS via :has(), same precedent as the chat-resize-handle
+   rule further down. Content is built by UIController._refreshRosterStrip(). */
+.chat-roster-strip {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+body.stage-hidden:has(#members-sidebar.collapsed) .chat-roster-strip {
+  display: flex;
+}
+
+.chat-roster-avatar {
+  position: relative;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-left: -0.5rem;
+  border: 2px solid var(--bg1);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+  line-height: 1;
+  overflow: hidden;
+}
+
+.chat-roster-avatar:first-child {
+  margin-left: 0;
+}
+
+/* Overlapping avatars stack in DOM order — bring a speaking or hovered one
+   fully in front so its ring/image isn't cut off by the avatar overlapping it. */
+.chat-roster-avatar:hover,
+.chat-roster-avatar.status-talking {
+  z-index: 1;
+}
+
+.chat-roster-avatar .avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chat-roster-more {
+  background: var(--bg3);
+  color: var(--t2);
+  font-size: 0.6rem;
+}
+
 /* ===== Chat / Files / Polls panel (redesign, Phase 2e) ===== */
 .panel-tabs {
   display: flex;

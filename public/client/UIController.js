@@ -3,6 +3,7 @@ import { ChatUI } from './ChatUI.js';
 import { escapeHtml } from './escapeHtml.js';
 import * as chatHistoryStore from './chatHistoryStore.js';
 import { syncPreference } from './AccountSettingsSync.js';
+import { colorFor, avatarInitial } from './chatMessageRow.js';
 
 /**
  * Owns everything DOM-facing for the room page: the video grid/focus stage,
@@ -1348,6 +1349,7 @@ export class UIController {
             const identityName = document.getElementById('topbar-identity-name');
             this._renderAvatarInto(identityAvatar, peerId, identityName?.textContent || '?');
         }
+        this._refreshRosterStrip();
     }
 
     /**
@@ -1530,6 +1532,42 @@ export class UIController {
             container.appendChild(card);
         }
         this._updateMemberCount();
+        this._refreshRosterStrip();
+    }
+
+    /**
+     * Rebuilds the stacked-avatar strip at the top of the chat panel
+     * (`#chat-roster-strip`) from the current `#participants` cards —
+     * unconditionally, since the strip's own visibility is decided entirely
+     * by CSS (see tailwind.css) once the stage + members panel are both
+     * hidden. Reuses `chatMessageRow.js`'s `colorFor()`/`avatarInitial()` so
+     * a peer's roster-strip color matches their chat-message color exactly.
+     * Called from every place a participant card is created/removed/renamed
+     * or gets a new avatar — same set of choke points `_updateMemberCount()`
+     * already runs from.
+     * @returns {void}
+     */
+    _refreshRosterStrip() {
+        const strip = document.getElementById('chat-roster-strip');
+        if (!strip) return;
+        const MAX_SHOWN = 8;
+        const cards = Array.from(document.querySelectorAll('#participants .participant-card'));
+        const shown = cards.slice(0, MAX_SHOWN);
+        const overflow = cards.length - shown.length;
+
+        strip.innerHTML = shown.map(card => {
+            const peerId = card.id.slice('participant-'.length);
+            const isSelf = card.dataset.self === '1';
+            const name = card.querySelector('.participant-name')?.textContent || peerId.substring(0, 8);
+            const avatarUrl = this.peerAvatars.get(peerId);
+            const color = colorFor(name, isSelf);
+            const label = `${name}${isSelf ? ' (you)' : ''}`;
+            const body = avatarUrl
+                ? `<img class="avatar-img" src="${avatarUrl}" alt="" />`
+                : escapeHtml(avatarInitial(name));
+            const talking = document.getElementById(`participant-${peerId}`)?.querySelector('.status-talking') ? ' status-talking' : '';
+            return `<span class="chat-roster-avatar${talking}" data-peer-id="${peerId}" style="background:${avatarUrl ? 'transparent' : color}" data-tip="${escapeHtml(label)}">${body}</span>`;
+        }).join('') + (overflow > 0 ? `<span class="chat-roster-avatar chat-roster-more" data-tip="${overflow} more">+${overflow}</span>` : '');
     }
 
     /**
@@ -1847,6 +1885,7 @@ export class UIController {
         this.recordingPeers.delete(peerId);
         this.peerAccountUsernames.delete(peerId);
         this._updateMemberCount();
+        this._refreshRosterStrip();
     }
 
     /**
@@ -1868,6 +1907,7 @@ export class UIController {
         this.recordingPeers.clear();
         this._renderRaisedHands();
         this._updateMemberCount();
+        this._refreshRosterStrip();
     }
 
     /** Refreshes the members-sidebar and top-bar "X / cap" participant counts. */
@@ -2156,6 +2196,7 @@ export class UIController {
         if (peerId === this.selfPeerId) {
             document.getElementById('topbar-identity-avatar')?.classList.toggle('status-talking', speaking);
         }
+        document.querySelector(`#chat-roster-strip [data-peer-id="${peerId}"]`)?.classList.toggle('status-talking', speaking);
     }
 
     /**
@@ -2444,6 +2485,7 @@ export class UIController {
         if (nameEl) nameEl.textContent = nickname;
         const avatar = el.querySelector('.flex-shrink-0 > div:first-child');
         if (avatar) this._renderAvatarInto(avatar, peerId, nickname);
+        this._refreshRosterStrip();
 
         if (peerId === this.selfPeerId) {
             const identityName = document.getElementById('topbar-identity-name');
