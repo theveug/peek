@@ -1543,10 +1543,29 @@ body.stage-hidden:has(#members-sidebar.collapsed) .chat-roster-strip {
 }
 
 /* Overlapping avatars stack in DOM order — bring a speaking or hovered one
-   fully in front so its ring/image isn't cut off by the avatar overlapping it. */
+   fully in front so it isn't cut off by the avatar overlapping it. */
 .chat-roster-avatar:hover,
 .chat-roster-avatar.status-talking {
   z-index: 1;
+}
+
+/* Speaking indicator here is a plain solid-green recolor of the avatar's own
+   separation border, not the pulsing box-shadow/drop-shadow ring every other
+   .status-talking element gets (owner-requested 2026-09-19, after that ring
+   turned out fragile at this size — see the overflow-clipping incident right
+   above) — cancels the inherited animation and just switches border-color.
+   ID-scoped selector: `.status-talking:not(:has(.avatar-img))` (further down,
+   "Status ring animation") has the same specificity as a bare
+   `.chat-roster-avatar.status-talking` (two class-level selectors either
+   way) and comes later in the file, so it would otherwise win the tie and
+   silently re-apply the pulse animation this is meant to cancel. */
+#chat-roster-strip .chat-roster-avatar.status-talking {
+  animation: none;
+  border-color: var(--green);
+}
+
+#chat-roster-strip .chat-roster-avatar.status-talking .avatar-img {
+  animation: none;
 }
 
 /* No overflow:hidden on .chat-roster-avatar itself (unlike .chat-avatar) —
