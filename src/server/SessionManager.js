@@ -71,14 +71,19 @@ export class SessionManager {
      *   peer's socket drops and reconnects before anyone else joins) keeps its topic instead
      *   of silently coming back topic-less. The client resends its last-known topic on every
      *   join, same as password.
+     * @param {'open'|'ptt'|null} [options.micPolicy] - only applied if the session is being
+     *   lazily created here; same reasoning as topic/password — without this, a full server
+     *   restart (which wipes every in-memory session) silently reverts a push-to-talk room
+     *   back to open mic the moment its first peer reconnects, with no client-side mute
+     *   action involved. The client resends its last-known non-default policy on every join.
      * @returns {void}
      */
-    addPeer(sessionId, peerId, socket, { password = null, creatorToken = null, topic = null } = {}) {
+    addPeer(sessionId, peerId, socket, { password = null, creatorToken = null, topic = null, micPolicy = null } = {}) {
         // Lazy-create goes through createSession — a second inline session
         // literal here silently drifted from createSession's shape once
         // already (missing bannedIps, crashing recordBan in lazily-created
         // rooms), so there is deliberately only one place that builds one.
-        this.createSession(sessionId, { password, creatorToken, topic });
+        this.createSession(sessionId, { password, creatorToken, topic, micPolicy });
         this.sessions.get(sessionId).peers.add(peerId);
         this.peerMap.set(peerId, { sessionId, socket });
     }

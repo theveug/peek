@@ -2,6 +2,7 @@
 //   1. /api/create-room with micPolicy 'ptt' → every joiner's 'init' carries it,
 //   2. a junk micPolicy at creation (non-string/unknown value) stores 'open',
 //   3. a lazily-created room (raw join to a dead code) defaults to 'open',
+//      unless the joiner resends a non-default policy (server restart case),
 //   4. a non-creator's set-mic-policy is silently ignored (no broadcast,
 //      later joiners still see the old value),
 //   5. the creator's set-mic-policy broadcasts 'mic-policy-update' to every
@@ -46,7 +47,7 @@ function assert(cond, msg) {
 }
 
 /** Opens a socket, sends a join, and resolves with helpers around it. */
-function connectAndJoin(code, { creatorToken } = {}) {
+function connectAndJoin(code, { creatorToken, micPolicy } = {}) {
     return new Promise((resolve, reject) => {
         const ws = new WebSocket(WS_URL, { rejectUnauthorized: false });
         const messages = [];
@@ -60,6 +61,7 @@ function connectAndJoin(code, { creatorToken } = {}) {
         ws.on('open', () => {
             const join = { type: 'join', sessionId: code };
             if (creatorToken) join.creatorToken = creatorToken;
+            if (micPolicy) join.micPolicy = micPolicy;
             ws.send(JSON.stringify(join));
         });
         const waitFor = (type, timeoutMs = 5000) => new Promise((res, rej) => {
@@ -133,6 +135,22 @@ async function main() {
         const lazy = await connectAndJoin('Lzy77');
         assert(lazy.init.micPolicy === 'open', "lazily-created room defaults to 'open'");
         lazy.ws.close();
+
+        // --- 3b. a rejoin resending 'ptt' keeps a lazily-recreated room's rule ---
+        // (regression guard: a server restart wipes SessionManager entirely, so
+        // without the client resending its last-known policy on join, the first
+        // reconnecting peer would silently recreate the room back at 'open'.)
+        const lazyPtt = await connectAndJoin('Lzy88', { micPolicy: 'ptt' });
+        assert(lazyPtt.init.micPolicy === 'ptt', "a rejoin resending micPolicy 'ptt' keeps the room's rule alive across a lazy recreate");
+        const lazyPttPeer = await connectAndJoin('Lzy88');
+        assert(lazyPttPeer.init.micPolicy === 'ptt', "a later joiner (no policy resent) still sees the recreated room's 'ptt' rule");
+        lazyPtt.ws.close();
+        lazyPttPeer.ws.close();
+
+        // --- 3c. junk micPolicy on a raw join is ignored, not adopted ---
+        const lazyJunk = await connectAndJoin('Lzy99', { micPolicy: { evil: true } });
+        assert(lazyJunk.init.micPolicy === 'open', "junk micPolicy on a raw join defaults to 'open', not adopted verbatim");
+        lazyJunk.ws.close();
 
         await sleep(200);
         console.log('All mic-policy checks passed.');

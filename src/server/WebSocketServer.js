@@ -113,6 +113,10 @@ export function setupWebSocket(wss, iceConfig, manager, buildId, trust) {
                     // password — the client resends its last-known topic on every
                     // join (see App.js's roomTopic variable).
                     const joinTopic = typeof msg.topic === 'string' ? msg.topic.slice(0, 120) : null;
+                    // Same treatment again, for the room's mic rule (see App.js's
+                    // roomMicPolicy variable) — without this, a server restart
+                    // silently drops push-to-talk enforcement back to open mic.
+                    const joinMicPolicy = msg.micPolicy === 'ptt' ? 'ptt' : null;
 
                     // Ban gate: a banned IP stays out for the rest of the session's
                     // lifetime (the set dies with the room). The creator token bypasses
@@ -159,7 +163,7 @@ export function setupWebSocket(wss, iceConfig, manager, buildId, trust) {
                         : null;
                     const presentedToken = joinCreatorToken || mintedCreatorToken;
 
-                    manager.addPeer(sessionId, peerId, ws, { password: joinPassword, creatorToken: presentedToken, topic: joinTopic });
+                    manager.addPeer(sessionId, peerId, ws, { password: joinPassword, creatorToken: presentedToken, topic: joinTopic, micPolicy: joinMicPolicy });
                     const peers = manager.getPeersInSession(sessionId).filter(p => p !== peerId);
 
                     // A claim can flip creatorPeerId/moderatorPeerIds, so this must run

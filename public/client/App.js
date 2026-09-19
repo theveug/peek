@@ -68,6 +68,14 @@ let roomPassword = sessionStorage.getItem('roomPassword') || null;
 // joins, which would otherwise delete-then-lazily-recreate the session with
 // no topic at all.
 let roomTopic = sessionStorage.getItem('roomTopic') || null;
+// Same "resend on every join" treatment as roomTopic/roomPassword above —
+// without it, a server restart (which wipes SessionManager's in-memory
+// sessions entirely) lazily recreates the room with the default 'open' mic
+// policy the moment the first peer reconnects, silently dropping push-to-talk
+// enforcement for everyone with no client-side action at all. Only stored
+// when non-default so joinMsg.micPolicy is omitted (server already defaults
+// to 'open') for the common case.
+let roomMicPolicy = sessionStorage.getItem('roomMicPolicy') || null;
 // `let`, not `const`: joining a code with no live session lazily creates the
 // room, and the server mints + returns a creator token in 'init' — it must be
 // adopted here so reconnects within this tab re-claim ownership. Falls back
@@ -134,6 +142,7 @@ function connect() {
         if (roomPassword) joinMsg.password = roomPassword;
         if (creatorToken) joinMsg.creatorToken = creatorToken;
         if (roomTopic) joinMsg.topic = roomTopic;
+        if (roomMicPolicy) joinMsg.micPolicy = roomMicPolicy;
         socket.send(JSON.stringify(joinMsg));
     };
 
@@ -1053,6 +1062,9 @@ document.getElementById('record-toggle').addEventListener('click', async () => {
 // from its 'mic-policy-update' handler; this callback only owns the DOM
 // consequences, identical in both cases).
 peerManager.onMicPolicy = (policy) => {
+    roomMicPolicy = policy === 'ptt' ? 'ptt' : null;
+    if (roomMicPolicy) sessionStorage.setItem('roomMicPolicy', roomMicPolicy);
+    else sessionStorage.removeItem('roomMicPolicy');
     ui.updateMicModeBadge(policy === 'ptt' ? 'push-to-talk' : (localStorage.getItem('micMode') || 'toggle'));
     refreshMicPolicyLock();
     refreshMicOptionsRows();
@@ -1689,9 +1701,25 @@ window.addEventListener('keydown', (e) => {
         // press pay for a real getUserMedia() re-acquire (and, on some
         // permission grants, a fresh prompt) instead of an instant flip.
         if (!peerManager.micStream) {
-            peerManager.toggleMic({ allowRelease: false }).then(enabled => updateMicUI(enabled, true));
+            peerManager.toggleMic({ allowRelease: false }).then(enabled => {
+                updateMicUI(enabled, true);
+                // PTT hold engage/disengage never went through toggleMicManual(),
+                // so unlike a plain mic-button click this was never persisted —
+                // a mid-hold reload (mobile tab discard during a server restart,
+                // same class of bug fixed for deafen — see CLAUDE.md) could
+                // resurrect a stale mic-open state instead of the true one.
+                saveMediaState(sessionId, { micEnabled: enabled });
+            });
         } else if (!peerManager.micEnabled) {
-            peerManager.toggleMic({ allowRelease: false }).then(enabled => updateMicUI(enabled, true));
+            peerManager.toggleMic({ allowRelease: false }).then(enabled => {
+                updateMicUI(enabled, true);
+                // PTT hold engage/disengage never went through toggleMicManual(),
+                // so unlike a plain mic-button click this was never persisted —
+                // a mid-hold reload (mobile tab discard during a server restart,
+                // same class of bug fixed for deafen — see CLAUDE.md) could
+                // resurrect a stale mic-open state instead of the true one.
+                saveMediaState(sessionId, { micEnabled: enabled });
+            });
         }
     } else {
         // Toggle or voice-activity: hold to force-mute. Doesn't touch
@@ -1719,7 +1747,15 @@ window.addEventListener('keyup', (e) => {
     if (micMode === 'push-to-talk') {
         // allowRelease: false — see the matching keydown handler above.
         if (peerManager.micEnabled) {
-            peerManager.toggleMic({ allowRelease: false }).then(enabled => updateMicUI(enabled, true));
+            peerManager.toggleMic({ allowRelease: false }).then(enabled => {
+                updateMicUI(enabled, true);
+                // PTT hold engage/disengage never went through toggleMicManual(),
+                // so unlike a plain mic-button click this was never persisted —
+                // a mid-hold reload (mobile tab discard during a server restart,
+                // same class of bug fixed for deafen — see CLAUDE.md) could
+                // resurrect a stale mic-open state instead of the true one.
+                saveMediaState(sessionId, { micEnabled: enabled });
+            });
         }
     } else {
         peerManager.ptmHeld = false;
