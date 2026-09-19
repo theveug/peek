@@ -1493,19 +1493,28 @@ body {
 }
 
 /* ===== Chat roster strip (2026-09-19) =====
-   Stacked-avatar strip at the top of the chat panel — a Discord/Flowbite-
-   style "who's actually in here" glance for when both the video stage
-   (`body.stage-hidden`) and the members panel (`#members-sidebar.collapsed`)
-   are hidden, so participant presence/speaking isn't fully invisible.
-   Visibility is pure CSS via :has(), same precedent as the chat-resize-handle
-   rule further down. Content is built by UIController._refreshRosterStrip(). */
+   Stacked-avatar strip centered inside .panel-tabs, between the Chat/Files/
+   Messages tabs and the trailing search/pinned/close icon group — a Discord/
+   Flowbite-style "who's actually in here" glance for when both the video
+   stage (`body.stage-hidden`) and the members panel
+   (`#members-sidebar.collapsed`) are hidden, so participant presence/
+   speaking isn't fully invisible. Visibility is pure CSS via :has(), same
+   precedent as the chat-resize-handle rule further down. Content is built by
+   UIController._refreshRosterStrip(). Absolutely positioned (centered on
+   .panel-tabs itself, not a flex sibling) rather than given `flex: 1` —
+   the tab bar already has a `margin-left: auto` trick on #chat-search-btn
+   (below) pushing the trailing icon group to the row's right edge, and a
+   flexible sibling competing for the same free space would fight that;
+   centering on the row's own box sidesteps it entirely and centers correctly
+   regardless of how wide either side group is (position: relative for this
+   lives on the real .panel-tabs rule below, not duplicated here). */
 .chat-roster-strip {
   display: none;
   align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 body.stage-hidden:has(#members-sidebar.collapsed) .chat-roster-strip {
@@ -1560,6 +1569,7 @@ body.stage-hidden:has(#members-sidebar.collapsed) .chat-roster-strip {
   gap: 0.25rem;
   padding: 0.5rem;
   border-bottom: 1px solid var(--border);
+  position: relative; /* anchors the centered .chat-roster-strip, see its own comment above */
 }
 
 .panel-tab-btn {

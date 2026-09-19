@@ -254,12 +254,6 @@
 
         <div class="flex-grow flex h-full min-h-0 text-foreground relative">
             <div class="chat-panel flex flex-col h-full border-r border-separator relative" id="chat">
-                <!-- Stacked-avatar roster strip: shown only when the stage and
-                     members panel are both hidden (tailwind.css), so who's in
-                     the room / who's talking stays visible with every other
-                     participant indicator out of view. Populated by
-                     UIController._refreshRosterStrip(). -->
-                <div class="chat-roster-strip" id="chat-roster-strip"></div>
                 <!-- Tab bar -->
                 <div class="panel-tabs shrink-0">
                     <button id="tab-chat" class="panel-tab-btn active" data-tip="Chat">
@@ -296,6 +290,13 @@
                         <span id="messages-tab-badge"
                             class="hidden flex items-center justify-center text-[10px] rounded-full min-w-4.5 h-4.5 px-1 leading-none panel-tab-badge">0</span>
                     </button>
+                    <!-- Stacked-avatar roster strip: centered in the tab bar between
+                         the Chat/Files/Messages tabs and the search/pinned/close
+                         icons, shown only when the stage and members panel are both
+                         hidden (tailwind.css), so who's in the room / who's talking
+                         stays visible with every other participant indicator out of
+                         view. Populated by UIController._refreshRosterStrip(). -->
+                    <div class="chat-roster-strip" id="chat-roster-strip"></div>
                     <button id="chat-search-btn" data-tip="Search chat" type="button" class="panel-close-btn">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
                             <path fill-rule="evenodd" clip-rule="evenodd"
