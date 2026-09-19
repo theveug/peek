@@ -1536,7 +1536,6 @@ body.stage-hidden:has(#members-sidebar.collapsed) .chat-roster-strip {
   color: white;
   flex-shrink: 0;
   line-height: 1;
-  overflow: hidden;
 }
 
 .chat-roster-avatar:first-child {
@@ -1550,6 +1549,15 @@ body.stage-hidden:has(#members-sidebar.collapsed) .chat-roster-strip {
   z-index: 1;
 }
 
+/* No overflow:hidden on .chat-roster-avatar itself (unlike .chat-avatar) —
+   the image is clipped to a circle via its own border-radius (inherited
+   from the global .avatar-img rule) instead, same as .participant-avatar
+   elsewhere. A parent's overflow:hidden clips a talking peer's own
+   drop-shadow speaking-ring (pulse-ring-img) along with the image, since
+   filter effects on a child are subject to an ancestor's overflow clipping
+   the same way box-shadow isn't on the SAME element — this silently made
+   the ring invisible for anyone with a custom avatar image (owner-reported
+   2026-09-19, only the initials-avatar case was actually tested at first). */
 .chat-roster-avatar .avatar-img {
   width: 100%;
   height: 100%;
