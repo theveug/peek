@@ -72,20 +72,29 @@ export class PreJoinSetup {
                     <h2 class="text-lg font-bold mb-1">Check your setup</h2>
                     <p class="text-sm text-muted mb-4">Pick your camera and mic before joining — you can always change these later in Settings.</p>
 
-                    <div class="prejoin-preview">
-                        <video id="prejoin-video" autoplay muted playsinline></video>
-                        <div id="prejoin-video-placeholder" class="prejoin-video-placeholder" style="display:none">
-                            <span class="material-symbols-rounded">videocam_off</span>
-                            <span id="prejoin-video-placeholder-text">Camera unavailable</span>
+                    <div class="settings-toggle-row mb-3">
+                        <div class="settings-toggle-row-title">I don't need a camera</div>
+                        <label class="settings-switch"><input type="checkbox" id="prejoin-skip-camera" /><span
+                                class="settings-switch-track"></span></label>
+                    </div>
+
+                    <div id="prejoin-camera-section">
+                        <div class="prejoin-preview">
+                            <video id="prejoin-video" autoplay muted playsinline></video>
+                            <div id="prejoin-video-placeholder" class="prejoin-video-placeholder" style="display:none">
+                                <span class="material-symbols-rounded">videocam_off</span>
+                                <span id="prejoin-video-placeholder-text">Camera unavailable</span>
+                            </div>
+                        </div>
+
+                        <div class="settings-field mt-4">
+                            <label for="prejoin-cam-device" class="settings-label">Camera</label>
+                            <select id="prejoin-cam-device" class="settings-text-input">
+                                <option value="">System default</option>
+                            </select>
                         </div>
                     </div>
 
-                    <div class="settings-field mt-4">
-                        <label for="prejoin-cam-device" class="settings-label">Camera</label>
-                        <select id="prejoin-cam-device" class="settings-text-input">
-                            <option value="">System default</option>
-                        </select>
-                    </div>
                     <div class="settings-field">
                         <label for="prejoin-mic-device" class="settings-label">Microphone</label>
                         <select id="prejoin-mic-device" class="settings-text-input">
@@ -98,12 +107,12 @@ export class PreJoinSetup {
                     </div>
                     <div class="settings-field">
                         <label for="prejoin-speaker-device" class="settings-label">Speaker</label>
-                        <div class="flex gap-2">
-                            <select id="prejoin-speaker-device" class="settings-text-input flex-1">
-                                <option value="">System default</option>
-                            </select>
-                            <button type="button" id="prejoin-speaker-test" class="lobby-btn-secondary shrink-0">Test</button>
-                        </div>
+                        <select id="prejoin-speaker-device" class="settings-text-input">
+                            <option value="">System default</option>
+                        </select>
+                        <button type="button" id="prejoin-speaker-test" class="prejoin-test-btn mt-2">
+                            <span class="material-symbols-rounded">volume_up</span>Test sound
+                        </button>
                     </div>
 
                     <div class="settings-toggle-row mt-4">
@@ -130,20 +139,45 @@ export class PreJoinSetup {
         overlay.querySelector('#prejoin-dont-show').addEventListener('change', (e) => {
             localStorage.setItem('skipDeviceCheck', e.target.checked ? '1' : '0');
         });
+
+        // "I don't need a camera" (owner-reported: not everyone wants to set
+        // one up) — hides the preview/picker entirely and, more importantly,
+        // stops asking for camera permission at all: someone who's already
+        // told us they don't want a camera shouldn't get a permission prompt
+        // for one on their next join either.
+        const skipCameraToggle = overlay.querySelector('#prejoin-skip-camera');
+        const cameraSection = overlay.querySelector('#prejoin-camera-section');
+        skipCameraToggle.checked = localStorage.getItem('skipCameraSetup') === '1';
+        cameraSection.style.display = skipCameraToggle.checked ? 'none' : '';
+        skipCameraToggle.addEventListener('change', (e) => {
+            localStorage.setItem('skipCameraSetup', e.target.checked ? '1' : '0');
+            cameraSection.style.display = e.target.checked ? 'none' : '';
+            if (e.target.checked) {
+                this._previewStream?.getVideoTracks().forEach(t => t.stop());
+            } else {
+                navigator.mediaDevices.getUserMedia({ audio: false, video: true }).then((camStream) => {
+                    const micTrack = this._previewStream?.getAudioTracks()[0];
+                    if (micTrack) camStream.addTrack(micTrack);
+                    this._setPreviewStream(camStream);
+                }).catch(() => this._showNoCamera());
+            }
+        });
+
         // Never a hard trap — a broken permission dialog or device shouldn't
         // strand anyone here with no way in. Escape behaves like "Join now".
         this._keydownHandler = (e) => { if (e.key === 'Escape') this._close(); };
         document.addEventListener('keydown', this._keydownHandler);
     }
 
-    /** Requests mic+cam, falling back to audio-only, falling back to no preview at all. */
+    /** Requests mic(+cam unless skipped), falling back to audio-only, falling back to no preview at all. */
     async _requestPreview() {
+        const skipCamera = localStorage.getItem('skipCameraSetup') === '1';
         try {
-            await this._acquirePreview({ audio: true, video: true });
+            await this._acquirePreview({ audio: true, video: !skipCamera });
         } catch {
             try {
                 await this._acquirePreview({ audio: true, video: false });
-                this._showNoCamera();
+                if (!skipCamera) this._showNoCamera();
             } catch {
                 this._showNoDevices();
             }
@@ -160,8 +194,20 @@ export class PreJoinSetup {
         this._setPreviewStream(stream);
     }
 
+    /**
+     * Swaps in a new preview stream, stopping only the OLD stream's tracks
+     * that aren't also present in the new one — device switching and the
+     * camera re-enable toggle both carry a still-wanted track (e.g. the mic)
+     * over into the replacement stream via addTrack(), and MediaStreamTrack.stop()
+     * is irreversible regardless of which MediaStream object(s) reference it,
+     * so stopping everything unconditionally here would silently kill a
+     * track the caller explicitly meant to keep alive.
+     */
     _setPreviewStream(stream) {
-        this._stopPreviewStream();
+        if (this._previewStream) {
+            const carriedOver = new Set(stream.getTracks());
+            this._previewStream.getTracks().forEach(t => { if (!carriedOver.has(t)) t.stop(); });
+        }
         this._previewStream = stream;
         const video = this.overlay?.querySelector('#prejoin-video');
         if (video && stream.getVideoTracks().length) {
