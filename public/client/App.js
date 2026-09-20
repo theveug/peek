@@ -22,6 +22,7 @@ import { startMessagesPolling } from './messagesPoll.js';
 import { updateSavedRoomPassword, isRoomSaved, saveRoom, removeRoom } from './savedRooms.js';
 import { isModifierCode, comboFromEvent, isComboHeld } from './keybindUtils.js';
 import { CallRecorder } from './CallRecorder.js';
+import { PreJoinSetup, shouldShowDeviceCheck } from './PreJoinSetup.js';
 
 initTooltips();
 
@@ -238,7 +239,17 @@ function showPasswordPrompt() {
     };
 }
 
-connect();
+// Pre-join device check (2026-09-21): blocks the actual room connection
+// until dismissed, so a first-time (or newly-equipped) user picks a working
+// mic/cam/speaker before anyone's relying on them being audible/visible,
+// instead of needing someone already using Peek to walk them through
+// Settings after the fact. Shown on every join until "Don't show this
+// again" is checked (or the Settings → Data & Storage toggle is flipped).
+if (shouldShowDeviceCheck()) {
+    new PreJoinSetup().show().then(connect);
+} else {
+    connect();
+}
 
 // Update banner — refresh applies the new build; dismiss just hides it for this tab
 const updateBanner = document.getElementById('update-banner');

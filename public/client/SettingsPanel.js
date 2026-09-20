@@ -8,6 +8,7 @@ import { setBackgroundTint, getStoredBackgroundTint, bgTintPresetNames, presetBg
 import { setFontScale, getStoredFontScale, fontScaleLabel } from './FontScaleManager.js';
 import { setThemePack, getStoredThemePack, themePackPresetNames, themePackLabel, themePackPreviewSwatch } from './ThemePackManager.js';
 import { trapFocus } from './focusTrap.js';
+import { populateDeviceSelect } from './deviceSelect.js';
 import { getCustomStatuses, getCustomStatus, upsertCustomStatus, deleteCustomStatus, SWATCHES } from './CustomStatuses.js';
 import * as chatHistoryStore from './chatHistoryStore.js';
 import { isModifierCode, comboFromEvent } from './keybindUtils.js';
@@ -629,6 +630,16 @@ export class SettingsPanel {
                             </div>
                             <div class="settings-toggle-row">
                                 <div>
+                                    <div class="settings-toggle-row-title">Show device-check screen when joining</div>
+                                    <div class="settings-toggle-row-desc">The camera/mic/speaker check shown before entering
+                                        a room. Off if you've dismissed it with "Don't show this again".</div>
+                                </div>
+                                <label class="settings-switch"><input type="checkbox"
+                                        id="settings-device-check-enabled" /><span
+                                        class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-toggle-row">
+                                <div>
                                     <div class="settings-toggle-row-title">Clear chat history</div>
                                     <div class="settings-toggle-row-desc">Wipes locally-saved chat text for every room,
                                         separately from every other preference below.</div>
@@ -786,24 +797,7 @@ export class SettingsPanel {
     }
 
     _populateDeviceSelect(selectId, devices, storageKey, kindLabel) {
-        const select = document.getElementById(selectId);
-        if (!select) return;
-        const current = localStorage.getItem(storageKey) || '';
-        select.innerHTML = '';
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = 'System default';
-        select.appendChild(defaultOption);
-        devices.forEach((d, i) => {
-            const opt = document.createElement('option');
-            opt.value = d.deviceId;
-            opt.textContent = d.label || `${kindLabel} ${i + 1}`;
-            select.appendChild(opt);
-        });
-        // Only select the stored preference if that device is still actually
-        // present — otherwise leave it on "System default" rather than
-        // showing a value with no matching <option>.
-        select.value = devices.some(d => d.deviceId === current) ? current : '';
+        populateDeviceSelect(document.getElementById(selectId), devices, localStorage.getItem(storageKey) || '', kindLabel);
     }
 
     _refreshAll() {
@@ -1854,6 +1848,13 @@ export class SettingsPanel {
             this.peerManager?.refreshAccountReveal();
         });
 
+        document.getElementById('settings-device-check-enabled')?.addEventListener('change', (e) => {
+            // Inverted storage key (skipDeviceCheck) — see PreJoinSetup.js's
+            // shouldShowDeviceCheck(), which the modal itself also writes to
+            // when "Don't show this again" is checked there.
+            localStorage.setItem('skipDeviceCheck', e.target.checked ? '0' : '1');
+        });
+
         const historyToggle = document.getElementById('settings-chat-history-enabled');
         const daysField = document.getElementById('chat-history-days-field');
         historyToggle?.addEventListener('change', (e) => {
@@ -1945,6 +1946,9 @@ export class SettingsPanel {
 
         const revealAccount = document.getElementById('settings-reveal-account');
         if (revealAccount) revealAccount.checked = localStorage.getItem('revealAccountInRoom') === '1';
+
+        const deviceCheckToggle = document.getElementById('settings-device-check-enabled');
+        if (deviceCheckToggle) deviceCheckToggle.checked = localStorage.getItem('skipDeviceCheck') !== '1';
 
         const historyToggle = document.getElementById('settings-chat-history-enabled');
         const historyEnabled = localStorage.getItem('chatHistoryEnabled') === '1';
