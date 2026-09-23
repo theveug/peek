@@ -258,6 +258,35 @@ body {
   font-family: "Fira Code", ui-monospace, monospace;
 }
 
+/* No accidental UI-text selection (Discord-style, 2026-09-24, owner-requested):
+   dragging across the topbar/dock/panels/participant cards used to select
+   their text instead of doing anything useful. Disabled app-wide, then
+   re-enabled specifically for chat/DM message content (people do want to
+   select and copy what was said), the in-app file viewer, and any real text
+   input (composer/search/settings fields) — those need normal text-selection
+   behavior for editing/copying. */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.chat-message,
+.chat-message *,
+.chat-code-viewer-markdown,
+.chat-code-viewer-markdown *,
+.chat-code-viewer-pre,
+.chat-code-viewer-pre * {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* Controls dock visibility (open/closed) is handled below in "Controls bar
    toggle" — it used to be hover-to-reveal here, replaced 2026-08-29 with an
    explicit toggle matching the chat/members side panels. */
