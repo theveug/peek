@@ -2500,10 +2500,22 @@ export class UIController {
         }
     }
 
-    /** Updates the top-bar identity pill's status-dot class for the local user. */
-    updateIdentityStatus(status) {
+    /**
+     * Updates the top-bar identity pill's status-dot class for the local
+     * user, plus dataset attributes peek-desktop's automation-hooks relay
+     * reads (blind DOM read, same convention as every other row in its
+     * CLAUDE.md integration-contract table) to answer a "state" query and to
+     * know whether the caption currently showing is its own overlay.
+     * @param {string} status
+     * @param {string} [statusText] - effective caption (overlay if active, else persisted)
+     * @param {boolean} [isOverlay] - true while an automation-hooks overlay is active
+     */
+    updateIdentityStatus(status, statusText, isOverlay) {
         const dot = document.getElementById('topbar-identity-status-dot');
-        if (dot) dot.className = `topbar-identity-status-dot ${status === 'online' ? '' : status}`.trim();
+        if (!dot) return;
+        dot.className = `topbar-identity-status-dot ${status === 'online' ? '' : status}`.trim();
+        dot.dataset.statusText = statusText || '';
+        dot.dataset.automationOverlay = isOverlay ? '1' : '';
     }
 
     // --- Audio ---

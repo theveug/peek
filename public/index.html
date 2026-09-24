@@ -241,6 +241,14 @@
                         </div>
                     </div>
                 </div>
+                <!-- Automation-only, never shown/focused by real UI: peek-desktop's
+                     automation-hooks relay sets this value + dispatches a synthetic
+                     'input' event to drive TopbarIdentity's setStatusOverlay/
+                     clearStatusOverlay wiring (empty value = clear), the same
+                     blind-DOM-write convention its CLAUDE.md integration-contract
+                     table uses everywhere else — never manipulated by any in-page
+                     control. See CLAUDE.md's "Local automation hooks" section. -->
+                <input type="hidden" id="automation-status-overlay-input" value="" />
             </div>
         </div>
 

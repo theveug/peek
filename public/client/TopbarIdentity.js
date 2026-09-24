@@ -17,7 +17,28 @@ export class TopbarIdentity {
 
         this._wireDropdown();
         this._wireOutsideClick();
+        this._wireAutomationOverlay();
         this._refreshStatus(); // picks up a still-active custom status's color on load/reconnect
+    }
+
+    /**
+     * Wires the hidden #automation-status-overlay-input element (index.html)
+     * to PeerManager's overlay methods — the one entry point peek-desktop's
+     * automation-hooks relay uses to show e.g. "Dictating…" over the user's
+     * real status without touching activeCustomStatusId or persisting
+     * anything, unlike the real #topbar-status-text field above. An empty
+     * value means "clear"; peek-desktop only ever sets this element's value
+     * and dispatches a synthetic 'input' event, never reads it back, so
+     * there's no matching _refresh method the way the real field has one.
+     */
+    _wireAutomationOverlay() {
+        const el = document.getElementById('automation-status-overlay-input');
+        if (!el) return;
+        el.addEventListener('input', () => {
+            const value = el.value.trim();
+            if (value) this.peerManager?.setStatusOverlay(value);
+            else this.peerManager?.clearStatusOverlay();
+        });
     }
 
     _wireDropdown() {

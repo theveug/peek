@@ -103,6 +103,13 @@ export class PeerManager {
         // persisted like nickname and broadcast bundled into the same status-update
         // message — untouched by _reconcileAwayStatus's automatic enum flips.
         this.statusText = (localStorage.getItem('statusText') || '').trim().slice(0, 60);
+        // Transient caption that overlays statusText without persisting or
+        // touching activeCustomStatusId — see setStatusOverlay()/
+        // clearStatusOverlay() below. null when no overlay is active. Not
+        // read from localStorage: unlike statusText this never needs to
+        // survive a reload, and peek-desktop's automation-hooks relay (the
+        // only caller) re-asserts it on every dictation start anyway.
+        this._statusOverlay = null;
         // Accounts in-room bridge (opt-in, Settings -> Privacy & P2P's "Reveal my
         // account to peers in this room", off by default) — the account username
         // currently being revealed to this room's peers, or null while withdrawn.
@@ -1564,9 +1571,15 @@ export class PeerManager {
      */
     setStatus(status) {
         this.status = status;
-        this.send('status-update', null, { status, statusText: this.statusText });
-        this.ui.updateParticipantStatus(this.peerId, status, this.statusText);
-        this.ui.updateIdentityStatus?.(status);
+        const effective = this._effectiveStatusText();
+        this.send('status-update', null, { status, statusText: effective });
+        this.ui.updateParticipantStatus(this.peerId, status, effective);
+        this.ui.updateIdentityStatus?.(status, effective, this._statusOverlay !== null);
+    }
+
+    /** @returns {string} the overlay caption if one is active, else the persisted statusText. */
+    _effectiveStatusText() {
+        return this._statusOverlay !== null ? this._statusOverlay : this.statusText;
     }
 
     /**
@@ -1585,20 +1598,66 @@ export class PeerManager {
     /**
      * Sets, persists, and broadcasts the free-text status caption — separate
      * from the online/away/dnd enum, so it's untouched by the automatic
-     * away-status reconciliation in `_reconcileAwayStatus`.
+     * away-status reconciliation in `_reconcileAwayStatus`. A deliberate edit
+     * here always wins over a pending automation overlay (see
+     * setStatusOverlay() below), so it's cleared unconditionally — the user
+     * typing "Dictating…" over themselves is a no-op either way.
      * @param {string} text
      * @returns {void}
      */
     setStatusText(text) {
         this.statusText = (text || '').trim().slice(0, 60);
         localStorage.setItem('statusText', this.statusText);
-        this.send('status-update', null, { status: this.status, statusText: this.statusText });
-        this.ui.updateParticipantStatus(this.peerId, this.status, this.statusText);
+        this._statusOverlay = null;
+        const effective = this._effectiveStatusText();
+        this.send('status-update', null, { status: this.status, statusText: effective });
+        this.ui.updateParticipantStatus(this.peerId, this.status, effective);
+        this.ui.updateIdentityStatus?.(this.status, effective, false);
+    }
+
+    /**
+     * Sets a transient caption that overlays statusText for peer-visible
+     * broadcast purposes only — never persisted, never touches
+     * activeCustomStatusId (so a currently-active custom status's dot color
+     * survives an overlay untouched, unlike typing directly into the
+     * status-text field). The one caller today is peek-desktop's
+     * automation-hooks relay (see its CLAUDE.md's "Local automation hooks"
+     * section) — e.g. showing "Dictating…" while a linked dictation tool is
+     * recording, so peers can see why the mic just muted. Cleared for free
+     * the instant the user changes their status any other way, since
+     * setStatusText/setManualStatus (via _applyCustomStatus's own
+     * setStatusText call) both win over it — no separate "was this
+     * overridden" detection needed on the caller's side.
+     * @param {string} text
+     * @returns {void}
+     */
+    setStatusOverlay(text) {
+        this._statusOverlay = (text || '').trim().slice(0, 60);
+        const effective = this._effectiveStatusText();
+        this.send('status-update', null, { status: this.status, statusText: effective });
+        this.ui.updateParticipantStatus(this.peerId, this.status, effective);
+        this.ui.updateIdentityStatus?.(this.status, effective, true);
+    }
+
+    /**
+     * Reverts to the persisted statusText. A no-op (not an error) if no
+     * overlay is currently active — lets a caller clear unconditionally
+     * without first checking state, same idempotent shape as every other
+     * automation-hooks action.
+     * @returns {void}
+     */
+    clearStatusOverlay() {
+        if (this._statusOverlay === null) return;
+        this._statusOverlay = null;
+        const effective = this._effectiveStatusText();
+        this.send('status-update', null, { status: this.status, statusText: effective });
+        this.ui.updateParticipantStatus(this.peerId, this.status, effective);
+        this.ui.updateIdentityStatus?.(this.status, effective, false);
     }
 
     /** Re-sends the current status to every peer (e.g. on a new peer joining). */
     broadcastStatus() {
-        this.send('status-update', null, { status: this.status, statusText: this.statusText });
+        this.send('status-update', null, { status: this.status, statusText: this._effectiveStatusText() });
     }
 
     /**
