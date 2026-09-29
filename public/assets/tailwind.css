@@ -378,12 +378,27 @@ textarea,
      panels are closed via the stage toggle). Same fix already applied to
      .chat-code-viewer-markdown just below for the identical reason. */
   max-width: none;
+}
+/* Theme-aware prose colors. The in-app markdown file viewer uses `prose` too
+   but isn't a .chat-body, so without sharing these it fell back to the
+   typography plugin's light-mode defaults (near-black headings/links on the
+   dark theme). */
+.chat-body.prose,
+.chat-code-viewer-markdown.prose {
   --tw-prose-body: var(--chat-body);
   --tw-prose-headings: var(--color-foreground);
+  --tw-prose-lead: var(--chat-body);
   --tw-prose-bold: var(--color-foreground);
   --tw-prose-links: var(--chat-sender);
+  --tw-prose-counters: var(--t3);
+  --tw-prose-bullets: var(--t3);
+  --tw-prose-hr: var(--border);
   --tw-prose-quotes: var(--chat-body);
   --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--t3);
+  --tw-prose-code: var(--color-foreground);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
 }
 
 /* ===== File sharing ===== */
