@@ -16,6 +16,13 @@ const SESSION_MAX_AGE_S = 30 * 24 * 60 * 60;
 const FAILED_LOGIN_LIMIT = 20;
 const failedLoginsByIp = new Map();
 setInterval(() => failedLoginsByIp.clear(), 10 * 60_000).unref();
+const FAILED_RECOVERY_LIMIT = 10;
+const failedRecoveriesByIp = new Map();
+setInterval(() => failedRecoveriesByIp.clear(), 10 * 60_000).unref();
+
+function isValidPassword(pw) {
+    return typeof pw === 'string' && pw.length >= MIN_PASSWORD_LEN && pw.length <= MAX_PASSWORD_LEN;
+}
 
 // Express 5 doesn't parse the Cookie request header itself (that's
 // cookie-parser's job) — for the one cookie this app needs, a small
@@ -62,7 +69,7 @@ export function mountAuthRoutes(app, authManager) {
         if (typeof username !== 'string' || !USERNAME_RE.test(username)) {
             return res.status(400).json({ error: 'Username must be 3-32 characters: letters, numbers, _ or -' });
         }
-        if (typeof password !== 'string' || password.length < MIN_PASSWORD_LEN || password.length > MAX_PASSWORD_LEN) {
+        if (!isValidPassword(password)) {
             return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LEN} characters` });
         }
 
@@ -71,7 +78,10 @@ export function mountAuthRoutes(app, authManager) {
             return res.status(409).json({ error: 'That username is already taken' });
         }
         setSessionCookie(req, res, session.token);
-        res.status(201).json({ username });
+        // Shown once by the client right after registering — the only
+        // self-service way back in if the password is ever forgotten.
+        const recoveryCodes = authManager.generateRecoveryCodes(session.userId);
+        res.status(201).json({ username, recoveryCodes });
     });
 
     app.post('/api/auth/login', async (req, res) => {
@@ -99,6 +109,72 @@ export function mountAuthRoutes(app, authManager) {
         if (token) authManager.logout(token);
         clearSessionCookie(req, res);
         res.status(204).end();
+    });
+
+    // --- Password recovery (2026-10-12) ---
+
+    // Forgotten password: username + one unused recovery code + new password.
+    // Same failure response for a nonexistent user and a wrong code, plus its
+    // own per-IP lockout (codes are 80-bit, so this is belt-and-braces, but it
+    // also stops this route being hammered for its argon2 cost on success).
+    app.post('/api/auth/recover', rateLimit(60_000, 10), async (req, res) => {
+        if ((failedRecoveriesByIp.get(req.ip) || 0) >= FAILED_RECOVERY_LIMIT) {
+            return res.status(429).json({ error: 'Too many attempts, try again later' });
+        }
+        const { username, code, newPassword } = req.body || {};
+        if (!isValidPassword(newPassword)) {
+            return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LEN} characters` });
+        }
+        const result = typeof username === 'string'
+            ? await authManager.recoverWithCode(username, code, newPassword)
+            : null;
+        if (!result) {
+            failedRecoveriesByIp.set(req.ip, (failedRecoveriesByIp.get(req.ip) || 0) + 1);
+            return res.status(401).json({ error: 'Invalid username or recovery code' });
+        }
+        setSessionCookie(req, res, result.token);
+        res.status(200).json({ username: result.username, remainingCodes: result.remaining });
+    });
+
+    app.post('/api/auth/change-password', rateLimit(60_000, 5), async (req, res) => {
+        const token = readCookie(req, COOKIE_NAME);
+        const session = token ? authManager.validateSessionToken(token) : null;
+        if (!session) {
+            return res.status(401).json({ error: 'Not logged in' });
+        }
+        const { currentPassword, newPassword } = req.body || {};
+        if (!isValidPassword(newPassword)) {
+            return res.status(400).json({ error: `New password must be at least ${MIN_PASSWORD_LEN} characters` });
+        }
+        const result = await authManager.changePassword(session.userId, session.sessionId, currentPassword, newPassword);
+        if (!result) {
+            return res.status(403).json({ error: 'Current password is incorrect' });
+        }
+        res.status(200).json({ ok: true, signedOutOtherSessions: result.revoked });
+    });
+
+    app.get('/api/auth/recovery-codes', (req, res) => {
+        const token = readCookie(req, COOKIE_NAME);
+        const session = token ? authManager.validateSessionToken(token) : null;
+        if (!session) {
+            return res.status(401).json({ error: 'Not logged in' });
+        }
+        res.status(200).json({ remaining: authManager.countRecoveryCodes(session.userId) });
+    });
+
+    // Regenerating requires the current password, not just a session — new
+    // codes are effectively a new password, so a hijacked session alone
+    // mustn't be able to mint a permanent way back in.
+    app.post('/api/auth/recovery-codes', rateLimit(60_000, 5), async (req, res) => {
+        const token = readCookie(req, COOKIE_NAME);
+        const session = token ? authManager.validateSessionToken(token) : null;
+        if (!session) {
+            return res.status(401).json({ error: 'Not logged in' });
+        }
+        if (!(await authManager.verifyPassword(session.userId, req.body?.currentPassword))) {
+            return res.status(403).json({ error: 'Current password is incorrect' });
+        }
+        res.status(200).json({ recoveryCodes: authManager.generateRecoveryCodes(session.userId) });
     });
 
     app.get('/api/auth/me', (req, res) => {

@@ -33,6 +33,27 @@ const DEVICE_SETTINGS_KEYS = ['camDeviceId', 'micDeviceId', 'speakerDeviceId'];
 const AVATAR_DATA_URL_RE = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/;
 const MAX_AVATAR_DATA_URL_LEN = 40000;
 
+// Recovery codes (2026-10-12): 16 chars from a 32-symbol alphabet with the
+// easily-confused 0/O/1/I dropped = 80 bits each, shown as
+// XXXX-XXXX-XXXX-XXXX. Exactly 32 symbols so `byte & 31` stays unbiased.
+// Normalized before hashing so case, spaces and dashes don't matter.
+const RECOVERY_CODE_COUNT = 8;
+const RECOVERY_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function makeRecoveryCode() {
+    const bytes = randomBytes(16);
+    let raw = '';
+    for (const b of bytes) raw += RECOVERY_ALPHABET[b & 31];
+    return raw.match(/.{4}/g).join('-');
+}
+
+function hashRecoveryCode(code) {
+    if (typeof code !== 'string') return null;
+    const normalized = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (normalized.length !== 16) return null;
+    return createHash('sha256').update(normalized).digest('hex');
+}
+
 // Mirrors SessionManager.js's method style: every mutator re-checks its own
 // invariants and returns falsy on failure, a small result object on success
 // (never bare `true`, so a success carrying no other data doesn't read as
@@ -46,7 +67,7 @@ class AuthManager {
     /**
      * @param {string} username
      * @param {string} password
-     * @returns {Promise<{token: string, expiresAt: number}|false>}
+     * @returns {Promise<{token: string, expiresAt: number, userId: number}|false>}
      */
     async register(username, password) {
         const dupe = this.db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(username);
@@ -58,7 +79,8 @@ class AuthManager {
             'INSERT INTO users (username, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?)'
         ).run(username, password_hash, now, now);
 
-        return this._mintSession(info.lastInsertRowid);
+        const userId = Number(info.lastInsertRowid);
+        return { ...this._mintSession(userId), userId };
     }
 
     /**
@@ -125,6 +147,101 @@ class AuthManager {
         const tokenHash = createHash('sha256').update(token).digest('hex');
         const info = this.db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash);
         return info.changes > 0;
+    }
+
+    /**
+     * Signed-in password change. Requires the current password even with a
+     * valid session — a stolen/borrowed session cookie alone must not be
+     * enough to lock the real owner out. Every OTHER session is revoked
+     * (the one making the change stays signed in).
+     * @param {number} userId
+     * @param {number} keepSessionId
+     * @param {string} currentPassword
+     * @param {string} newPassword
+     * @returns {Promise<{revoked: number}|null>} null if currentPassword is wrong
+     */
+    async changePassword(userId, keepSessionId, currentPassword, newPassword) {
+        if (!(await this.verifyPassword(userId, currentPassword))) return null;
+        const passwordHash = await hash(newPassword);
+        const revoked = this.db.transaction(() => {
+            this.db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
+                .run(passwordHash, Date.now(), userId);
+            return this.db.prepare('DELETE FROM sessions WHERE user_id = ? AND id != ?')
+                .run(userId, keepSessionId).changes;
+        })();
+        return { revoked };
+    }
+
+    /** @returns {Promise<boolean>} */
+    async verifyPassword(userId, password) {
+        const row = this.db.prepare('SELECT password_hash FROM users WHERE id = ?').get(userId);
+        if (!row || typeof password !== 'string') return false;
+        return verify(row.password_hash, password);
+    }
+
+    /**
+     * Replaces any existing recovery codes with a fresh set. The plaintext
+     * codes are returned exactly once — only hashes are stored.
+     * @param {number} userId
+     * @returns {string[]}
+     */
+    generateRecoveryCodes(userId) {
+        const codes = Array.from({ length: RECOVERY_CODE_COUNT }, makeRecoveryCode);
+        const now = Date.now();
+        this.db.transaction(() => {
+            this.db.prepare('DELETE FROM recovery_codes WHERE user_id = ?').run(userId);
+            const insert = this.db.prepare(
+                'INSERT INTO recovery_codes (user_id, code_hash, created_at) VALUES (?, ?, ?)'
+            );
+            for (const code of codes) insert.run(userId, hashRecoveryCode(code), now);
+        })();
+        return codes;
+    }
+
+    /** @returns {number} how many unused recovery codes this account has left */
+    countRecoveryCodes(userId) {
+        return this.db.prepare(
+            'SELECT COUNT(*) AS n FROM recovery_codes WHERE user_id = ? AND used_at IS NULL'
+        ).get(userId).n;
+    }
+
+    /**
+     * Self-service reset: username + one unused recovery code + a new
+     * password. Spends the code, revokes every existing session, and signs
+     * the caller in fresh. A nonexistent username and a wrong code fail
+     * identically (both are a fast indexed miss), so this can't be used to
+     * enumerate usernames.
+     * @returns {Promise<{token: string, expiresAt: number, username: string, remaining: number}|null>}
+     */
+    async recoverWithCode(username, code, newPassword) {
+        const user = this.db.prepare('SELECT id, username FROM users WHERE username = ? COLLATE NOCASE').get(username);
+        const codeHash = hashRecoveryCode(code);
+        if (!user || !codeHash) return null;
+        const row = this.db.prepare(
+            'SELECT id FROM recovery_codes WHERE user_id = ? AND code_hash = ? AND used_at IS NULL'
+        ).get(user.id, codeHash);
+        if (!row) return null;
+
+        const passwordHash = await hash(newPassword);
+        const spent = this.db.transaction(() => {
+            // Re-checked inside the transaction so two concurrent requests
+            // can't both spend the same code.
+            const info = this.db.prepare(
+                'UPDATE recovery_codes SET used_at = ? WHERE id = ? AND used_at IS NULL'
+            ).run(Date.now(), row.id);
+            if (info.changes === 0) return false;
+            this.db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
+                .run(passwordHash, Date.now(), user.id);
+            this.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+            return true;
+        })();
+        if (!spent) return null;
+
+        return {
+            ...this._mintSession(user.id),
+            username: user.username,
+            remaining: this.countRecoveryCodes(user.id),
+        };
     }
 
     /**

@@ -29,9 +29,22 @@
 // positioning for free, no fixed-position JS math needed.
 import { pullAndApplySettings } from './AccountSettingsSync.js';
 
+const SECURITY_INPUTS = ['account-current-password', 'account-new-password', 'account-new-password-confirm'];
+
+// No res.ok gate, same convention as the login submit below: parse the body
+// and branch on its `error` field.
+async function postJson(url, payload) {
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    return res.json();
+}
+
 export class AccountPanel {
     constructor() {
-        this.mode = 'login'; // 'login' | 'register'
+        this.mode = 'login'; // 'login' | 'register' | 'recover'
         this.popover = null;
         this._init();
     }
@@ -67,6 +80,11 @@ export class AccountPanel {
             document.getElementById('topbar-identity-menu')?.classList.add('hidden');
             this._openPopover();
         });
+        document.getElementById('topbar-identity-security')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.getElementById('topbar-identity-menu')?.classList.add('hidden');
+            this._openSecurity();
+        });
         document.getElementById('topbar-identity-signout')?.addEventListener('click', (e) => {
             e.stopPropagation();
             document.getElementById('topbar-identity-menu')?.classList.add('hidden');
@@ -91,6 +109,9 @@ export class AccountPanel {
                 <span id="lobby-account-label">Sign in</span>
             </button>
             <div id="lobby-account-menu" class="quick-status-menu hidden">
+                <button type="button" id="lobby-account-security" class="quick-status-option">
+                    <span class="material-symbols-rounded" style="font-size:1rem;">key</span>Password &amp; recovery
+                </button>
                 <button type="button" id="lobby-account-signout" class="quick-status-option">
                     <span class="material-symbols-rounded" style="font-size:1rem;">logout</span>Sign out
                 </button>
@@ -106,6 +127,11 @@ export class AccountPanel {
             e.stopPropagation();
             if (this._loggedIn) this._lobbyMenu.classList.toggle('hidden');
             else this._openPopover();
+        });
+        wrap.querySelector('#lobby-account-security').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this._lobbyMenu.classList.add('hidden');
+            this._openSecurity();
         });
         wrap.querySelector('#lobby-account-signout').addEventListener('click', (e) => {
             e.stopPropagation();
@@ -130,35 +156,90 @@ export class AccountPanel {
         const el = document.createElement('div');
         el.id = 'account-login-popover';
         el.className = 'quick-settings-popover topbar-popover hidden';
+        // Three views in one popover, exactly one visible at a time:
+        // auth (login/register/recover), security (signed-in password change
+        // + regenerate recovery codes), codes (show a fresh set once).
         el.innerHTML = `
-            <div class="quick-settings-header" id="account-popover-title">Log in</div>
-            <div class="settings-field">
-                <div class="settings-label">Username</div>
-                <input type="text" id="account-username" class="settings-text-input" autocomplete="username" />
+            <div id="account-auth-view">
+                <div class="quick-settings-header" id="account-popover-title">Log in</div>
+                <div class="settings-field">
+                    <div class="settings-label">Username</div>
+                    <input type="text" id="account-username" class="settings-text-input" autocomplete="username" />
+                </div>
+                <div class="settings-field hidden" id="account-code-field">
+                    <div class="settings-label">Recovery code</div>
+                    <input type="text" id="account-recovery-code" class="settings-text-input" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" />
+                </div>
+                <div class="settings-field">
+                    <div class="settings-label" id="account-password-label">Password</div>
+                    <input type="password" id="account-password" class="settings-text-input" autocomplete="current-password" />
+                </div>
+                <div class="settings-field hidden" id="account-confirm-field">
+                    <div class="settings-label">Confirm password</div>
+                    <input type="password" id="account-confirm-password" class="settings-text-input" autocomplete="new-password" />
+                </div>
+                <div id="account-error" class="lobby-error hidden"></div>
+                <button type="button" id="account-submit" class="lobby-btn-primary" style="width:100%;">Log in</button>
+                <p class="settings-section-subcopy" style="margin:0.75rem 0 0;text-align:center;">
+                    <a href="#" id="account-mode-toggle">Need an account? Register</a>
+                </p>
+                <p class="settings-section-subcopy" id="account-forgot-row" style="margin:0.375rem 0 0;text-align:center;">
+                    <a href="#" id="account-forgot-link">Forgot password?</a>
+                </p>
             </div>
-            <div class="settings-field">
-                <div class="settings-label">Password</div>
-                <input type="password" id="account-password" class="settings-text-input" autocomplete="current-password" />
+            <div id="account-security-view" class="hidden">
+                <div class="quick-settings-header">Password &amp; recovery</div>
+                <div id="account-security-status" class="settings-section-subcopy hidden" style="margin:0 0 0.75rem;"></div>
+                <div class="settings-field">
+                    <div class="settings-label">Current password</div>
+                    <input type="password" id="account-current-password" class="settings-text-input" autocomplete="current-password" />
+                </div>
+                <div class="settings-field">
+                    <div class="settings-label">New password</div>
+                    <input type="password" id="account-new-password" class="settings-text-input" autocomplete="new-password" />
+                </div>
+                <div class="settings-field">
+                    <div class="settings-label">Confirm new password</div>
+                    <input type="password" id="account-new-password-confirm" class="settings-text-input" autocomplete="new-password" />
+                </div>
+                <div id="account-security-error" class="lobby-error hidden"></div>
+                <button type="button" id="account-change-password" class="lobby-btn-primary" style="width:100%;">Change password</button>
+                <div class="settings-label" style="margin-top:1rem;">Recovery codes</div>
+                <p class="settings-section-subcopy" id="account-codes-remaining" style="margin:0.25rem 0 0.5rem;"></p>
+                <button type="button" id="account-regenerate-codes" class="lobby-btn-secondary">Generate new codes</button>
             </div>
-            <div class="settings-field hidden" id="account-confirm-field">
-                <div class="settings-label">Confirm password</div>
-                <input type="password" id="account-confirm-password" class="settings-text-input" autocomplete="new-password" />
+            <div id="account-codes-view" class="hidden">
+                <div class="quick-settings-header">Save your recovery codes</div>
+                <p class="settings-section-subcopy" style="margin:0 0 0.75rem;">
+                    If you forget your password, one of these gets you back in. Each works once.
+                    They won't be shown again, so store them somewhere safe.
+                </p>
+                <pre id="account-codes-list" class="account-codes-list"></pre>
+                <div style="display:flex;gap:0.5rem;margin:0.75rem 0;">
+                    <button type="button" id="account-codes-copy" class="prejoin-test-btn" style="flex:1;">Copy</button>
+                    <button type="button" id="account-codes-download" class="prejoin-test-btn" style="flex:1;">Download</button>
+                </div>
+                <button type="button" id="account-codes-done" class="lobby-btn-primary" style="width:100%;">I've saved them</button>
             </div>
-            <div id="account-error" class="lobby-error hidden"></div>
-            <button type="button" id="account-submit" class="lobby-btn-primary" style="width:100%;">Log in</button>
-            <p class="settings-section-subcopy" style="margin:0.75rem 0 0;text-align:center;">
-                <a href="#" id="account-mode-toggle">Need an account? Register</a>
-            </p>
         `;
         parent.appendChild(el);
         this.popover = el;
 
         this._wireModeToggle();
         this._wireSubmit();
+        this._wireSecurity();
+        this._wireCodesView();
         this._wireOutsideClick();
     }
 
+    _showView(name) {
+        for (const v of ['auth', 'security', 'codes']) {
+            document.getElementById(`account-${v}-view`).classList.toggle('hidden', v !== name);
+        }
+    }
+
     _openPopover() {
+        this._showView('auth');
         this._applyMode();
         this.popover.classList.remove('hidden');
         document.getElementById('account-username')?.focus();
@@ -177,10 +258,11 @@ export class AccountPanel {
             if (this.popover.classList.contains('hidden')) return;
             if (this.popover.contains(e.target)) return;
             if (this._signInEl?.contains(e.target) || this._lobbyBtn?.contains(e.target)) return;
+            if (this._codesShowing()) return; // dismissed explicitly only — never shown again
             this._closePopover();
         });
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !this.popover.classList.contains('hidden')) this._closePopover();
+            if (e.key === 'Escape' && !this.popover.classList.contains('hidden') && !this._codesShowing()) this._closePopover();
         });
     }
 
@@ -191,15 +273,27 @@ export class AccountPanel {
             this.mode = this.mode === 'login' ? 'register' : 'login';
             this._applyMode();
         });
+        document.getElementById('account-forgot-link')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.mode = 'recover';
+            this._applyMode();
+            document.getElementById('account-username')?.focus();
+        });
     }
 
     _applyMode() {
         const isRegister = this.mode === 'register';
-        document.getElementById('account-popover-title').textContent = isRegister ? 'Register' : 'Log in';
-        document.getElementById('account-confirm-field').classList.toggle('hidden', !isRegister);
-        document.getElementById('account-submit').textContent = isRegister ? 'Register' : 'Log in';
+        const isRecover = this.mode === 'recover';
+        const title = isRegister ? 'Register' : isRecover ? 'Reset password' : 'Log in';
+        document.getElementById('account-popover-title').textContent = title;
+        document.getElementById('account-submit').textContent = title;
+        document.getElementById('account-confirm-field').classList.toggle('hidden', !isRegister && !isRecover);
+        document.getElementById('account-code-field').classList.toggle('hidden', !isRecover);
+        document.getElementById('account-forgot-row').classList.toggle('hidden', this.mode !== 'login');
+        document.getElementById('account-password-label').textContent = isRecover ? 'New password' : 'Password';
+        document.getElementById('account-password').autocomplete = this.mode === 'login' ? 'current-password' : 'new-password';
         document.getElementById('account-mode-toggle').textContent =
-            isRegister ? 'Already have an account? Log in' : 'Need an account? Register';
+            this.mode === 'login' ? 'Need an account? Register' : 'Already have an account? Log in';
         document.getElementById('account-error').classList.add('hidden');
     }
 
@@ -216,10 +310,9 @@ export class AccountPanel {
             const username = document.getElementById('account-username').value;
             const password = document.getElementById('account-password').value;
 
-            // No password-reset exists in Phase 1 — a mistyped password on
-            // registration has no recovery path, so catching a typo here
-            // client-side matters more than it usually would.
-            if (this.mode === 'register') {
+            // A typo'd new password is only fixable with a recovery code, so
+            // catch it client-side for both register and reset.
+            if (this.mode === 'register' || this.mode === 'recover') {
                 const confirm = document.getElementById('account-confirm-password').value;
                 if (password !== confirm) {
                     errorEl.textContent = 'Passwords do not match';
@@ -230,11 +323,16 @@ export class AccountPanel {
 
             submitBtn.disabled = true;
             try {
-                const endpoint = this.mode === 'register' ? '/api/auth/register' : '/api/auth/login';
+                const isRecover = this.mode === 'recover';
+                const endpoint = isRecover ? '/api/auth/recover'
+                    : this.mode === 'register' ? '/api/auth/register' : '/api/auth/login';
+                const payload = isRecover
+                    ? { username, code: document.getElementById('account-recovery-code').value, newPassword: password }
+                    : { username, password };
                 const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password }),
+                    body: JSON.stringify(payload),
                 });
                 // No res.ok gate — same convention lobby.js's /api/validate-room
                 // call already uses: parse the body, branch on an app-level field.
@@ -254,14 +352,14 @@ export class AccountPanel {
         };
 
         submitBtn.addEventListener('click', submit);
-        for (const id of ['account-username', 'account-password', 'account-confirm-password']) {
+        for (const id of ['account-username', 'account-recovery-code', 'account-password', 'account-confirm-password']) {
             document.getElementById(id).addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') { e.preventDefault(); submit(); }
             });
         }
     }
 
-    _afterAuthSuccess({ username }) {
+    _afterAuthSuccess({ username, recoveryCodes, remainingCodes }) {
         // Unconditional, not just a fallback for an empty field: a shared
         // machine with several people each logging into their own account
         // needs the room-display nickname to actually follow whoever's
@@ -269,8 +367,137 @@ export class AccountPanel {
         // left behind — see _logout()'s matching clear below.
         localStorage.setItem('nickname', username);
         this._renderState({ username });
-        this._closePopover();
         pullAndApplySettings();
+        if (Array.isArray(recoveryCodes) && recoveryCodes.length) {
+            this._showCodes(recoveryCodes); // just registered
+        } else if (typeof remainingCodes === 'number') {
+            // Just recovered: land on the security view so a low/empty code
+            // set is obvious and easy to top up.
+            this._openSecurity(`Password reset. ${remainingCodes} recovery code${remainingCodes === 1 ? '' : 's'} left.`);
+        } else {
+            this._closePopover();
+        }
+    }
+
+    // --- Signed-in security view: change password, regenerate codes ---
+
+    async _openSecurity(statusText = '') {
+        this._showView('security');
+        for (const id of SECURITY_INPUTS) document.getElementById(id).value = '';
+        this._securityError('');
+        this._setSecurityStatus(statusText);
+        this.popover.classList.remove('hidden');
+        document.getElementById('account-current-password').focus();
+
+        const remainingEl = document.getElementById('account-codes-remaining');
+        remainingEl.textContent = '';
+        const res = await fetch('/api/auth/recovery-codes').then(r => r.ok ? r.json() : null).catch(() => null);
+        if (!res) return;
+        remainingEl.textContent = res.remaining === 0
+            ? "You have no recovery codes. Generate some so a forgotten password doesn't lock you out."
+            : `${res.remaining} unused code${res.remaining === 1 ? '' : 's'} left. Generating new ones replaces them all (needs your current password).`;
+    }
+
+    _setSecurityStatus(text) {
+        const el = document.getElementById('account-security-status');
+        el.textContent = text;
+        el.classList.toggle('hidden', !text);
+    }
+
+    _securityError(text) {
+        const el = document.getElementById('account-security-error');
+        el.textContent = text;
+        el.classList.toggle('hidden', !text);
+    }
+
+    _wireSecurity() {
+        const changeBtn = document.getElementById('account-change-password');
+        const regenBtn = document.getElementById('account-regenerate-codes');
+        const current = () => document.getElementById('account-current-password').value;
+
+        const changePassword = async () => {
+            this._securityError('');
+            const newPassword = document.getElementById('account-new-password').value;
+            if (newPassword !== document.getElementById('account-new-password-confirm').value) {
+                return this._securityError('New passwords do not match');
+            }
+            changeBtn.disabled = true;
+            try {
+                const body = await postJson('/api/auth/change-password', { currentPassword: current(), newPassword });
+                if (body.error) return this._securityError(body.error);
+                for (const id of SECURITY_INPUTS) document.getElementById(id).value = '';
+                const n = body.signedOutOtherSessions;
+                this._setSecurityStatus(`Password changed.${n ? ` Signed out ${n} other session${n === 1 ? '' : 's'}.` : ''}`);
+            } catch {
+                this._securityError('Could not reach the server — try again');
+            } finally {
+                changeBtn.disabled = false;
+            }
+        };
+
+        changeBtn.addEventListener('click', changePassword);
+        for (const id of SECURITY_INPUTS) {
+            document.getElementById(id).addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); changePassword(); }
+            });
+        }
+
+        regenBtn.addEventListener('click', async () => {
+            this._securityError('');
+            if (!current()) return this._securityError('Enter your current password to generate new codes');
+            regenBtn.disabled = true;
+            try {
+                const body = await postJson('/api/auth/recovery-codes', { currentPassword: current() });
+                if (body.error) return this._securityError(body.error);
+                this._showCodes(body.recoveryCodes);
+            } catch {
+                this._securityError('Could not reach the server — try again');
+            } finally {
+                regenBtn.disabled = false;
+            }
+        });
+    }
+
+    // --- One-time recovery-code display ---
+
+    _codesShowing() {
+        return !this.popover.classList.contains('hidden')
+            && !document.getElementById('account-codes-view').classList.contains('hidden');
+    }
+
+    _showCodes(codes) {
+        this._codes = codes;
+        document.getElementById('account-codes-list').textContent = codes.join('\n');
+        document.getElementById('account-codes-copy').textContent = 'Copy';
+        this._showView('codes');
+        this.popover.classList.remove('hidden');
+        document.getElementById('account-codes-done').focus();
+    }
+
+    _wireCodesView() {
+        const copyBtn = document.getElementById('account-codes-copy');
+        copyBtn.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(this._codes.join('\n'));
+                copyBtn.textContent = 'Copied';
+            } catch {
+                copyBtn.textContent = 'Copy failed';
+            }
+        });
+        document.getElementById('account-codes-download').addEventListener('click', () => {
+            const text = `Peek recovery codes (${location.host})\nEach code works once.\n\n${this._codes.join('\n')}\n`;
+            const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'peek-recovery-codes.txt';
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        });
+        document.getElementById('account-codes-done').addEventListener('click', () => {
+            this._codes = null;
+            document.getElementById('account-codes-list').textContent = '';
+            this._closePopover();
+        });
     }
 
     async _logout() {
@@ -321,6 +548,7 @@ export class AccountPanel {
         if (!loggedIn) {
             document.getElementById('account-username').value = '';
             document.getElementById('account-password').value = '';
+            document.getElementById('account-recovery-code').value = '';
             const confirmField = document.getElementById('account-confirm-password');
             if (confirmField) confirmField.value = '';
         }

@@ -3188,6 +3188,24 @@ button.participant-menu-row:hover {
   color: var(--t1);
 }
 
+/* One-time recovery-code list (AccountPanel.js's codes view, 2026-10-12).
+   Selectable on purpose — the global user-select:none would otherwise stop
+   people highlighting a code to copy it by hand. */
+.account-codes-list {
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: 'Fira Code', monospace;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  text-align: center;
+  color: var(--t1);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* ===== Chat hidden state ===== */
 /* .chat-resize-handle's own body:has() rule (near its definition) covers
    hiding the handle now that it's no longer a sibling of #chat to target
