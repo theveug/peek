@@ -34,6 +34,12 @@ Not yet scoped/estimated — captured here so they don't get lost; move into a p
 
 - [ ] **Broader ARIA/keyboard-nav pass (2026-07-14)** — the two "totally unreachable via keyboard" gaps (`#controls`, per-peer `.participant-actions`) and the Settings/lightbox focus traps are fixed (see `CHANGELOG.md`), but the audit that found them also found near-zero `role`/ARIA usage elsewhere in app code. Remaining, lower-urgency (things are reachable, just not well-described/navigable): custom popovers/menus (moderator kebab, quick-settings, invite, topbar identity, emoji picker, pinned/search panels) have no `role="menu"`/`aria-expanded`/arrow-key navigation — Escape-to-close already works consistently across all of them, this would just make them read/operate more like native menus for screen-reader and keyboard users. Drag-to-reposition self-view PiPs have no keyboard equivalent (mouse/touch only via Pointer Events). No concrete plan yet — flagging scope, not estimating.
 
+## Accounts — password recovery (2026-10-12)
+
+Only recovery path today is the operator running `npm run reset-password -- <username>` on the host (`scripts/reset-password.mjs`: random temp password, revokes all sessions). Next, in order:
+- [ ] **Change-password form** (signed in, requires current password, revokes other sessions) — without it a reset user is stuck on the operator's temp password.
+- [ ] **Recovery codes** — ~8 one-time codes shown at registration, argon2-hashed in a new table; code + new password resets via a rate-limited, non-enumerating route; regenerable while signed in. No email collected, works offline — fits the design principles. Email reset (opt-in `SMTP_*`) deliberately deferred: more PII for operators + breaks offline; flag the tradeoff if revisited. Passkeys need HTTPS (plain-HTTP LAN self-hosts excluded).
+
 ## Bigger features (post-Electron)
 
 - [ ] **Multiple rooms/channels (Discord-style)** — basic multi-room already works (`SessionManager.js` keys sessions by room code, anyone can create any number). What's missing for a real "server" feel is a *persistent* list of named channels you can browse and return to — today everything's in-memory and disappears on server restart. The storage-layer blocker this used to have is gone (`src/server/db/` + SQLite already exist for the opt-in accounts feature) — still unscoped/unbuilt, but no longer blocked on infrastructure that doesn't exist.
