@@ -18,10 +18,39 @@ jobs:
           script: |
             set -e
             cd ~/peek
-            docker compose down
             git fetch origin main
             git checkout main
             git reset --hard origin/main
             echo "Deploying commit: $(git rev-parse HEAD)"
-            docker compose up -d --build
+            # Build while the old container keeps serving; if the build fails,
+            # set -e stops here and the current deployment stays up untouched.
+            docker compose build
+            docker compose up -d
+
+            # Verify the new container is actually serving before cleaning up.
+            # Checked from inside the container (Node's built-in fetch) so it
+            # doesn't depend on curl/wget being installed on the host.
+            echo "Waiting for app to respond..."
+            healthy=0
+            for i in $(seq 1 30); do
+              if docker compose exec -T peek node -e "fetch('http://localhost:3000/api/trust').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+                healthy=1
+                break
+              fi
+              sleep 2
+            done
+            if [ "$healthy" -ne 1 ]; then
+              echo "Health check failed; skipping cleanup."
+              docker compose logs --tail=50 peek
+              exit 1
+            fi
+            echo "Deploy verified."
+
+            # Cleanup only runs after a verified deploy. Neither command touches
+            # the running container or its image: build cache older than 7 days
+            # (recent cache kept for fast rebuilds), plus dangling images left
+            # behind by previous --build runs.
+            docker builder prune -a --filter "until=168h" -f
+            docker image prune -f
+            df -h / | tail -1
 
