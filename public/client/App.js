@@ -13,6 +13,7 @@ import { attachMentionAutocomplete } from './MentionAutocomplete.js';
 import { attachEmojiAutocomplete } from './EmojiAutocomplete.js';
 import { getOwnerToken, setOwnerToken } from './ownerTokens.js';
 import { getMediaState, saveMediaState, clearMediaState } from './mediaStateStore.js';
+import { startMicScheduler } from './MicSchedule.js';
 import { playSound } from './SoundPlayer.js';
 import { RoomRail } from './RoomRail.js';
 import { AccountPanel } from './AccountPanel.js';
@@ -36,6 +37,7 @@ const peerManager = new PeerManager(null, ui);
 const debug = new DebugPanel(peerManager);
 const callRecorder = new CallRecorder({ peerManager, ui });
 ui.onWatchChange = (streamKey, watched) => peerManager.setWatched(streamKey, watched);
+ui.onReceiveFpsCap = (streamKey, fps) => peerManager.requestReceiveFps(streamKey, fps);
 ui.onEditMessage = (messageId, text) => peerManager.broadcastChatEdit(messageId, text);
 ui.onDeleteMessage = (messageId) => peerManager.broadcastChatDelete(messageId);
 ui.onPinMessage = (messageId) => peerManager.broadcastPin(messageId);
@@ -1034,6 +1036,26 @@ function refreshMicPolicyLock() {
 }
 
 wireQuickPopover('mic-options-caret', 'mic-options-popover', () => { refreshMicOptionsMode(); refreshMicOptionsRows(); refreshMicPolicyLock(); });
+
+// Scheduled mic settings (Settings → Microphone & Voice Detection) — see
+// MicSchedule.js for the apply-once-per-window / restore-baseline semantics.
+// Applies through the same paths the Settings controls use, so the room's
+// PTT rule still wins over a scheduled mic mode (_effectiveMicMode()).
+startMicScheduler(async (settings, schedule) => {
+    if ((localStorage.getItem('noiseSuppression') === '1') !== settings.noiseSuppression) {
+        await peerManager.setNoiseSuppression(settings.noiseSuppression);
+    }
+    localStorage.setItem('micThreshold', String(settings.micThreshold));
+    if ((localStorage.getItem('micMode') || 'toggle') !== settings.micMode) {
+        localStorage.setItem('micMode', settings.micMode);
+        ui.updateMicModeBadge(peerManager._effectiveMicMode());
+        peerManager.enforcePttMuteOnModeSwitch(settings.micMode);
+    }
+    refreshMicOptionsRows();
+    ui.showToast(schedule
+        ? `Scheduled mic settings on${schedule.label ? ` — ${schedule.label}` : ''}`
+        : 'Scheduled mic settings ended — your usual settings are back');
+});
 
 // Local call recording — see CallRecorder.js. Local-only feedback via
 // showToast() (this is about your own downloaded file, not a room event);

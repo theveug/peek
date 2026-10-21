@@ -5,6 +5,9 @@ import * as chatHistoryStore from './chatHistoryStore.js';
 import { syncPreference } from './AccountSettingsSync.js';
 import { colorFor, avatarInitial } from './chatMessageRow.js';
 
+/** Per-viewer frame-rate cap choices (0 = the sender's full frame rate). */
+const RECEIVE_FPS_OPTIONS = [5, 15, 30, 0];
+
 /**
  * Owns everything DOM-facing for the room page: the video grid/focus stage,
  * zoom/pan, watch-tile tracking (bandwidth-saving pause/resume), self-view
@@ -33,6 +36,14 @@ export class UIController {
         // changed) can seed the badge/caption immediately instead of showing
         // blank until the fresh element's own loadedmetadata/resize fires.
         this._lastKnownRes = new Map();
+        // Last measured received frame rate per stream key — same reseed-on-
+        // rebuild reason as _lastKnownRes. See _startFpsMeter().
+        this._lastKnownFps = new Map();
+        // Frame-rate caps we've asked each remote stream's owner to apply to
+        // the copy they send us (streamKey -> fps). Session-scoped like
+        // peerVolumes — peerIds don't survive a reconnect.
+        this.receiveFpsCaps = new Map();
+        this.onReceiveFpsCap = null; // set by App.js — (streamKey, fps) => void
         this.onWatchChange = null;
         this.onPipExit = null;
         this.onModeratorAction = null; // set by App.js — (action, peerId)
@@ -728,44 +739,139 @@ export class UIController {
         this._renderFocusWatchState();
     }
 
-    /** Updates the focus view's bottom-left caption (nickname · resolution) for `peerId`. */
-    _updateFocusMeta(peerId) {
-        const isSelf = peerId === 'me' || peerId === 'me-cam';
-        const isCam = peerId.endsWith('-cam');
-        // 'me'/'me-cam' aren't real peerIds — no `#participant-me` card exists —
-        // so _peerNickname needs the actual selfPeerId to resolve your real name.
-        const actualPeerId = isSelf ? (this.selfPeerId || peerId) : (isCam ? peerId.slice(0, -4) : peerId);
+    /**
+     * Resolves a stream key to the pieces both the grid tile and the focus
+     * view label with — they share one look (name pill bottom-left, accent
+     * "720p · 15fps" badge bottom-right).
+     * @param {string} streamKey
+     * @returns {{actualPeerId: string, isCam: boolean, label: string}}
+     */
+    _streamLabelInfo(streamKey) {
+        const isSelf = streamKey === 'me' || streamKey === 'me-cam';
+        const isCam = streamKey.endsWith('-cam');
+        // 'me'/'me-cam' aren't real peerIds — no `#participant-me` card, no
+        // `_micEnabled['me']` entry — so lookups need the real selfPeerId.
+        const actualPeerId = isSelf ? (this.selfPeerId || streamKey) : (isCam ? streamKey.slice(0, -4) : streamKey);
         const nickname = isSelf ? `${this._peerNickname(actualPeerId)} (you)` : this._peerNickname(actualPeerId);
+        return { actualPeerId, isCam, label: nickname + (isCam ? ' · Cam' : '') };
+    }
 
-        const captionText = document.getElementById('focus-caption-text');
-        const video = this.focusedVideo;
-        const updateCaption = () => {
-            if (!captionText) return;
-            const { videoWidth: w, videoHeight: h } = video;
-            if (w && h) {
-                const res = `${w}x${h}`;
-                captionText.textContent = `${nickname} · ${res}`;
-                this._lastKnownRes.set(`${peerId}:wh`, res);
-            } else {
-                // The shared focusedVideo element briefly still reports the
-                // previous peer's dimensions right after refocusing (new
-                // srcObject, metadata not loaded yet) — fall back to this
-                // stream's own last-known size instead of dropping the
-                // resolution from the caption entirely.
-                const cached = this._lastKnownRes.get(`${peerId}:wh`);
-                captionText.textContent = cached ? `${nickname} · ${cached}` : nickname;
-            }
+    /** Paints a `.grid-tile-mic` span — hidden entirely while the mic hardware isn't in use. */
+    _paintMicIcon(icon, enabled, hardwareOff) {
+        icon.style.display = hardwareOff ? 'none' : '';
+        if (hardwareOff) return;
+        icon.style.color = enabled ? '#22c55e' : '#ef4444';
+        icon.innerHTML = enabled ? this._micOnSvg() : this._micOffSvg();
+    }
+
+    /**
+     * Keeps a quality badge's text ("720p · 15fps") current for `video`.
+     * Height comes from the element's intrinsic size, fps from
+     * _startFpsMeter() — i.e. what's actually arriving/rendering, which is
+     * what matters for "is this too much for my connection".
+     *
+     * Listeners are property-assigned (not addEventListener) because the
+     * focus view reuses one <video> element across refocuses — re-wiring
+     * must replace the previous handlers, not accumulate them.
+     * @param {HTMLVideoElement} video
+     * @param {string} streamKey
+     * @param {HTMLElement} textEl
+     */
+    _wireQualityBadge(video, streamKey, textEl) {
+        const render = () => {
+            if (video.videoWidth && video.videoHeight) this._lastKnownRes.set(streamKey, video.videoHeight);
+            // Seeded from cache: buildGrid() recreates every tile's <video> on
+            // any layout pass, and the shared focusedVideo briefly reports zero
+            // size right after a refocus — neither should blank the badge.
+            const h = this._lastKnownRes.get(streamKey);
+            const fps = this._lastKnownFps.get(streamKey);
+            const parts = [];
+            if (h) parts.push(`${h}p`);
+            if (fps !== undefined) parts.push(`${fps}fps`);
+            textEl.textContent = parts.join(' · ');
         };
-        updateCaption();
-        video.onloadedmetadata = updateCaption;
-        // A peer changing quality live (webcam picker's applyCamQualitySettings
-        // hot-swap, screen-share's applyConstraints) doesn't hand this video
-        // element a new track/stream — the existing RTCRtpSender is
-        // replaceTrack()'d or constrained in place — so `loadedmetadata` never
-        // fires again and the caption goes stale. `resize` is the event that
-        // actually fires on an HTMLVideoElement when its intrinsic dimensions
-        // change mid-playback; without it this only ever updated on first focus.
-        video.onresize = updateCaption;
+        render();
+        video.onloadedmetadata = render;
+        // A live quality change (webcam picker's hot-swap, screen-share's
+        // applyConstraints) reuses the existing track/sender, so
+        // `loadedmetadata` never fires again — `resize` is what actually fires
+        // when an HTMLVideoElement's intrinsic dimensions change mid-playback.
+        video.onresize = render;
+        this._startFpsMeter(video, streamKey, render);
+    }
+
+    /**
+     * Measures the frame rate actually rendered by `video`, once a second.
+     * requestVideoFrameCallback counts presented frames (so a stalled stream
+     * honestly reads 0fps); getVideoPlaybackQuality() is the fallback. Stops
+     * itself when the element leaves the DOM or is re-wired to another stream.
+     * @param {HTMLVideoElement} video
+     * @param {string} streamKey
+     * @param {() => void} onTick
+     */
+    _startFpsMeter(video, streamKey, onTick) {
+        const token = {};
+        video._fpsMeterToken = token;
+        const useRvfc = typeof video.requestVideoFrameCallback === 'function';
+        let frames = 0;
+        if (useRvfc) {
+            const onFrame = () => {
+                if (video._fpsMeterToken !== token) return;
+                frames++;
+                video.requestVideoFrameCallback(onFrame);
+            };
+            video.requestVideoFrameCallback(onFrame);
+        }
+        const totalFrames = () => video.getVideoPlaybackQuality?.().totalVideoFrames ?? 0;
+        let lastTotal = totalFrames();
+        let last = performance.now();
+        const interval = setInterval(() => {
+            if (video._fpsMeterToken !== token || !video.isConnected) {
+                clearInterval(interval);
+                return;
+            }
+            const now = performance.now();
+            let count = frames;
+            frames = 0;
+            if (!useRvfc) {
+                const total = totalFrames();
+                count = total - lastTotal;
+                lastTotal = total;
+            }
+            const elapsed = now - last;
+            last = now;
+            // Background tabs stop presenting frames — a measured 0 there
+            // would be wrong, not informative, so just skip the sample.
+            if (document.hidden) return;
+            this._lastKnownFps.set(streamKey, Math.round(count * 1000 / elapsed));
+            onTick();
+        }, 1000);
+    }
+
+    /**
+     * Asks a remote stream's owner to cap the frame rate of the copy sent to
+     * us. Local choice, session-scoped; the request itself goes out via
+     * App.js's onReceiveFpsCap → PeerManager.requestReceiveFps().
+     * @param {string} streamKey - peerId (screen) or `${peerId}-cam`.
+     * @param {number} fps - 0 = no cap.
+     */
+    setReceiveFpsCap(streamKey, fps) {
+        if (fps) this.receiveFpsCaps.set(streamKey, fps);
+        else this.receiveFpsCaps.delete(streamKey);
+        this.onReceiveFpsCap?.(streamKey, fps);
+    }
+
+    /** Updates the focus view's name pill + quality badge for `peerId` — same look as a grid tile. */
+    _updateFocusMeta(peerId) {
+        const { actualPeerId, isCam, label } = this._streamLabelInfo(peerId);
+        const captionText = document.getElementById('focus-caption-text');
+        if (captionText) captionText.textContent = label;
+        const mic = document.getElementById('focus-caption-mic');
+        if (mic) this._paintMicIcon(mic, this._micEnabled?.[actualPeerId] ?? false, this._micHardwareOff?.[actualPeerId] ?? true);
+        const badgeIcon = document.getElementById('focus-badge-icon');
+        if (badgeIcon) badgeIcon.textContent = isCam ? 'videocam' : 'screen_share';
+        const badgeText = document.getElementById('focus-badge-text');
+        if (badgeText) this._wireQualityBadge(this.focusedVideo, peerId, badgeText);
     }
 
     /**
@@ -786,6 +892,8 @@ export class UIController {
         this.focusedVideo.style.visibility = paused ? 'hidden' : 'visible';
         const caption = document.getElementById('focus-quality-caption');
         if (caption) caption.style.display = paused ? 'none' : 'flex';
+        const badge = document.getElementById('focus-badge');
+        if (badge) badge.style.display = paused ? 'none' : 'flex';
         const btnGroup = document.getElementById('focus-icon-btn-group');
         if (btnGroup) btnGroup.style.display = paused ? 'none' : 'flex';
         // "Stop watching" has nothing to do for self — hide just that one
@@ -992,11 +1100,7 @@ export class UIController {
      */
     _buildGridCell(peerId) {
         const isSelf = peerId === 'me' || peerId === 'me-cam';
-        const isCam = peerId.endsWith('-cam');
-        // 'me'/'me-cam' aren't real peerIds — no `#participant-me` card, no
-        // `_micEnabled['me']` entry — so both lookups need the real selfPeerId.
-        const actualPeerId = isSelf ? (this.selfPeerId || peerId) : (isCam ? peerId.slice(0, -4) : peerId);
-        const nickname = isSelf ? `${this._peerNickname(actualPeerId)} (you)` : this._peerNickname(actualPeerId);
+        const { actualPeerId, isCam, label: labelString } = this._streamLabelInfo(peerId);
         const micEnabled = this._micEnabled?.[actualPeerId] ?? false;
         // Unknown-until-told-otherwise defaults to hidden, same as a freshly
         // created participant card — see updateParticipantMic()'s hardwareOff param.
@@ -1013,15 +1117,11 @@ export class UIController {
 
         const micIcon = document.createElement('span');
         micIcon.className = 'grid-tile-mic inline-flex items-center';
-        micIcon.style.display = micHardwareOff ? 'none' : '';
-        if (!micHardwareOff) {
-            micIcon.style.color = micEnabled ? '#22c55e' : '#ef4444';
-            micIcon.innerHTML = micEnabled ? this._micOnSvg() : this._micOffSvg();
-        }
+        this._paintMicIcon(micIcon, micEnabled, micHardwareOff);
         label.appendChild(micIcon);
 
         const labelText = document.createElement('span');
-        labelText.textContent = nickname + (isCam ? ' · Cam' : '');
+        labelText.textContent = labelString;
         label.appendChild(labelText);
 
         if (isWatched) {
@@ -1039,30 +1139,8 @@ export class UIController {
                 badge.className = 'grid-tile-badge';
                 badge.innerHTML = `<span class="material-symbols-rounded">${isCam ? 'videocam' : 'screen_share'}</span>`;
                 const badgeText = document.createElement('span');
-                // Seed from the last resolution we saw for this stream key —
-                // buildGrid() tears down and recreates every tile's <video> on
-                // any updateLayout() pass (e.g. a different peer joining/leaving),
-                // not just when this stream itself changed, so without this the
-                // badge goes blank and waits on a fresh loadedmetadata/resize
-                // even though the resolution hasn't actually changed.
-                const cached = this._lastKnownRes.get(peerId);
-                if (cached) badgeText.textContent = cached;
                 badge.appendChild(badgeText);
-                const updateBadge = () => {
-                    if (video.videoWidth && video.videoHeight) {
-                        const text = `${video.videoHeight}p`;
-                        badgeText.textContent = text;
-                        this._lastKnownRes.set(peerId, text);
-                    }
-                };
-                updateBadge();
-                video.addEventListener('loadedmetadata', updateBadge);
-                // See _updateFocusMeta's comment on the same pair of listeners — a
-                // live quality change (webcam picker's hot-swap, screen-share's
-                // applyConstraints) re-uses the existing track/sender rather than
-                // handing this tile a new one, so `resize` (not `loadedmetadata`)
-                // is what actually fires.
-                video.addEventListener('resize', updateBadge);
+                this._wireQualityBadge(video, peerId, badgeText);
                 cell.appendChild(badge);
             }
 
@@ -1717,6 +1795,34 @@ export class UIController {
             });
             dynamicSection.appendChild(nsItem);
 
+            // Per-viewer frame-rate cap — only for streams they're actually
+            // sending right now. Caps just the copy sent to us (see
+            // PeerManager.requestReceiveFps()).
+            [[peerId, 'screen_share', 'Screen fps'], [`${peerId}-cam`, 'videocam', 'Camera fps']].forEach(([streamKey, icon, label]) => {
+                if (!this.streams[streamKey]) return;
+                const row = document.createElement('div');
+                row.className = 'participant-menu-row participant-fps-row';
+                row.innerHTML = `<span class="material-symbols-rounded">${icon}</span><span class="participant-menu-row-label">${label}</span>`;
+                const picker = document.createElement('div');
+                picker.className = 'participant-fps-picker';
+                const current = this.receiveFpsCaps.get(streamKey) || 0;
+                RECEIVE_FPS_OPTIONS.forEach(fps => {
+                    const opt = document.createElement('button');
+                    opt.type = 'button';
+                    opt.textContent = fps ? String(fps) : 'Max';
+                    opt.dataset.tip = fps ? `Receive at most ${fps}fps` : 'Receive their full frame rate';
+                    if (fps === current) opt.classList.add('active');
+                    opt.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.setReceiveFpsCap(streamKey, fps);
+                        picker.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === opt));
+                    });
+                    picker.appendChild(opt);
+                });
+                row.appendChild(picker);
+                dynamicSection.appendChild(row);
+            });
+
             // Moderator actions — unlike the rows above (available to everyone,
             // since the kebab itself is no longer moderator-gated), these stay
             // restricted to actual moderators, same boundary the old
@@ -1884,6 +1990,8 @@ export class UIController {
         if (this.raisedHands.delete(peerId)) this._renderRaisedHands();
         this.recordingPeers.delete(peerId);
         this.peerAccountUsernames.delete(peerId);
+        this.receiveFpsCaps.delete(peerId);
+        this.receiveFpsCaps.delete(`${peerId}-cam`);
         this._updateMemberCount();
         this._refreshRosterStrip();
     }
@@ -1903,6 +2011,7 @@ export class UIController {
         this.blockedPeerIds.clear();
         this.peerAvatars.clear();
         this.peerAccountUsernames.clear();
+        this.receiveFpsCaps.clear();
         this.raisedHands.clear();
         this.recordingPeers.clear();
         this._renderRaisedHands();
@@ -2215,12 +2324,11 @@ export class UIController {
         keys.forEach(key => {
             const tile = this.gridView?.querySelector(`[data-peer-id="${key}"]`);
             const icon = tile?.querySelector('.grid-tile-mic');
-            if (!icon) return;
-            icon.style.display = hardwareOff ? 'none' : '';
-            if (hardwareOff) return;
-            icon.style.color = enabled ? '#22c55e' : '#ef4444';
-            icon.innerHTML = enabled ? this._micOnSvg() : this._micOffSvg();
+            if (icon) this._paintMicIcon(icon, enabled, hardwareOff);
         });
+        // The focus view's name pill carries the same mic icon as a grid tile.
+        const focusMic = document.getElementById('focus-caption-mic');
+        if (focusMic && keys.includes(this.focusedPeerId)) this._paintMicIcon(focusMic, enabled, hardwareOff);
     }
 
     /**

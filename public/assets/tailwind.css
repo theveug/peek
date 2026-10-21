@@ -2716,6 +2716,43 @@ button.participant-menu-row:hover {
   flex: 1;
 }
 
+/* Per-viewer frame-rate cap row (screen/cam) — label + compact segmented picker. */
+.participant-fps-row {
+  cursor: default;
+}
+
+.participant-fps-row .participant-menu-row-label {
+  white-space: nowrap;
+}
+
+.participant-fps-picker {
+  display: flex;
+  gap: 0.125rem;
+  background: var(--bg4);
+  border-radius: var(--radius-sm);
+  padding: 0.125rem;
+}
+
+.participant-fps-picker button {
+  border: none;
+  background: transparent;
+  color: var(--t2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.1875rem 0.375rem;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.participant-fps-picker button:hover {
+  color: var(--t1);
+}
+
+.participant-fps-picker button.active {
+  background: var(--accent);
+  color: var(--accentText);
+}
+
 .participant-menu-divider {
   height: 1px;
   margin: 0.25rem 0.125rem;
@@ -3621,40 +3658,11 @@ body,
 }
 
 /* --- Focus view --- */
-.focus-sharing-dot {
-  width: 0.4375rem;
-  height: 0.4375rem;
-  border-radius: 50%;
-  background: #fff;
-  animation: focusLiveDot 1.4s infinite;
-}
-
-@keyframes focusLiveDot {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
-}
-
-/* Single bottom-left pill (name + live dot + resolution) — replaces the old
-   two-piece top accent banner + bottom caption, which duplicated the name
-   and read as cluttered next to the grid tiles' single bottom-left label. */
-.focus-quality-caption {
-  position: absolute;
-  bottom: 0.875rem;
-  left: 0.875rem;
-  display: flex;
-  align-items: center;
-  gap: 0.4375rem;
-  font-family: "Fira Code", ui-monospace, monospace;
-  font-size: 0.7188rem;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(0, 0, 0, 0.45);
-  padding: 0.3125rem 0.625rem;
-  border-radius: 0.4375rem;
+/* The focus view reuses the grid tile's name pill (.grid-tile-name) and
+   accent quality badge (.grid-tile-badge) so both views look identical; it
+   only needs lifting above #focused-video, which (unlike a grid tile's
+   <video>) is absolutely positioned. */
+.focus-overlay-pill {
   z-index: 2;
 }
 
@@ -4569,6 +4577,59 @@ body,
 
 .settings-switch input:checked + .settings-switch-track::after {
   transform: translateX(18px);
+}
+
+/* ===== Scheduled mic settings (Settings → Microphone & Voice Detection) ===== */
+.mic-schedule-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-md);
+}
+
+.mic-schedule-header,
+.mic-schedule-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mic-schedule-header .settings-text-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.mic-schedule-row .settings-text-input {
+  width: auto;
+}
+
+.mic-schedule-row-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--t3);
+}
+
+.mic-schedule-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.5rem;
+}
+
+.mic-schedule-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.mic-schedule-active-pill {
+  flex-shrink: 0;
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 0.125rem 0.4375rem;
+  border-radius: 999px;
+  background: var(--accentSoft);
+  color: var(--accent);
 }
 
 .settings-danger-btn {

@@ -536,9 +536,13 @@
                 <div id="focused-view" class="flex-grow w-full relative overflow-hidden" style="display:none;">
                     <video id="focused-video" autoplay playsinline muted
                         class="absolute inset-0 w-full h-full object-contain" style="transform-origin: 0 0;"></video>
-                    <div id="focus-quality-caption" class="focus-quality-caption">
-                        <span class="focus-sharing-dot"></span>
+                    <div id="focus-quality-caption" class="grid-tile-name focus-overlay-pill absolute bottom-2.5 left-2.5 flex items-center gap-1.5 text-xs font-medium text-white pointer-events-none">
+                        <span id="focus-caption-mic" class="grid-tile-mic inline-flex items-center" style="display:none;"></span>
                         <span id="focus-caption-text"></span>
+                    </div>
+                    <div id="focus-badge" class="grid-tile-badge focus-overlay-pill">
+                        <span id="focus-badge-icon" class="material-symbols-rounded">screen_share</span>
+                        <span id="focus-badge-text"></span>
                     </div>
                     <div id="focus-icon-btn-group" class="focus-icon-btn-group">
                         <button id="focus-stop-button" type="button" data-tip="Stop watching" class="focus-icon-btn focus-icon-btn-danger">

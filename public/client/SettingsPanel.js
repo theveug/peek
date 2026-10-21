@@ -13,6 +13,7 @@ import { getCustomStatuses, getCustomStatus, upsertCustomStatus, deleteCustomSta
 import * as chatHistoryStore from './chatHistoryStore.js';
 import { isModifierCode, comboFromEvent } from './keybindUtils.js';
 import { syncAvatar } from './AccountSettingsSync.js';
+import { getMicSchedules, saveMicSchedules, newMicSchedule, activeMicSchedule, SENSITIVITY_PRESETS, MAX_MIC_SCHEDULES } from './MicSchedule.js';
 
 // Labels for the tri-state mute/deafen pickers in the custom-status form —
 // 'none' means "leave as-is," so a status can just as easily auto-unmute/
@@ -482,6 +483,16 @@ export class SettingsPanel {
                                 </div>
                                 <label class="settings-switch"><input type="checkbox" id="settings-auto-deafen-away" /><span
                                         class="settings-switch-track"></span></label>
+                            </div>
+                            <div class="settings-field" style="margin-top:1rem;">
+                                <div class="settings-label">Scheduled mic settings</div>
+                                <p class="text-[10px] text-muted mt-1" style="margin-bottom:0.625rem;">Switch noise
+                                    suppression, mic mode or sensitivity automatically at set times (e.g. a noisy room in
+                                    the evening). Applied when a window starts; anything you change by hand holds until
+                                    the next switch, and your usual settings come back when the window ends.</p>
+                                <div id="mic-schedule-list" class="flex flex-col gap-1.5" style="margin-bottom:0.625rem;"></div>
+                                <button type="button" id="mic-schedule-add-btn" class="settings-avatar-btn">+ New
+                                    schedule</button>
                             </div>
                         </div>
 
@@ -1509,6 +1520,8 @@ export class SettingsPanel {
             this._updateMicThresholdLabel(parseFloat(e.target.value));
         });
 
+        this._wireMicSchedules();
+
         const micHoldTime = document.getElementById('settings-mic-hold-time');
         micHoldTime?.addEventListener('input', (e) => {
             localStorage.setItem('micHoldTime', e.target.value);
@@ -1816,6 +1829,159 @@ export class SettingsPanel {
         if (masterVolumeValue) masterVolumeValue.textContent = `${Math.round(masterVol * 100)}%`;
 
         this._refreshMicMode();
+        this._renderMicSchedules();
+    }
+
+    // --- Scheduled mic settings ---
+    // Editor for MicSchedule.js's list. Every field saves immediately (same
+    // no-Save-button rule as the rest of this panel); App.js's running
+    // scheduler re-evaluates on each save via 'peek:mic-schedules-changed'.
+
+    _wireMicSchedules() {
+        document.getElementById('mic-schedule-add-btn')?.addEventListener('click', () => {
+            const list = getMicSchedules();
+            if (list.length >= MAX_MIC_SCHEDULES) return;
+            list.push(newMicSchedule());
+            saveMicSchedules(list);
+            this._renderMicSchedules();
+        });
+    }
+
+    _renderMicSchedules() {
+        const container = document.getElementById('mic-schedule-list');
+        if (!container) return;
+        container.innerHTML = '';
+        const list = getMicSchedules();
+        const addBtn = document.getElementById('mic-schedule-add-btn');
+        if (addBtn) addBtn.style.display = list.length >= MAX_MIC_SCHEDULES ? 'none' : '';
+        if (!list.length) {
+            container.innerHTML = '<div class="text-[11px] text-muted">No schedules yet.</div>';
+            return;
+        }
+        const active = activeMicSchedule(list);
+
+        const update = (id, patch) => {
+            const next = getMicSchedules().map(s => (s.id === id ? { ...s, ...patch } : s));
+            saveMicSchedules(next);
+        };
+
+        const select = (options, value, onChange, ariaLabel) => {
+            const el = document.createElement('select');
+            el.className = 'settings-text-input';
+            el.setAttribute('aria-label', ariaLabel);
+            options.forEach(([val, text]) => {
+                const opt = document.createElement('option');
+                opt.value = val;
+                opt.textContent = text;
+                el.appendChild(opt);
+            });
+            el.value = value;
+            el.addEventListener('change', () => onChange(el.value));
+            return el;
+        };
+
+        const sensitivityKey = (t) => Object.keys(SENSITIVITY_PRESETS).find(k => SENSITIVITY_PRESETS[k] === t) || '';
+
+        list.forEach((s) => {
+            const card = document.createElement('div');
+            card.className = 'mic-schedule-card surface-input';
+
+            // Header: enabled switch, label, "active now" pill, delete.
+            const header = document.createElement('div');
+            header.className = 'mic-schedule-header';
+            const sw = document.createElement('label');
+            sw.className = 'settings-switch';
+            sw.dataset.tip = s.enabled ? 'Enabled' : 'Disabled';
+            const swInput = document.createElement('input');
+            swInput.type = 'checkbox';
+            swInput.checked = s.enabled;
+            swInput.addEventListener('change', () => { update(s.id, { enabled: swInput.checked }); this._renderMicSchedules(); });
+            const swTrack = document.createElement('span');
+            swTrack.className = 'settings-switch-track';
+            sw.append(swInput, swTrack);
+
+            const label = document.createElement('input');
+            label.type = 'text';
+            label.className = 'settings-text-input';
+            label.maxLength = 40;
+            label.placeholder = 'Name (e.g. Evening)';
+            label.value = s.label;
+            label.addEventListener('change', () => update(s.id, { label: label.value.trim() }));
+
+            header.append(sw, label);
+            if (active?.id === s.id) {
+                const pill = document.createElement('span');
+                pill.className = 'mic-schedule-active-pill';
+                pill.textContent = 'Active now';
+                header.appendChild(pill);
+            }
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.className = 'settings-danger-btn';
+            delBtn.textContent = 'Delete';
+            delBtn.addEventListener('click', () => {
+                saveMicSchedules(getMicSchedules().filter(x => x.id !== s.id));
+                this._renderMicSchedules();
+            });
+            header.appendChild(delBtn);
+
+            // Time window.
+            const times = document.createElement('div');
+            times.className = 'mic-schedule-row';
+            const timeInput = (value, key, ariaLabel) => {
+                const el = document.createElement('input');
+                el.type = 'time';
+                el.className = 'settings-text-input';
+                el.value = value;
+                el.setAttribute('aria-label', ariaLabel);
+                el.addEventListener('change', () => {
+                    if (!el.value) return;
+                    update(s.id, { [key]: el.value });
+                    this._renderMicSchedules();
+                });
+                return el;
+            };
+            const from = document.createElement('span');
+            from.className = 'mic-schedule-row-label';
+            from.textContent = 'From';
+            const to = document.createElement('span');
+            to.className = 'mic-schedule-row-label';
+            to.textContent = 'to';
+            times.append(from, timeInput(s.start, 'start', 'Start time'), to, timeInput(s.end, 'end', 'End time'));
+
+            // Settings — "Unchanged" leaves that one as your usual value.
+            const settingsRow = document.createElement('div');
+            settingsRow.className = 'mic-schedule-settings';
+            const field = (title, control) => {
+                const wrap = document.createElement('label');
+                wrap.className = 'mic-schedule-field';
+                const t = document.createElement('span');
+                t.className = 'mic-schedule-row-label';
+                t.textContent = title;
+                wrap.append(t, control);
+                return wrap;
+            };
+            settingsRow.append(
+                field('Noise suppression', select(
+                    [['', 'Unchanged'], ['on', 'On'], ['off', 'Off']],
+                    s.noiseSuppression == null ? '' : (s.noiseSuppression ? 'on' : 'off'),
+                    (v) => update(s.id, { noiseSuppression: v === '' ? null : v === 'on' }),
+                    'Noise suppression')),
+                field('Mic mode', select(
+                    [['', 'Unchanged'], ['toggle', 'Toggle'], ['push-to-talk', 'Push to Talk'], ['voice-activity', 'Voice Activity']],
+                    s.micMode || '',
+                    (v) => update(s.id, { micMode: v || null }),
+                    'Mic mode')),
+                field('Sensitivity', select(
+                    [['', 'Unchanged'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']],
+                    sensitivityKey(s.micThreshold),
+                    (v) => update(s.id, { micThreshold: v ? SENSITIVITY_PRESETS[v] : null }),
+                    'Sensitivity')),
+            );
+
+            card.append(header, times, settingsRow);
+            container.appendChild(card);
+        });
     }
 
     // --- Privacy & P2P ---

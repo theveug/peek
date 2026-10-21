@@ -190,7 +190,8 @@ export function setupWebSocket(wss, iceConfig, manager, buildId, trust) {
                 case 'answer':
                 case 'ice-candidate':
                 case 'watch-stream':
-                case 'unwatch-stream': {
+                case 'unwatch-stream':
+                case 'set-receive-fps': {
                     // Only relay within the sender's own session — peerIds are global
                     // (and survive a same-socket room change), so without this any
                     // client could push signalling at peers in other rooms.

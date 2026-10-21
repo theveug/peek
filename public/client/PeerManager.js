@@ -154,6 +154,10 @@ export class PeerManager {
         // _ensureRawTrackKeepAlive() below for why this exists.
         this._peerRawKeepAliveAudio = new Map(); // peerId -> <audio> element
         this.senders = {};
+        // Per-viewer frame-rate caps OTHER peers asked us to apply to the copy of
+        // our screen/cam we send them — peerId -> { screen?: fps, cam?: fps }.
+        // See requestReceiveFps()/_applyReceiverFpsCap().
+        this._receiverFpsCaps = {};
         this._statsInterval = null;
 
         // --- Active-speaker detection (drives optional auto-focus + per-peer speaking rings) ---
@@ -199,6 +203,50 @@ export class PeerManager {
             if (!this.senders[peerId]) this.senders[peerId] = {};
             this.senders[peerId][`${kind}-${track.kind}`] = sender;
         });
+        // A cap a viewer requested earlier outlives the sender it was applied to
+        // (stop + restart a share mints a brand-new sender), so re-apply it here.
+        if (kind === 'screen' || kind === 'cam') this._applyReceiverFpsCap(peerId, kind);
+    }
+
+    /**
+     * Asks the owner of a remote stream to cap the frame rate of the copy they
+     * send to US — the mesh gives every viewer their own RTCRtpSender, so this
+     * never affects what anyone else receives. Honor-system like watch/unwatch:
+     * the owner's client applies it, a modified client could ignore it.
+     * @param {string} streamKey - peerId (screen) or `${peerId}-cam`.
+     * @param {number} fps - 0 = no cap (source frame rate).
+     * @returns {void}
+     */
+    requestReceiveFps(streamKey, fps) {
+        const isCam = streamKey.endsWith('-cam');
+        const peerId = isCam ? streamKey.slice(0, -4) : streamKey;
+        this.send('set-receive-fps', peerId, { kind: isCam ? 'cam' : 'screen', fps });
+    }
+
+    /**
+     * Applies (or clears) the frame-rate cap `peerId` asked for on our sender
+     * to them, via encoding `maxFramerate` — no renegotiation, no effect on
+     * other peers' senders, and it stacks with the room-size quality tier
+     * (which constrains the capture itself) by simply taking the lower of the two.
+     * @param {string} peerId
+     * @param {'screen'|'cam'} kind
+     * @returns {Promise<void>}
+     */
+    async _applyReceiverFpsCap(peerId, kind) {
+        const sender = this.senders[peerId]?.[`${kind}-video`];
+        if (!sender?.getParameters) return;
+        const fps = this._receiverFpsCaps[peerId]?.[kind] || 0;
+        try {
+            const params = sender.getParameters();
+            if (!params.encodings?.length) params.encodings = [{}];
+            params.encodings.forEach(enc => {
+                if (fps) enc.maxFramerate = fps;
+                else delete enc.maxFramerate;
+            });
+            await sender.setParameters(params);
+        } catch (err) {
+            console.warn(`Failed to apply ${kind} fps cap for ${peerId}:`, err);
+        }
     }
 
     /**
@@ -466,6 +514,19 @@ export class PeerManager {
             case 'unwatch-stream':
                 this.setSenderPaused(from, payload.kind, true);
                 break;
+
+            case 'set-receive-fps': {
+                // `from` is stamped by the server, so a peer can only ever cap
+                // the copy sent to itself. Validate the rest — peer-controlled.
+                const kind = payload?.kind;
+                const fps = payload?.fps;
+                if (kind !== 'screen' && kind !== 'cam') break;
+                if (!Number.isInteger(fps) || fps < 0 || fps > 60) break;
+                if (!this._receiverFpsCaps[from]) this._receiverFpsCaps[from] = {};
+                this._receiverFpsCaps[from][kind] = fps;
+                this._applyReceiverFpsCap(from, kind);
+                break;
+            }
 
             case 'mic-status':
                 this.ui.updateParticipantMic(from, payload.enabled, !payload.active);
@@ -2544,6 +2605,7 @@ export class PeerManager {
         this._peerRawMicTracks.delete(peerId);
         this._releaseRawTrackKeepAlive(peerId);
         delete this.senders[peerId];
+        delete this._receiverFpsCaps[peerId];
         delete this._sendQueues[peerId];
         this.peerRecordingConsent.delete(peerId);
         // silent: this is blanket cleanup on a full disconnect — the 'peer-left'

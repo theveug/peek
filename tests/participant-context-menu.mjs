@@ -152,7 +152,7 @@ async function main() {
         // --- STEP 6: the "noise suppression on" badge reflects a peer's own outgoing toggle ---
         await pageA.click('#topbar-identity');
         await pageA.click('#topbar-identity-settings');
-        await pageA.click('[data-settings-section="audio"]');
+        await pageA.click('[data-settings-section="mic-voice"]');
         await pageA.check('#settings-noise-suppression');
         await pageA.click('#close-settings');
 
