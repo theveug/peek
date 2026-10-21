@@ -22,6 +22,7 @@
     "test:mic-gate": "node tests/mic-gate-logic.mjs",
     "test:mic-schedule": "node tests/mic-schedule-logic.mjs",
     "test:receive-fps": "node tests/receive-fps-cap.mjs",
+    "test:focus-repick": "node tests/focus-self-repick.mjs",
     "test:audio-senders": "node tests/audio-sender-lifecycle.mjs",
     "test:password-leak": "node tests/room-password-leak.mjs",
     "test:offline": "node tests/offline-selfhost.mjs",

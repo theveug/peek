@@ -53,6 +53,11 @@ export class UIController {
         this.moderatorPeerIds = new Set();
         this.focusedPeerId = null;
         this.autoFocusPaused = false;
+        // True only while focus is on your own stream because you clicked it.
+        // A self focus reached any other way (fallback after a peer's stream
+        // ended, or a click from an earlier focus session) yields to a remote
+        // stream — see _focusNeedsRepick().
+        this._selfFocusExplicit = false;
         this.viewMode = 'grid'; // 'focus' or 'grid'
         this.zoom = 1;
         this.panX = 0;
@@ -703,8 +708,23 @@ export class UIController {
 
     /** @param {'grid'|'focus'} mode */
     setViewMode(mode) {
+        // Leaving focus view ends an explicit "watch myself" choice — pressing
+        // Focus again later should land on a peer, not a stale self focus.
+        if (mode === 'grid') this._selfFocusExplicit = false;
         this.viewMode = mode;
         this.updateLayout();
+    }
+
+    /**
+     * Whether the focus target should be (re)picked: nothing focused, the
+     * focused stream is gone, or it's your own stream without you having
+     * explicitly chosen it while a remote stream is available.
+     * @returns {boolean}
+     */
+    _focusNeedsRepick() {
+        const f = this.focusedPeerId;
+        if (!f || !this.streams[f]) return true;
+        return (f === 'me' || f === 'me-cam') && !this._selfFocusExplicit;
     }
 
     /** Flips between grid and focus view. */
@@ -728,6 +748,7 @@ export class UIController {
         // their sender — your own stream is already local, there's no sender to
         // pause and no peerId to signal, so 'me'/'me-cam' never go through it.
         if (peerId !== 'me' && peerId !== 'me-cam') this._watchTile(peerId);
+        this._selfFocusExplicit = peerId === 'me' || peerId === 'me-cam';
         this.focusedPeerId = peerId;
         this.focusedVideo.srcObject = stream;
         this.zoom = 1;
@@ -3150,7 +3171,7 @@ export class UIController {
 
         playSound('streamUp');
 
-        if (!this.focusedPeerId || !this.streams[this.focusedPeerId]) {
+        if (this._focusNeedsRepick()) {
             this._autoWatchOrSkip(peerId);
             this.focusedPeerId = peerId;
             this.focusedVideo.srcObject = stream;
@@ -3217,6 +3238,7 @@ export class UIController {
             const next = remoteRemaining[0] ?? remaining.find(id => id === 'me' || id === 'me-cam');
             if (next) {
                 if (next !== 'me' && next !== 'me-cam') this._autoWatchOrSkip(next);
+                this._selfFocusExplicit = false; // a fallback, not a choice
                 this.focusedPeerId = next;
                 this.focusedVideo.srcObject = this.streams[next];
             }
@@ -3258,7 +3280,7 @@ export class UIController {
             this.gridView.style.display = 'grid';
             this.buildGrid();
         } else {
-            if (!this.focusedPeerId || !this.streams[this.focusedPeerId]) {
+            if (this._focusNeedsRepick()) {
                 this._autoWatchOrSkip(remoteStreams[0]);
                 this.focusedPeerId = remoteStreams[0];
                 this.focusedVideo.srcObject = this.streams[remoteStreams[0]];
