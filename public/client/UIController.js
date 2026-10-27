@@ -123,6 +123,14 @@ export class UIController {
         // peer's <audio> element in addAudio() below, and to all of them at
         // once via setAudioOutputDevice() when the user changes it in Settings.
         this._audioOutputDeviceId = localStorage.getItem('speakerDeviceId') || '';
+        // A Bluetooth headset on Windows swaps between two output endpoints
+        // (stereo vs hands-free) whenever its mic opens/closes, which fires
+        // several devicechange events in a burst — debounce, then re-attach.
+        let deviceChangeTimer = null;
+        navigator.mediaDevices?.addEventListener?.('devicechange', () => {
+            clearTimeout(deviceChangeTimer);
+            deviceChangeTimer = setTimeout(() => this.refreshAudioOutputs(), 800);
+        });
         this.setupZoom();
         this.setupPictureInPicture();
         this.setupFocusControls();
@@ -2695,6 +2703,45 @@ export class UIController {
         if (typeof HTMLMediaElement === 'undefined' || !HTMLMediaElement.prototype.setSinkId) return; // unsupported browser — silently a no-op
         const audios = document.querySelectorAll('audio[id^="audio-"]');
         await Promise.all(Array.from(audios).map(a => a.setSinkId(this._audioOutputDeviceId).catch(() => {})));
+    }
+
+    /**
+     * Re-attaches every call `<audio>` element to its output device and
+     * restarts playback. Needed because an element whose output device
+     * vanished (e.g. a Bluetooth headset's stereo endpoint while its mic is
+     * open) stays silent even after the device comes back — previously only
+     * a rejoin, which builds fresh elements, recovered it. If the chosen
+     * speaker isn't present right now, falls back to the system default for
+     * this moment without touching the saved preference, so the next device
+     * change switches back once it reappears.
+     * @returns {Promise<void>}
+     */
+    async refreshAudioOutputs() {
+        const audios = Array.from(document.querySelectorAll('audio[id^="audio-"]'));
+        if (!audios.length) return;
+        let sinkId = '';
+        if (this._audioOutputDeviceId && HTMLMediaElement.prototype.setSinkId) {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                if (devices.some(d => d.kind === 'audiooutput' && d.deviceId === this._audioOutputDeviceId)) {
+                    sinkId = this._audioOutputDeviceId;
+                }
+            } catch { /* keep default */ }
+        }
+        await Promise.all(audios.map(async (a) => {
+            if (a.setSinkId) {
+                // Hop via the default device first: re-setting the same id
+                // can be a no-op, which wouldn't re-open a reconnected device.
+                if (sinkId) await a.setSinkId('').catch(() => {});
+                await a.setSinkId(sinkId).catch(() => {});
+            }
+            const src = a.srcObject;
+            if (src) {
+                a.srcObject = null;
+                a.srcObject = src;
+            }
+            a.play?.().catch(() => {});
+        }));
     }
 
     /**

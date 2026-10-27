@@ -79,6 +79,7 @@ export class PeerManager {
         // having turned the mic on, so re-enabling knows to reattach via
         // replaceTrack() on the existing sender rather than pc.addTrack()+renegotiate.
         this.micReleased = false;
+        this._micToggleChain = Promise.resolve(); // see toggleMic()
         // Momentary hold-to-force-mute override (PTM) — independent of
         // micEnabled/the toggle preference, so releasing the key restores
         // exactly whatever micEnabled already was. See App.js's keydown/keyup
@@ -664,9 +665,7 @@ export class PeerManager {
                 this._addTrackedStream(pc, peerId, this.stream, 'screen');
 
                 // Now explicitly create and send offer
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                this.send('offer', peerId, offer);
+                await this._sendOffer(peerId, pc);
             });
 
         } catch (err) {
@@ -1367,7 +1366,18 @@ export class PeerManager {
      *   push-to-talk press pay for a real device re-acquire.
      * @returns {Promise<boolean>} the resulting `micEnabled` state.
      */
-    async toggleMic({ allowRelease = true } = {}) {
+    toggleMic(opts) {
+        // Serialized: a rapid double press (desktop hook, a status that mutes,
+        // key repeat) used to start a second toggle mid-getUserMedia, which saw
+        // no micStream yet and opened the mic twice. Each toggle now waits for
+        // the previous one, so two presses are always exactly two toggles.
+        const run = this._micToggleChain.then(() => this._toggleMicNow(opts));
+        this._micToggleChain = run.catch(() => {});
+        return run;
+    }
+
+    /** toggleMic()'s body — only ever called through that serializing queue. */
+    async _toggleMicNow({ allowRelease = true } = {}) {
         if (!this.micStream) {
             if (this.micReleased) return this._reacquireMic();
             try {
@@ -1382,10 +1392,9 @@ export class PeerManager {
 
                 for (const [peerId, pc] of Object.entries(this.peers)) {
                     this._addTrackedStream(pc, peerId, this.micStream, 'mic');
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    this.send('offer', peerId, offer);
+                    await this._sendOffer(peerId, pc);
                 }
+                this._scheduleAudioOutputRefresh();
             } catch (err) {
                 console.warn('Mic access denied:', err);
                 return false;
@@ -1436,6 +1445,18 @@ export class PeerManager {
         this.micStream = null;
         this.micEnabled = false;
         this.micReleased = true;
+        this._scheduleAudioOutputRefresh();
+    }
+
+    /**
+     * Opening/closing a Bluetooth headset's mic makes Windows switch its
+     * output endpoint, which can leave incoming call audio silent. Re-attach
+     * output once the switch has settled (see UIController.refreshAudioOutputs()).
+     * @returns {void}
+     */
+    _scheduleAudioOutputRefresh() {
+        clearTimeout(this._audioOutputRefreshTimer);
+        this._audioOutputRefreshTimer = setTimeout(() => this.ui.refreshAudioOutputs?.(), 1500);
     }
 
     /**
@@ -1467,13 +1488,12 @@ export class PeerManager {
                     await sender.replaceTrack(newTrack).catch(() => {});
                 } else {
                     this._addTrackedStream(pc, peerId, this.micStream, 'mic');
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    this.send('offer', peerId, offer);
+                    await this._sendOffer(peerId, pc);
                 }
             }
             this.micEnabled = true;
             this.micReleased = false;
+            this._scheduleAudioOutputRefresh();
         } catch (err) {
             console.warn('Mic re-acquire denied:', err);
             return false;
@@ -2511,11 +2531,7 @@ export class PeerManager {
             pc.addTransceiver('audio', { direction: 'recvonly' });
         }
 
-        pc.createOffer()
-            .then(offer => pc.setLocalDescription(offer))
-            .then(() => {
-                this.send('offer', peerId, pc.localDescription);
-            });
+        this._sendOffer(peerId, pc);
     }
 
     /**
@@ -2536,7 +2552,24 @@ export class PeerManager {
             pc = this.createPeerConnection(from);
         }
 
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        // Glare: both sides renegotiated at once (e.g. one unmutes while the
+        // other starts a camera). Perfect-negotiation roles from a stable
+        // peerId comparison: the impolite side ignores the colliding offer and
+        // waits for its own answer; the polite side rolls back its offer,
+        // answers, then re-offers so its own pending change still lands.
+        // Without this, both offers crash into each other and the errors were
+        // silently dropped, leaving the connection half-negotiated.
+        const collision = pc._makingOffer || pc.signalingState !== 'stable';
+        const polite = !!this.peerId && this.peerId < from;
+        if (collision && !polite) return;
+
+        try {
+            if (collision) await pc.setLocalDescription({ type: 'rollback' });
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        } catch (err) {
+            console.warn('receiveOffer: setRemoteDescription failed', err);
+            return;
+        }
 
         if (this.stream && !this.senders[from]?.['screen-video']) {
             this._addTrackedStream(pc, from, this.stream, 'screen');
@@ -2558,24 +2591,54 @@ export class PeerManager {
             this._addTrackedStream(pc, from, this.micStream, 'mic');
         }
 
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        this.send('answer', from, pc.localDescription);
+        try {
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            this.send('answer', from, pc.localDescription);
+        } catch (err) {
+            console.warn('receiveOffer: answer failed', err);
+            return;
+        }
+
+        if (collision) this._sendOffer(from, pc);
+    }
+
+    /**
+     * Creates, applies and sends an offer on one connection. Every
+     * renegotiation goes through here so `_makingOffer` (read by
+     * receiveOffer()'s glare check) is always accurate.
+     * @param {string} peerId
+     * @param {RTCPeerConnection} pc
+     * @returns {Promise<void>}
+     */
+    async _sendOffer(peerId, pc) {
+        pc._makingOffer = true;
+        try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            this.send('offer', peerId, pc.localDescription);
+        } catch (err) {
+            console.warn('Offer failed:', err);
+        } finally {
+            pc._makingOffer = false;
+        }
     }
 
     /** Applies an incoming WebRTC answer to the matching connection. */
     receiveAnswer(from, answer) {
         const pc = this.peers[from];
-        if (pc) {
-            pc.setRemoteDescription(new RTCSessionDescription(answer));
-        }
+        // A stale answer to an offer we rolled back in a glare (see receiveOffer) — ignore it.
+        if (!pc || pc.signalingState !== 'have-local-offer') return;
+        pc.setRemoteDescription(new RTCSessionDescription(answer))
+            .catch(err => console.warn('receiveAnswer failed:', err));
     }
 
     /** Applies an incoming ICE candidate to the matching connection. */
     receiveCandidate(from, candidate) {
         const pc = this.peers[from];
         if (pc) {
-            pc.addIceCandidate(new RTCIceCandidate(candidate));
+            // Can legitimately fail for a candidate belonging to an offer we ignored in a glare.
+            pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
         }
     }
 
@@ -2710,9 +2773,7 @@ export class PeerManager {
 
             for (const [peerId, pc] of Object.entries(this.peers)) {
                 this._addTrackedStream(pc, peerId, this.camStream, 'cam');
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                this.send('offer', peerId, offer);
+                await this._sendOffer(peerId, pc);
             }
 
             return true;

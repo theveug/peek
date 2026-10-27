@@ -31,6 +31,7 @@ function makeFakePc() {
         addTrackCalls: [],
         removeTrackCalls: [],
         _senders: [],
+        signalingState: 'stable',
         addTrack(track, stream) {
             this.addTrackCalls.push({ track, stream });
             const sender = { track, replaceTrack: async () => {} };
