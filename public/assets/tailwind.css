@@ -77,22 +77,22 @@ html {
      Additive, not replacing the tokens above — existing markup keeps working
      unchanged; new surfaces (starting with the settings panel) are built on
      these. --accent* are overridden at runtime by AccentManager.js per the
-     user's chosen swatch; the values here are just the default (Violet, hue
-     286) so there's no flash-of-unstyled-accent before JS runs. */
-  --bg1: oklch(0.165 0.014 286);
-  --bg2: oklch(0.205 0.014 286);
-  --bg3: oklch(0.245 0.013 286);
-  --bg4: oklch(0.3 0.015 286);
-  --bg5: oklch(0.36 0.016 286);
-  --border: oklch(0.345 0.016 286);
-  --input: oklch(0.295 0.014 286);
-  --t1: oklch(0.96 0.005 286);
-  --t2: oklch(0.75 0.012 286);
-  --t3: oklch(0.6 0.014 286);
-  --accent: oklch(0.7 0.16 286);
-  --accentH: oklch(0.76 0.155 286);
-  --accentSoft: oklch(0.7 0.16 286 / 0.18);
-  --accentSoft2: oklch(0.7 0.16 286 / 0.32);
+     user's chosen swatch; the values here are just the default (Orange, hue
+     38) so there's no flash-of-unstyled-accent before JS runs. */
+  --bg1: oklch(0.165 0.014 250);
+  --bg2: oklch(0.205 0.014 250);
+  --bg3: oklch(0.245 0.013 250);
+  --bg4: oklch(0.3 0.015 250);
+  --bg5: oklch(0.36 0.016 250);
+  --border: oklch(0.345 0.016 250);
+  --input: oklch(0.295 0.014 250);
+  --t1: oklch(0.96 0.005 250);
+  --t2: oklch(0.75 0.012 250);
+  --t3: oklch(0.6 0.014 250);
+  --accent: oklch(0.7 0.16 38);
+  --accentH: oklch(0.76 0.155 38);
+  --accentSoft: oklch(0.7 0.16 38 / 0.18);
+  --accentSoft2: oklch(0.7 0.16 38 / 0.32);
   --accentText: oklch(0.99 0 0);
   --green: oklch(0.8 0.17 150);
   --amber: oklch(0.8 0.14 85);
@@ -120,16 +120,16 @@ body.light {
   --spinner-fill: #374151;
 
   /* ----- Redesign tokens (Phase 1), light mode ----- */
-  --bg1: oklch(0.915 0.012 286);
-  --bg2: oklch(0.955 0.009 286);
-  --bg3: oklch(0.995 0.003 286);
-  --bg4: oklch(0.945 0.012 286);
-  --bg5: oklch(0.9 0.014 286);
-  --border: oklch(0.89 0.013 286);
-  --input: oklch(0.965 0.008 286);
-  --t1: oklch(0.27 0.02 286);
-  --t2: oklch(0.46 0.018 286);
-  --t3: oklch(0.6 0.016 286);
+  --bg1: oklch(0.915 0.012 250);
+  --bg2: oklch(0.955 0.009 250);
+  --bg3: oklch(0.995 0.003 250);
+  --bg4: oklch(0.945 0.012 250);
+  --bg5: oklch(0.9 0.014 250);
+  --border: oklch(0.89 0.013 250);
+  --input: oklch(0.965 0.008 250);
+  --t1: oklch(0.27 0.02 250);
+  --t2: oklch(0.46 0.018 250);
+  --t3: oklch(0.6 0.016 250);
   --green: oklch(0.66 0.16 150);
   --amber: oklch(0.72 0.14 85);
   --red: oklch(0.58 0.21 25);
@@ -5279,17 +5279,10 @@ body,
   width: 3.625rem;
   height: 3.625rem;
   margin: 0 auto 1.25rem;
-  border-radius: 1.125rem;
-  background: var(--accent);
-  color: var(--accentText);
+  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 0 8px var(--accentSoft);
-}
-
-.lobby-hero-icon .material-symbols-rounded {
-  font-size: 1.75rem;
 }
 
 .lobby-hero h1 {
@@ -5797,16 +5790,18 @@ body,
 .topbar-brand-icon {
   width: 1.875rem;
   height: 1.875rem;
-  border-radius: 0.5625rem;
-  background: var(--accent);
-  color: var(--accentText);
+  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.topbar-brand-icon .material-symbols-rounded {
-  font-size: 1.0625rem;
+/* The shield logo (2026-10-28 logo pack), inline so currentColor follows the
+   user's accent. The topbar uses the pack's bolder small drawing. */
+.topbar-brand-icon svg,
+.lobby-hero-icon svg {
+  width: 100%;
+  height: 100%;
 }
 
 .topbar-brand-name {

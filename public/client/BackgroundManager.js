@@ -12,6 +12,8 @@ import { syncPreference } from './AccountSettingsSync.js';
 // one per theme — copied verbatim from tailwind.css's :root/body.light. Only
 // the hue varies per preset; applyBackgroundTint() needs to know which
 // ladder is active, so it must be re-run whenever the theme itself changes.
+// Slate (hue 250) is the default since the 2026-10-28 logo pack: it's the
+// closest preset to the logo's Ink #121417 (hue ~258, near-neutral).
 const PRESETS = {
     violet: 286,
     slate: 250,
@@ -21,7 +23,7 @@ const PRESETS = {
     ocean: 200,
 };
 
-const DEFAULT_BG = 'violet';
+const DEFAULT_BG = 'slate';
 
 const DARK_LADDER = {
     bg1: [0.165, 0.014],

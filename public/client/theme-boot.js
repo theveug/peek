@@ -23,9 +23,9 @@
         document.body.classList.remove('dark', 'light');
         document.body.classList.add(theme);
 
-        var ACCENT_HUES = { violet: 286, indigo: 264, blue: 215, green: 155, amber: 70, pink: 355 };
+        var ACCENT_HUES = { orange: 38, violet: 286, indigo: 264, blue: 215, green: 155, amber: 70, pink: 355 };
         var accentName = localStorage.getItem('accentHue');
-        if (!ACCENT_HUES.hasOwnProperty(accentName)) accentName = 'violet';
+        if (!ACCENT_HUES.hasOwnProperty(accentName)) accentName = 'orange';
         var accentHue = ACCENT_HUES[accentName];
         var htmlStyle = document.documentElement.style;
         htmlStyle.setProperty('--accent', 'oklch(0.70 0.16 ' + accentHue + ')');
@@ -36,7 +36,7 @@
 
         var BG_HUES = { violet: 286, slate: 250, plum: 320, forest: 145, sand: 60, ocean: 200 };
         var bgName = localStorage.getItem('bgTint');
-        if (!BG_HUES.hasOwnProperty(bgName)) bgName = 'violet';
+        if (!BG_HUES.hasOwnProperty(bgName)) bgName = 'slate';
         var bgHue = BG_HUES[bgName];
         var ladder = isLight
             ? { bg1: [0.915, 0.012], bg2: [0.955, 0.009], bg3: [0.995, 0.003], bg4: [0.945, 0.012], bg5: [0.90, 0.014], border: [0.89, 0.013], input: [0.965, 0.008] }

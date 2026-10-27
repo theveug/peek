@@ -3,9 +3,12 @@
 // why this is safe (every use is inside a function body, not at module load).
 import { syncPreference } from './AccountSettingsSync.js';
 
-// The 6 accent choices from the design spec — all oklch(0.70 0.16 H) at a
-// different hue, so only H needs to vary per preset.
+// The accent choices from the design spec — all oklch(0.70 0.16 H) at a
+// different hue, so only H needs to vary per preset. Orange (hue 38) is the
+// logo's Signal #FF5A1F mapped onto that same fixed lightness/chroma, and the
+// default since the 2026-10-28 logo pack.
 const PRESETS = {
+    orange: 38,
     violet: 286,
     indigo: 264,
     blue: 215,
@@ -14,7 +17,7 @@ const PRESETS = {
     pink: 355,
 };
 
-const DEFAULT_ACCENT = 'violet';
+const DEFAULT_ACCENT = 'orange';
 
 export function getStoredAccent() {
     const stored = localStorage.getItem('accentHue');
