@@ -5804,6 +5804,13 @@ body,
   height: 100%;
 }
 
+/* Desktop app (see theme-boot.js): its title bar already shows the logo +
+   name, so drop the topbar's copy and the divider that followed it. */
+body.in-desktop-app .topbar-brand,
+body.in-desktop-app .topbar-brand + .topbar-divider {
+  display: none;
+}
+
 .topbar-brand-name {
   font-weight: 800;
   font-size: 1.0625rem;

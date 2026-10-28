@@ -14,6 +14,12 @@
 // FontScaleManager's min/max clamp range) change, update both here and in
 // the real modules.
 (function () {
+    // The peek-desktop shell already shows the app icon + name in its own
+    // title bar, so the topbar's brand would read twice. Electron's default
+    // user agent carries "Electron/x.y" — detected here (not via any bridge;
+    // the desktop app deliberately exposes none) and before paint, so the
+    // brand never flashes in. tailwind.css's `.in-desktop-app` rule hides it.
+    if (/\bElectron\//.test(navigator.userAgent)) document.body.classList.add('in-desktop-app');
     try {
         var theme = localStorage.getItem('theme');
         if (!theme) {
