@@ -47,10 +47,14 @@ jobs:
             echo "Deploy verified."
 
             # Cleanup only runs after a verified deploy. Neither command touches
-            # the running container or its image: build cache older than 7 days
-            # (recent cache kept for fast rebuilds), plus dangling images left
-            # behind by previous --build runs.
-            docker builder prune -a --filter "until=168h" -f
+            # the running container or its image: build cache trimmed down to a
+            # 2GB cap (least-recently-used removed first, so recent layers stay
+            # for fast rebuilds), plus dangling images left behind by previous
+            # --build runs. A size cap, not an age filter: the old
+            # --filter "until=168h" left 9.6GB of months-old cache in place.
+            # --keep-storage is deprecated on Docker 28+ but still accepted there,
+            # and it's the only spelling older engines understand.
+            docker builder prune -af --keep-storage 2gb
             docker image prune -f
             df -h / | tail -1
 
