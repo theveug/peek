@@ -24,8 +24,9 @@ const MIC_MODES = ['toggle', 'push-to-talk', 'voice-activity'];
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DEFAULT_THRESHOLD = 0.03;
 
-/** Sensitivity presets offered by the schedule editor (lower = more sensitive). */
-export const SENSITIVITY_PRESETS = { high: 0.02, medium: 0.04, low: 0.07 };
+/** Sensitivity levels offered by the schedule editor — the same 10 steps as
+ * Settings' slider (0.01-0.10, lower = more sensitive). */
+export const SENSITIVITY_LEVELS = Array.from({ length: 10 }, (_, i) => Number(((i + 1) / 100).toFixed(2)));
 
 function _sanitize(s) {
     if (!s || typeof s !== 'object' || typeof s.id !== 'string') return null;

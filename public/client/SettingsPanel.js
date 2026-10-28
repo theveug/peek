@@ -13,7 +13,7 @@ import { getCustomStatuses, getCustomStatus, upsertCustomStatus, deleteCustomSta
 import * as chatHistoryStore from './chatHistoryStore.js';
 import { isModifierCode, comboFromEvent } from './keybindUtils.js';
 import { syncAvatar } from './AccountSettingsSync.js';
-import { getMicSchedules, saveMicSchedules, newMicSchedule, activeMicSchedule, SENSITIVITY_PRESETS, MAX_MIC_SCHEDULES } from './MicSchedule.js';
+import { getMicSchedules, saveMicSchedules, newMicSchedule, activeMicSchedule, SENSITIVITY_LEVELS, MAX_MIC_SCHEDULES } from './MicSchedule.js';
 
 // Labels for the tri-state mute/deafen pickers in the custom-status form —
 // 'none' means "leave as-is," so a status can just as easily auto-unmute/
@@ -1880,7 +1880,10 @@ export class SettingsPanel {
             return el;
         };
 
-        const sensitivityKey = (t) => Object.keys(SENSITIVITY_PRESETS).find(k => SENSITIVITY_PRESETS[k] === t) || '';
+        // One option per slider step, labelled with the slider's own High/Medium/Low word.
+        const sensitivityWord = (t) => t <= 0.02 ? 'High' : t <= 0.06 ? 'Medium' : 'Low';
+        const sensitivityOptions = [['', 'Unchanged'], ...SENSITIVITY_LEVELS.map((t, i) =>
+            [String(t), `${i + 1}${i === 0 ? ' (most sensitive)' : i === 9 ? ' (least sensitive)' : ''} · ${sensitivityWord(t)}`])];
 
         list.forEach((s) => {
             const card = document.createElement('div');
@@ -1973,9 +1976,9 @@ export class SettingsPanel {
                     (v) => update(s.id, { micMode: v || null }),
                     'Mic mode')),
                 field('Sensitivity', select(
-                    [['', 'Unchanged'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']],
-                    sensitivityKey(s.micThreshold),
-                    (v) => update(s.id, { micThreshold: v ? SENSITIVITY_PRESETS[v] : null }),
+                    sensitivityOptions,
+                    s.micThreshold == null ? '' : String(s.micThreshold),
+                    (v) => update(s.id, { micThreshold: v ? parseFloat(v) : null }),
                     'Sensitivity')),
             );
 
