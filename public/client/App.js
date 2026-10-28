@@ -831,16 +831,45 @@ function toggleDeafen() {
 
 document.getElementById('deafen-toggle').addEventListener('click', toggleDeafen);
 
+// Top-bar "More" menu: holds the rarely-used raise-hand and recording actions.
+const topbarMoreButton = document.getElementById('topbar-more-button');
+const topbarMoreMenu = document.getElementById('topbar-more-menu');
+// Lights the ⋯ button while a hand is up or a recording is running, so that
+// state stays visible with the menu closed.
+function refreshTopbarMoreState() {
+    topbarMoreButton.classList.toggle('topbar-more-active', !!peerManager.handRaised || callRecorder.isRecording());
+}
+topbarMoreButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const opening = topbarMoreMenu.classList.contains('hidden');
+    topbarMoreMenu.classList.toggle('hidden', !opening);
+    if (opening) {
+        refreshRecordMode();
+        // Mode switching is only meaningful before a recording starts.
+        document.querySelectorAll('#record-mode-picker button[data-value]').forEach(b => {
+            b.disabled = callRecorder.isRecording();
+        });
+    }
+});
+document.addEventListener('click', (e) => {
+    if (!topbarMoreMenu.classList.contains('hidden') && !topbarMoreMenu.contains(e.target)) {
+        topbarMoreMenu.classList.add('hidden');
+    }
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') topbarMoreMenu.classList.add('hidden');
+});
+
 // Raise hand — a pure presence signal (no media side effects): broadcasts over
-// the same WS relay path as mic/deafen status, lights the dock button amber
-// while up, and PeerManager mirrors it onto our own participant card + the
-// sidebar's raised-hands queue via ui.updateParticipantHand.
+// the same WS relay path as mic/deafen status, and PeerManager mirrors it onto
+// our own participant card + the sidebar's raised-hands queue via
+// ui.updateParticipantHand.
 document.getElementById('raise-hand-toggle').addEventListener('click', () => {
     const raised = !peerManager.handRaised;
     peerManager.setHandRaised(raised);
-    const btn = document.getElementById('raise-hand-toggle');
-    btn.classList.toggle('dock-btn-active-amber', raised);
-    btn.dataset.tip = raised ? 'Lower hand' : 'Raise hand';
+    document.getElementById('raise-hand-label').textContent = raised ? 'Lower hand' : 'Raise hand';
+    topbarMoreMenu.classList.add('hidden');
+    refreshTopbarMoreState();
 });
 
 // --- Quick popovers off the dock buttons (deafen volume, screen/cam
@@ -1062,32 +1091,25 @@ startMicScheduler(async (settings, schedule) => {
 // the separate 'recording-status' broadcast CallRecorder sends for 'audio'/
 // 'composite' modes is what other peers see (a card badge + system message).
 const refreshRecordMode = wireSegmentedPicker('record-mode-picker', 'recordMode', () => {});
-wireQuickPopover('record-options-caret', 'record-options-popover', () => {
-    refreshRecordMode();
-    // Mode switching is only meaningful before a recording starts.
-    document.querySelectorAll('#record-mode-picker button[data-value]').forEach(b => {
-        b.disabled = callRecorder.isRecording();
-    });
-});
 
 document.getElementById('record-toggle').addEventListener('click', async () => {
-    const btn = document.getElementById('record-toggle');
+    const label = document.getElementById('record-label');
+    topbarMoreMenu.classList.add('hidden');
     if (callRecorder.isRecording()) {
         await callRecorder.stop();
-        btn.classList.remove('dock-btn-active-red');
-        btn.dataset.tip = 'Start recording';
+        label.textContent = 'Start recording';
         ui.showToast('Recording saved to your downloads');
     } else {
         const mode = localStorage.getItem('recordMode') || 'composite';
         try {
             await callRecorder.start(mode);
-            btn.classList.add('dock-btn-active-red');
-            btn.dataset.tip = 'Stop recording';
+            label.textContent = 'Stop recording';
             ui.showToast('Recording started — saved locally, nothing is sent to a server');
         } catch (err) {
             ui.showToast(err.message || 'Could not start recording');
         }
     }
+    refreshTopbarMoreState();
 });
 
 // Fires on 'init' and every creator rule change (PeerManager also passes an

@@ -3386,7 +3386,7 @@ body,
      that gap). Squaring it off butts the dock directly against #videos's
      edges, matching the panels' own square corners. */
   border-radius: 0;
-  padding: 0.375rem 0.75rem;
+  padding: 0.375rem 0.5rem;
   gap: 0.375rem;
   flex-wrap: wrap;
   row-gap: 0.375rem;
@@ -3757,17 +3757,6 @@ body,
   opacity: 0.9;
 }
 
-/* Raise-hand button while the hand is up — same solid-fill treatment as
-   .dock-btn-active-red, in the amber the raised-hand icon uses elsewhere. */
-.dock-btn-active-amber {
-  background: var(--amber);
-  color: #fff;
-}
-
-.dock-btn-active-amber:hover {
-  background: var(--amber);
-  opacity: 0.9;
-}
 
 /* ===== Raised hands (members sidebar queue + card badge) ===== */
 
@@ -4910,6 +4899,43 @@ body,
    #topbar-identity-signin (AccountPanel.js), which combines both classes. */
 .quick-status-option.hidden {
   display: none;
+}
+
+/* Top-bar "More" menu (raise hand, recording). Anchored to the ⋯ button's
+   right edge with its own width, since .quick-status-menu otherwise
+   stretches to its (icon-sized) wrapper. */
+.topbar-more-menu {
+  left: auto;
+  right: 0;
+  width: 17rem;
+}
+
+.topbar-more-section {
+  padding: 0.25rem 0.375rem 0.375rem;
+}
+
+.topbar-more-section .settings-segmented {
+  width: 100%;
+}
+
+.topbar-more-section .settings-segmented button {
+  flex: 1;
+  justify-content: center;
+  padding: 0.375rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.topbar-more-note {
+  margin-top: 0.375rem;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--t3);
+}
+
+/* Hand up or recording running: keep it visible while the menu is closed. */
+.topbar-icon-btn.topbar-more-active {
+  color: var(--amber);
 }
 
 .quick-status-dot {

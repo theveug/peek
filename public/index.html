@@ -114,6 +114,33 @@
                     </div>
                 </div>
 
+                <!-- Rarely-used room actions (raise hand, local recording), moved out of
+                     the controls dock so it only holds the everyday media buttons. -->
+                <div class="quick-status-dropdown">
+                    <button type="button" id="topbar-more-button" data-tip="More" class="topbar-icon-btn">
+                        <span class="material-symbols-rounded">more_horiz</span>
+                    </button>
+                    <div id="topbar-more-menu" class="quick-status-menu topbar-more-menu hidden">
+                        <button type="button" id="raise-hand-toggle" class="quick-status-option">
+                            <span class="material-symbols-rounded" style="font-size:1rem;">front_hand</span>
+                            <span id="raise-hand-label">Raise hand</span>
+                        </button>
+                        <div class="quick-status-menu-divider"></div>
+                        <button type="button" id="record-toggle" class="quick-status-option">
+                            <span class="material-symbols-rounded" style="font-size:1rem;">fiber_manual_record</span>
+                            <span id="record-label">Start recording</span>
+                        </button>
+                        <div class="topbar-more-section">
+                            <div class="settings-segmented" id="record-mode-picker">
+                                <button type="button" data-value="composite">Video</button>
+                                <button type="button" data-value="audio">Audio only</button>
+                                <button type="button" data-value="local">My stream</button>
+                            </div>
+                            <div class="topbar-more-note">Saves a local file to your device when you stop. Nothing is sent to a server.</div>
+                        </div>
+                    </div>
+                </div>
+
                 <button id="leave-room-button" data-tip="Leave Room" class="topbar-leave-btn">
                     <span class="material-symbols-rounded">call_end</span>
                     <span class="topbar-leave-label">Leave</span>
@@ -737,26 +764,6 @@
                             <span class="material-symbols-rounded">volume_up</span>
                             <input id="deafen-volume-slider" type="range" min="0" max="1" step="0.01" />
                             <span id="deafen-volume-value" class="dock-volume-value">100%</span>
-                        </div>
-                    </div>
-                    <button id="raise-hand-toggle" data-tip="Raise hand" class="dock-btn">
-                        <span class="material-symbols-rounded">front_hand</span>
-                    </button>
-                    <div class="dock-btn-wrap relative">
-                        <button id="record-toggle" data-tip="Start recording" class="dock-btn">
-                            <span class="material-symbols-rounded">fiber_manual_record</span>
-                        </button>
-                        <button type="button" id="record-options-caret" data-tip="Recording options" class="dock-caret">
-                            <span class="material-symbols-rounded">expand_less</span>
-                        </button>
-                        <div id="record-options-popover" class="dock-quick-popover hidden">
-                            <div class="dock-quick-popover-label">Record</div>
-                            <div class="settings-segmented" id="record-mode-picker">
-                                <button type="button" data-value="composite">Video</button>
-                                <button type="button" data-value="audio">Audio only</button>
-                                <button type="button" data-value="local">My stream</button>
-                            </div>
-                            <div class="dock-popover-note">Saves a local file to your device when you stop. Nothing is sent to a server.</div>
                         </div>
                     </div>
                 </div>
