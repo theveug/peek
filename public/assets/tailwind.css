@@ -89,10 +89,10 @@ html {
   --t1: oklch(0.96 0.005 250);
   --t2: oklch(0.75 0.012 250);
   --t3: oklch(0.6 0.014 250);
-  --accent: oklch(0.7 0.16 38);
-  --accentH: oklch(0.76 0.155 38);
-  --accentSoft: oklch(0.7 0.16 38 / 0.18);
-  --accentSoft2: oklch(0.7 0.16 38 / 0.32);
+  --accent: oklch(0.68 0.21 38);
+  --accentH: oklch(0.74 0.19 38);
+  --accentSoft: oklch(0.68 0.21 38 / 0.18);
+  --accentSoft2: oklch(0.68 0.21 38 / 0.32);
   --accentText: oklch(0.99 0 0);
   --green: oklch(0.8 0.17 150);
   --amber: oklch(0.8 0.14 85);

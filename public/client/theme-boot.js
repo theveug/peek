@@ -27,11 +27,15 @@
         var accentName = localStorage.getItem('accentHue');
         if (!ACCENT_HUES.hasOwnProperty(accentName)) accentName = 'orange';
         var accentHue = ACCENT_HUES[accentName];
+        // Mirrors AccentManager.js's LC table (orange = the logo's exact #FF5A1F).
+        var ACCENT_LC = { orange: [0.68, 0.21, 0.74, 0.19] };
+        var alc = ACCENT_LC[accentName] || [0.70, 0.16, 0.76, 0.155];
+        var aBase = alc[0] + ' ' + alc[1] + ' ' + accentHue;
         var htmlStyle = document.documentElement.style;
-        htmlStyle.setProperty('--accent', 'oklch(0.70 0.16 ' + accentHue + ')');
-        htmlStyle.setProperty('--accentH', 'oklch(0.76 0.155 ' + accentHue + ')');
-        htmlStyle.setProperty('--accentSoft', 'oklch(0.70 0.16 ' + accentHue + ' / 0.18)');
-        htmlStyle.setProperty('--accentSoft2', 'oklch(0.70 0.16 ' + accentHue + ' / 0.32)');
+        htmlStyle.setProperty('--accent', 'oklch(' + aBase + ')');
+        htmlStyle.setProperty('--accentH', 'oklch(' + alc[2] + ' ' + alc[3] + ' ' + accentHue + ')');
+        htmlStyle.setProperty('--accentSoft', 'oklch(' + aBase + ' / 0.18)');
+        htmlStyle.setProperty('--accentSoft2', 'oklch(' + aBase + ' / 0.32)');
         htmlStyle.setProperty('--accentText', 'oklch(0.99 0 0)');
 
         var BG_HUES = { violet: 286, slate: 250, plum: 320, forest: 145, sand: 60, ocean: 200 };

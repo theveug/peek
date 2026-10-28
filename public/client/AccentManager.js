@@ -3,10 +3,11 @@
 // why this is safe (every use is inside a function body, not at module load).
 import { syncPreference } from './AccountSettingsSync.js';
 
-// The accent choices from the design spec — all oklch(0.70 0.16 H) at a
-// different hue, so only H needs to vary per preset. Orange (hue 38) is the
-// logo's Signal #FF5A1F mapped onto that same fixed lightness/chroma, and the
-// default since the 2026-10-28 logo pack.
+// The accent choices from the design spec — oklch(0.70 0.16 H) at a
+// different hue. Orange is the exception: it's the logo's Signal #FF5A1F
+// exactly (oklch 0.68 0.21 38), not squeezed onto the shared lightness/chroma,
+// which left it visibly paler than the logo beside it. Default since the
+// 2026-10-28 logo pack. Keep theme-boot.js's copy in sync.
 const PRESETS = {
     orange: 38,
     violet: 286,
@@ -17,7 +18,16 @@ const PRESETS = {
     pink: 355,
 };
 
+// Per-preset [lightness, chroma, hover lightness, hover chroma]; anything not
+// listed uses the shared ladder.
+const LC = { orange: [0.68, 0.21, 0.74, 0.19] };
+const BASE_LC = [0.70, 0.16, 0.76, 0.155];
+
 const DEFAULT_ACCENT = 'orange';
+
+function lcFor(name) {
+    return LC[name] ?? BASE_LC;
+}
 
 export function getStoredAccent() {
     const stored = localStorage.getItem('accentHue');
@@ -25,12 +35,14 @@ export function getStoredAccent() {
 }
 
 export function applyAccent(name) {
-    const hue = PRESETS[name] ?? PRESETS[DEFAULT_ACCENT];
+    if (!PRESETS[name]) name = DEFAULT_ACCENT;
+    const hue = PRESETS[name];
+    const [l, c, hl, hc] = lcFor(name);
     const root = document.documentElement.style;
-    root.setProperty('--accent', `oklch(0.70 0.16 ${hue})`);
-    root.setProperty('--accentH', `oklch(0.76 0.155 ${hue})`);
-    root.setProperty('--accentSoft', `oklch(0.70 0.16 ${hue} / 0.18)`);
-    root.setProperty('--accentSoft2', `oklch(0.70 0.16 ${hue} / 0.32)`);
+    root.setProperty('--accent', `oklch(${l} ${c} ${hue})`);
+    root.setProperty('--accentH', `oklch(${hl} ${hc} ${hue})`);
+    root.setProperty('--accentSoft', `oklch(${l} ${c} ${hue} / 0.18)`);
+    root.setProperty('--accentSoft2', `oklch(${l} ${c} ${hue} / 0.32)`);
     root.setProperty('--accentText', 'oklch(0.99 0 0)');
 }
 
@@ -50,6 +62,7 @@ export function accentPresetNames() {
 }
 
 export function presetColor(name) {
-    const hue = PRESETS[name] ?? PRESETS[DEFAULT_ACCENT];
-    return `oklch(0.70 0.16 ${hue})`;
+    if (!PRESETS[name]) name = DEFAULT_ACCENT;
+    const [l, c] = lcFor(name);
+    return `oklch(${l} ${c} ${PRESETS[name]})`;
 }
