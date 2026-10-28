@@ -250,11 +250,6 @@ export class UIController {
     _addFileToTab(entry) {
         this._sharedFiles.push(entry);
         document.getElementById('files-empty-state').classList.add('hidden');
-        const badge = document.getElementById('files-tab-badge');
-        badge.textContent = this._sharedFiles.length;
-        badge.classList.remove('hidden');
-        badge.classList.add('flex');
-        this.updateTabBarCompact();
         if (this._sharedFiles.length >= 2) {
             document.getElementById('files-download-wrap').classList.remove('hidden');
         }

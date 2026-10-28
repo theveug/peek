@@ -71,6 +71,30 @@ export class ChatUI {
         this._wirePinnedPanel();
         this._wireSearchPanel();
         this._wireAutoScrollResize();
+        this._wireUnreadClear();
+    }
+
+    /**
+     * Clears the unread dot/mention badge once the latest message is actually
+     * on screen — window focused, chat tab open, log scrolled to the bottom.
+     * Before this, the only things that cleared it were reopening the chat
+     * panel or switching tabs, so a message that arrived while alt-tabbed
+     * away left the dot (and the desktop app's tray/taskbar badge, which
+     * polls `#new-message-indicator`) lit indefinitely after coming back.
+     * Scrolled up reading history keeps it lit until reaching the bottom.
+     * @returns {void}
+     */
+    _wireUnreadClear() {
+        const check = () => {
+            if (!document.hasFocus() || this._isChatViewClosed()) return;
+            const chatLog = document.getElementById('chat-log');
+            if (!chatLog || !this._isAtBottom(chatLog)) return;
+            document.getElementById('new-message-indicator')?.classList.add('hidden');
+            document.getElementById('mention-indicator')?.classList.add('hidden');
+        };
+        window.addEventListener('focus', check);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+        document.getElementById('chat-log')?.addEventListener('scroll', check, { passive: true });
     }
 
     /**
@@ -987,11 +1011,10 @@ export class ChatUI {
         }
 
         this._scrollToBottom(chatLog);
-
-        if (!document.hasFocus() || this._isChatViewClosed()) {
-            const indicator = document.getElementById('new-message-indicator');
-            if (indicator) indicator.classList.remove('hidden');
-        }
+        // Deliberately never lights #new-message-indicator: joins/leaves/
+        // quality notices aren't messages anyone sent, and badging them kept
+        // the dot (and the desktop app's tray/taskbar badge) lit in any busy
+        // room. Only real chat messages and shared files badge.
     }
 
     /**
