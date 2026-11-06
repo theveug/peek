@@ -24,6 +24,7 @@ import { updateSavedRoomPassword, isRoomSaved, saveRoom, removeRoom } from './sa
 import { isModifierCode, comboFromEvent, isComboHeld } from './keybindUtils.js';
 import { CallRecorder } from './CallRecorder.js';
 import { PreJoinSetup, shouldShowDeviceCheck } from './PreJoinSetup.js';
+import { getQuality, setQualityOverride } from './qualityOverrides.js';
 
 initTooltips();
 
@@ -990,12 +991,13 @@ function wireSegmentedPicker(containerId, storageKey, onChange) {
     const container = document.getElementById(containerId);
     const buttons = container ? Array.from(container.querySelectorAll('button[data-value]')) : [];
     const refresh = () => {
-        const current = localStorage.getItem(storageKey);
+        const current = getQuality(storageKey);
         buttons.forEach(b => b.classList.toggle('active', b.dataset.value === current));
     };
     buttons.forEach(btn => {
         btn.addEventListener('click', () => {
-            localStorage.setItem(storageKey, btn.dataset.value);
+            // Session-only: Settings holds the saved default (see qualityOverrides.js).
+            setQualityOverride(storageKey, btn.dataset.value);
             refresh();
             onChange?.(btn.dataset.value);
         });

@@ -1,4 +1,5 @@
 // --- public/client/QuickRoomSettings.js ---
+import { getQuality, setQualityOverride } from './qualityOverrides.js';
 // Small popover off the controls bar for the handful of settings people
 // actually want to change mid-room (file trust, follow-speaker, screen/cam
 // quality) without opening the full settings panel. Reads/writes the exact
@@ -74,7 +75,8 @@ export class QuickRoomSettings {
         if (!container) return;
         container.querySelectorAll('button').forEach(btn => {
             btn.addEventListener('click', () => {
-                localStorage.setItem(storageKey, btn.dataset.value);
+                // Session-only: Settings holds the saved default (see qualityOverrides.js).
+                setQualityOverride(storageKey, btn.dataset.value);
                 container.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
                 onApply?.();
             });
@@ -84,7 +86,7 @@ export class QuickRoomSettings {
     _highlightSegmented(containerId, storageKey, fallback) {
         const container = document.getElementById(containerId);
         if (!container) return;
-        const current = localStorage.getItem(storageKey) || fallback;
+        const current = getQuality(storageKey) || fallback;
         container.querySelectorAll('button').forEach(b => {
             b.classList.toggle('active', b.dataset.value === current);
         });

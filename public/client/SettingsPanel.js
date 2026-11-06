@@ -13,6 +13,7 @@ import { getCustomStatuses, getCustomStatus, upsertCustomStatus, deleteCustomSta
 import * as chatHistoryStore from './chatHistoryStore.js';
 import { isModifierCode, comboFromEvent } from './keybindUtils.js';
 import { syncAvatar } from './AccountSettingsSync.js';
+import { clearQualityOverride } from './qualityOverrides.js';
 import { getMicSchedules, saveMicSchedules, newMicSchedule, activeMicSchedule, SENSITIVITY_LEVELS, MAX_MIC_SCHEDULES } from './MicSchedule.js';
 
 // Labels for the tri-state mute/deafen pickers in the custom-status form —
@@ -1319,6 +1320,8 @@ export class SettingsPanel {
         container.querySelectorAll('button').forEach(btn => {
             btn.addEventListener('click', () => {
                 localStorage.setItem(storageKey, btn.dataset.value);
+                // Changing the saved default also ends any in-call temp override.
+                clearQualityOverride(storageKey);
                 container.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
                 onApply?.();
             });

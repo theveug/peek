@@ -1,6 +1,7 @@
 // --- public/client/PeerManager.js ---
 import { setSharingWithAudio } from './SoundPlayer.js';
 import { syncPreference } from './AccountSettingsSync.js';
+import { getQuality } from './qualityOverrides.js';
 
 const RES_RANK = { '640x360': 0, '640x480': 1, '1280x720': 2, '1920x1080': 3, '2560x1440': 4, source: 5 };
 
@@ -817,8 +818,8 @@ export class PeerManager {
      */
     _resolveQuality(kind) {
         const isCam = kind === 'cam';
-        const resVal = localStorage.getItem(isCam ? 'camRes' : 'screenShareRes') || (isCam ? '640x480' : '1280x720');
-        const fpsVal = parseInt(localStorage.getItem(isCam ? 'camFps' : 'screenShareFps') || '30', 10);
+        const resVal = getQuality(isCam ? 'camRes' : 'screenShareRes') || (isCam ? '640x480' : '1280x720');
+        const fpsVal = parseInt(getQuality(isCam ? 'camFps' : 'screenShareFps') || '30', 10);
 
         const tier = this._qualityTier();
         const cappedRes = this._capResolution(resVal, tier ? (isCam ? tier.camRes : tier.screenRes) : null);

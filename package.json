@@ -54,6 +54,7 @@
     "test:deafen-persist": "node tests/deafen-persistence.mjs",
     "test:mobile-controls-stacking": "node tests/mobile-controls-stacking.mjs",
     "test:quick-popover-clamp": "node tests/quick-popover-clamp.mjs",
+    "test:quality-overrides": "node tests/quality-overrides.mjs",
     "test:chat-autoscroll": "node tests/chat-autoscroll.mjs",
     "test:prejoin-setup": "node tests/prejoin-setup.mjs"
   },
