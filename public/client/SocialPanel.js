@@ -31,6 +31,35 @@ import { trapFocus } from './focusTrap.js';
 import { startPresencePolling } from './presencePoll.js';
 import { startMessagesPolling } from './messagesPoll.js';
 
+// Room chat's markdown/highlight vendor bundles (index.html loads these as
+// plain <script> tags). The lobby doesn't, so a DM opened there used to be
+// plain text with no code blocks. Loaded on demand, and only once a
+// deployment with accounts is confirmed, so the lobby's first paint for
+// everyone else stays as light as before. Same-origin files, so the strict
+// `script-src 'self'` CSP allows them.
+const CHAT_LIBS = [
+    '/assets/vendor/marked.min.js',
+    '/assets/vendor/purify.min.js',
+    '/assets/vendor/highlight.min.js',
+    '/assets/vendor/hljs-autohotkey.min.js',
+    '/assets/vendor/hljs-powershell.min.js',
+    '/assets/vendor/hljs-dockerfile.min.js',
+    '/client/markdown-setup.js',
+];
+
+async function loadChatRenderingLibs() {
+    if (typeof marked !== 'undefined') return; // room page already has them
+    for (const src of CHAT_LIBS) {
+        await new Promise((resolve) => {
+            const s = document.createElement('script');
+            s.src = src;
+            s.onload = resolve;
+            s.onerror = resolve; // a missing lib just means plain-text fallback
+            document.head.appendChild(s);
+        });
+    }
+}
+
 export class SocialPanel {
     /**
      * @param {{hideMessagesTab?: boolean}} [opts] Trial (2026-09-09,
@@ -65,7 +94,16 @@ export class SocialPanel {
         // trick SettingsPanel.js's section controllers rely on to stay simple
         // regardless of which page built the modal.
         this.friendsPanel = new FriendsPanel();
-        if (!this._hideMessagesTab) this.messagesPanel = new MessagesPanel();
+        if (!this._hideMessagesTab) {
+            // Must finish before MessagesPanel is built: its composer drops
+            // the "Code block" option when hljs isn't loaded.
+            await loadChatRenderingLibs();
+            this.messagesPanel = new MessagesPanel({
+                split: true,
+                isVisible: () => this._activeTab === 'messages' && !this.modal.classList.contains('hidden'),
+                isInboxVisible: () => !this.modal.classList.contains('hidden'),
+            });
+        }
 
         this._wireNav();
         if (!this._hideMessagesTab) this._wireOpenDm();
@@ -150,7 +188,7 @@ export class SocialPanel {
             <div class="social-drawer">
                 <div class="social-header">
                     <h2 class="social-header-title">Friends</h2>
-                    <button type="button" id="close-social-panel" class="settings-close-btn" data-tip="Close">
+                    <button type="button" class="settings-close-btn" data-social-close data-tip="Close">
                         <span class="settings-close-btn-icon"><span class="material-symbols-rounded">close</span></span>
                         <span class="settings-close-btn-esc">ESC</span>
                     </button>
@@ -160,63 +198,93 @@ export class SocialPanel {
                 </div>
             </div>
         ` : `
-            <div class="social-backdrop"></div>
-            <div class="social-drawer">
-                <div class="social-header">
-                    <h2 class="social-header-title">Friends &amp; Messages</h2>
-                    <button type="button" id="close-social-panel" class="settings-close-btn" data-tip="Close">
-                        <span class="settings-close-btn-icon"><span class="material-symbols-rounded">close</span></span>
-                        <span class="settings-close-btn-esc">ESC</span>
-                    </button>
-                </div>
+            <div class="social-home" id="social-home">
+                <aside class="social-home-sidebar">
+                    <div class="social-home-sidebar-header">
+                        <h2 class="social-header-title">Friends &amp; Messages</h2>
+                        <button type="button" class="settings-close-btn social-home-close-mobile" data-social-close data-tip="Close">
+                            <span class="settings-close-btn-icon"><span class="material-symbols-rounded">close</span></span>
+                        </button>
+                    </div>
+                    <div class="social-home-sidebar-scroll">
+                        <button type="button" class="social-home-nav-item" data-social-tab="friends">
+                            <span class="material-symbols-rounded">group</span>
+                            <span class="flex-1 text-left">Friends</span>
+                            <span id="social-requests-badge" class="messages-inbox-unread-count hidden"></span>
+                        </button>
+                        <div class="social-home-section-label">Direct messages</div>
+                        <div id="messages-inbox-view">
+                            <div id="messages-inbox-list" class="social-dm-list"></div>
+                        </div>
+                    </div>
+                </aside>
 
-                <div class="settings-segmented social-tabs">
-                    <button type="button" data-social-tab="friends">Friends</button>
-                    <button type="button" class="active" data-social-tab="messages">Messages</button>
-                </div>
-
-                <div class="social-body">
-                    <div class="social-tab-panel" data-social-panel="friends">${friendsPanelHtml}</div>
-
-                    <div class="social-tab-panel active" data-social-panel="messages">
-                        <div class="quick-settings-header messages-section-header">
-                            <button type="button" id="messages-back-btn" class="hidden messages-back-btn" data-tip="Back to conversations">
+                <main class="social-home-main">
+                    <section class="social-tab-panel" data-social-panel="friends">
+                        <header class="social-home-main-header">
+                            <button type="button" class="messages-back-btn social-home-back" data-social-back data-tip="Back">
                                 <span class="material-symbols-rounded">arrow_back</span>
                             </button>
-                            <span id="messages-popover-title">Messages</span>
+                            <span class="material-symbols-rounded social-home-header-icon">group</span>
+                            <span class="social-home-header-title">Friends</span>
+                            <button type="button" class="settings-close-btn social-home-close" data-social-close data-tip="Close">
+                                <span class="settings-close-btn-icon"><span class="material-symbols-rounded">close</span></span>
+                                <span class="settings-close-btn-esc">ESC</span>
+                            </button>
+                        </header>
+                        <div class="social-home-friends-body">
+                            <div class="social-home-friends-inner">${friendsPanelHtml}</div>
                         </div>
+                    </section>
 
-                        <div id="messages-inbox-view">
-                            <div id="messages-inbox-list" class="quick-banned-list"></div>
+                    <section class="social-tab-panel" data-social-panel="messages">
+                        <header class="social-home-main-header">
+                            <button type="button" id="messages-back-btn" class="messages-back-btn social-home-back" data-social-back data-tip="Back to conversations">
+                                <span class="material-symbols-rounded">arrow_back</span>
+                            </button>
+                            <span id="messages-partner-avatar" class="social-home-partner-avatar"></span>
+                            <span id="messages-popover-title" class="social-home-header-title">Messages</span>
+                            <span id="messages-partner-status" class="social-home-partner-status"></span>
+                            <button type="button" class="settings-close-btn social-home-close" data-social-close data-tip="Close">
+                                <span class="settings-close-btn-icon"><span class="material-symbols-rounded">close</span></span>
+                                <span class="settings-close-btn-esc">ESC</span>
+                            </button>
+                        </header>
+
+                        <div id="messages-empty-view" class="social-home-empty">
+                            <span class="material-symbols-rounded">forum</span>
+                            <p>Pick a conversation on the left, or message a friend from <strong>Friends</strong>.</p>
                         </div>
 
                         <div id="messages-conversation-view" class="hidden">
                             <div id="messages-thread" class="messages-thread"></div>
-                            <div class="chat-composer">
-                                <div class="composer-plus-wrap">
-                                    <button id="messages-composer-plus-btn" data-tip="Add" class="chat-composer-btn shrink-0">
-                                        <span class="material-symbols-rounded">add</span>
-                                    </button>
-                                    <div id="messages-composer-plus-menu" class="composer-plus-menu hidden">
-                                        <button type="button" id="messages-code-block-btn" class="composer-plus-option">
-                                            <span class="w-4 h-4 flex items-center justify-center material-symbols-rounded text-base leading-none">code</span>
-                                            Code block
+                            <div class="social-dm-composer-wrap">
+                                <div class="chat-composer social-dm-composer">
+                                    <div class="composer-plus-wrap">
+                                        <button id="messages-composer-plus-btn" data-tip="Add" class="chat-composer-btn shrink-0">
+                                            <span class="material-symbols-rounded">add</span>
                                         </button>
-                                        <button type="button" id="messages-emoji-btn" class="composer-plus-option">
-                                            <span class="w-4 h-4 flex items-center justify-center text-base leading-none">😀</span>
-                                            Add emoji
-                                        </button>
+                                        <div id="messages-composer-plus-menu" class="composer-plus-menu hidden">
+                                            <button type="button" id="messages-code-block-btn" class="composer-plus-option">
+                                                <span class="w-4 h-4 flex items-center justify-center material-symbols-rounded text-base leading-none">code</span>
+                                                Code block
+                                            </button>
+                                            <button type="button" id="messages-emoji-btn" class="composer-plus-option">
+                                                <span class="w-4 h-4 flex items-center justify-center text-base leading-none">😀</span>
+                                                Add emoji
+                                            </button>
+                                        </div>
                                     </div>
+                                    <textarea id="messages-input" rows="1" placeholder="Message"
+                                        class="chat-composer-input" maxlength="4000"></textarea>
+                                    <button type="button" id="messages-send-btn" data-tip="Send" class="chat-composer-send shrink-0">
+                                        <span class="material-symbols-rounded">send</span>
+                                    </button>
                                 </div>
-                                <textarea id="messages-input" rows="1" placeholder="Message"
-                                    class="chat-composer-input" maxlength="4000"></textarea>
-                                <button type="button" id="messages-send-btn" data-tip="Send" class="chat-composer-send shrink-0">
-                                    <span class="material-symbols-rounded">send</span>
-                                </button>
                             </div>
                         </div>
-                    </div>
-                </div>
+                    </section>
+                </main>
             </div>
         `;
         document.body.appendChild(modal);
@@ -264,7 +332,19 @@ export class SocialPanel {
 
     open(tab = null) {
         if (!this.modal) return;
-        this._activateTab(tab || this.modal.querySelector('.social-tabs button.active')?.dataset.socialTab || (this._hideMessagesTab ? 'friends' : 'messages'));
+        if (this._hideMessagesTab) {
+            this._activateTab('friends');
+        } else {
+            // Lobby Home view: land on the conversation that was open last
+            // time, else Friends (Discord's own default). The DM list in the
+            // sidebar is always visible, so refresh it on every open.
+            const fallback = this.messagesPanel?.hasActiveConversation() ? 'messages' : 'friends';
+            // Phone: a plain open starts on the list, not wherever it was left.
+            if (!tab) this.modal.querySelector('.social-home')?.classList.remove('show-main');
+            this._activateTab(tab || this._activeTab || fallback, { showMain: !!tab });
+            this.messagesPanel?.refreshInbox();
+            if (this._activeTab !== 'friends') this.friendsPanel?.onShow(); // keeps the requests badge current
+        }
         this.modal.classList.remove('hidden');
         // Idempotence guard in case open() is ever called while already
         // open — don't stack a second trap (same guard SettingsPanel uses).
@@ -286,8 +366,13 @@ export class SocialPanel {
     }
 
     _wireCloseHandlers() {
-        this.modal.querySelector('#close-social-panel')?.addEventListener('click', () => this.close());
+        this.modal.querySelectorAll('[data-social-close]').forEach(btn => btn.addEventListener('click', () => this.close()));
         this.modal.querySelector('.social-backdrop')?.addEventListener('click', () => this.close());
+        // Phone width: the Home view shows the sidebar OR the main pane, not
+        // both — back buttons return to the sidebar list.
+        this.modal.querySelectorAll('[data-social-back]').forEach(btn => btn.addEventListener('click', () => {
+            this.modal.querySelector('.social-home')?.classList.remove('show-main');
+        }));
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && !this.modal.classList.contains('hidden')) this.close();
         });
@@ -295,18 +380,26 @@ export class SocialPanel {
 
     // --- Tabs ---
 
-    _activateTab(tab) {
-        this.modal.querySelectorAll('.social-tabs button').forEach(b => {
+    /**
+     * @param {'friends'|'messages'} tab
+     * @param {{showMain?: boolean}} [opts] - phone width only: switch from the
+     *   sidebar list to the main pane. True for an explicit pick (a nav click,
+     *   opening a DM), false when open() is just restoring the last tab.
+     */
+    _activateTab(tab, { showMain = true } = {}) {
+        this._activeTab = tab;
+        this.modal.querySelectorAll('[data-social-tab]').forEach(b => {
             b.classList.toggle('active', b.dataset.socialTab === tab);
         });
         this.modal.querySelectorAll('.social-tab-panel').forEach(panel => {
             panel.classList.toggle('active', panel.dataset.socialPanel === tab);
         });
+        if (showMain) this.modal.querySelector('.social-home')?.classList.add('show-main');
         this._onTabShown(tab);
     }
 
     _wireNav() {
-        this.modal.querySelectorAll('.social-tabs button').forEach(btn => {
+        this.modal.querySelectorAll('[data-social-tab]').forEach(btn => {
             btn.addEventListener('click', () => this._activateTab(btn.dataset.socialTab));
         });
     }
@@ -320,14 +413,13 @@ export class SocialPanel {
         else if (tab === 'messages') this.messagesPanel?.onShow();
     }
 
-    // FriendsPanel.js's "Message" row action dispatches this (no direct
-    // reference between the two sub-panels — same cross-module signal shape
-    // as peek:account). MessagesPanel.js has its own listener on the same
-    // event that shows the actual conversation; this one just makes sure the
-    // whole drawer is open and the Messages tab is the one showing. Order
-    // between the two listeners doesn't matter — MessagesPanel.onShow() is
-    // idempotent w.r.t. an already-open conversation (see its own header
-    // comment), so whichever runs second doesn't undo the other.
+    // FriendsPanel.js's "Message" row action and the Home view's DM list
+    // rows both dispatch this (no direct reference between the sub-panels —
+    // same cross-module signal shape as peek:account). MessagesPanel.js has
+    // its own listener on the same event that shows the actual conversation;
+    // this one just makes sure the whole view is open on the Messages pane.
+    // Order between the two listeners doesn't matter — MessagesPanel.onShow()
+    // is idempotent w.r.t. an already-open conversation.
     _wireOpenDm() {
         document.addEventListener('peek:open-dm', () => this.open('messages'));
     }
@@ -350,7 +442,10 @@ export class SocialPanel {
             // pollers.
             if (!this._stopPresencePolling) {
                 this._stopPresencePolling = startPresencePolling(
-                    (presence) => this.friendsPanel.setOnline(presence),
+                    (presence) => {
+                        this.friendsPanel.setOnline(presence);
+                        this.messagesPanel?.setPresence(presence);
+                    },
                     () => document.dispatchEvent(new CustomEvent('peek:force-logout')),
                 );
             }

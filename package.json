@@ -56,12 +56,15 @@
     "test:quick-popover-clamp": "node tests/quick-popover-clamp.mjs",
     "test:quality-overrides": "node tests/quality-overrides.mjs",
     "test:chat-autoscroll": "node tests/chat-autoscroll.mjs",
-    "test:prejoin-setup": "node tests/prejoin-setup.mjs"
+    "test:prejoin-setup": "node tests/prejoin-setup.mjs",
+    "test:lobby-dm-home": "node tests/lobby-dm-home.mjs"
   },
   "author": "",
   "license": "ISC",
   "nodemonConfig": {
-    "ignore": ["data/*"]
+    "ignore": [
+      "data/*"
+    ]
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.0",

@@ -3044,7 +3044,42 @@ button.participant-menu-row:hover {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* No sideways scroll bar (owner-reported 2026-11-08) — long words wrap,
+     and a wide code block scrolls inside its own <pre> instead. */
+  overflow-x: hidden;
   margin-bottom: 0.75rem;
+}
+
+.messages-thread .chat-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* "This is the start of your messages with X" header (MessagesPanel.js's
+   _threadIntro()). margin-top:auto pins a short thread to the bottom, next
+   to the composer, the way a fresh chat looks. */
+.messages-thread-intro {
+  margin-top: auto;
+  padding: 1.5rem 1rem 0.75rem;
+}
+
+.messages-thread-intro .chat-avatar {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 9999px;
+  font-size: 1.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.messages-thread-intro-name {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--t1);
+}
+
+.messages-thread-intro-sub {
+  font-size: 0.875rem;
+  color: var(--t3);
 }
 
 /* Room chat-panel tab context (App.js's initRoomMessagesTab trial): unlike
@@ -3192,6 +3227,357 @@ button.participant-menu-row:hover {
 @media (max-width: 767px) {
   .social-drawer {
     width: 100%;
+  }
+}
+
+/* ===== Social Home view (lobby Friends & Messages, 2026-11-08) =====
+   Owner-reported: the lobby's DM view was a 24rem drawer, "crammed to one
+   side" with stray scroll bars. On the lobby SocialPanel.js now builds a
+   Discord-style Home instead: full page beside the room rail, a sidebar with
+   Friends + the DM list, and the open conversation filling the rest like a
+   room chat. The room page keeps its Friends-only .social-drawer above. */
+#social-modal .social-home {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  left: var(--room-rail-width);
+  display: flex;
+  background: var(--bg2);
+}
+
+.social-home-sidebar {
+  flex: none;
+  width: 17rem;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg3);
+  border-right: 1px solid var(--border);
+}
+
+.social-home-sidebar-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 3.5rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.social-home-sidebar-header .social-header-title {
+  font-size: 1rem;
+}
+
+.social-home-sidebar-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.social-home-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--radius-sm);
+  color: var(--t2);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.social-home-nav-item:hover {
+  background: var(--bg4);
+  color: var(--t1);
+}
+
+.social-home-nav-item.active {
+  background: var(--bg5);
+  color: var(--t1);
+}
+
+.social-home-section-label {
+  padding: 1rem 0.625rem 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+
+.social-dm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.social-dm-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: var(--radius-sm);
+  --dm-row-bg: var(--bg3);
+}
+
+.social-dm-row:hover {
+  background: var(--bg4);
+  --dm-row-bg: var(--bg4);
+}
+
+.social-dm-row.active {
+  background: var(--bg5);
+  --dm-row-bg: var(--bg5);
+}
+
+.social-dm-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.social-dm-row .quick-banned-name {
+  font-size: 0.875rem;
+  color: var(--t2);
+}
+
+.social-dm-row:hover .quick-banned-name,
+.social-dm-row.active .quick-banned-name,
+.social-dm-row.has-unread .quick-banned-name {
+  color: var(--t1);
+}
+
+.social-dm-row.has-unread .quick-banned-name {
+  font-weight: 800;
+}
+
+.social-dm-row .messages-inbox-preview {
+  font-size: 0.75rem;
+}
+
+.social-dm-avatar {
+  position: relative;
+  flex: none;
+}
+
+.social-dm-avatar .chat-avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+}
+
+.social-dm-presence {
+  position: absolute;
+  right: -0.125rem;
+  bottom: -0.125rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  background: var(--t3);
+  border: 2px solid var(--dm-row-bg);
+}
+
+.social-dm-presence.is-online {
+  background: var(--green);
+}
+
+.social-dm-empty {
+  padding: 0.5rem 0.625rem;
+  font-size: 0.8125rem;
+  color: var(--t3);
+}
+
+.social-home-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.social-home .social-tab-panel.active {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.social-home-main-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 3.5rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.social-home-header-icon {
+  color: var(--t3);
+}
+
+.social-home-header-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--t1);
+}
+
+.social-home-partner-avatar:empty {
+  display: none;
+}
+
+.social-home-partner-avatar .chat-avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+}
+
+.social-home-partner-status {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--t3);
+}
+
+.social-home-partner-status:not(:empty)::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--t3);
+}
+
+.social-home-partner-status.is-online::before {
+  background: var(--green);
+}
+
+/* Compact close button for the 3.5rem headers (Settings' own version has a
+   stacked ESC label that would make the header taller). */
+.social-home .settings-close-btn-esc {
+  display: none;
+}
+
+.social-home .settings-close-btn-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-md);
+}
+
+.social-home .settings-close-btn:hover {
+  color: var(--t1);
+}
+
+.social-home .social-home-close {
+  margin-left: auto;
+}
+
+/* Desktop shows sidebar and main side by side: no back buttons, and only
+   the main-header close. */
+.social-home .social-home-back,
+.social-home .social-home-close-mobile {
+  display: none;
+}
+
+.social-home-friends-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+.social-home-friends-inner {
+  max-width: 40rem;
+  margin: 0 auto;
+}
+
+/* Friend rows: name on the left next to its presence dot, actions on the
+   right (the shared row's space-between centers a lone name in a wide pane). */
+.social-home-friends-inner .quick-banned-name {
+  flex: 1;
+  text-align: left;
+}
+
+.social-home-friends-inner .quick-banned-row {
+  padding: 0.5rem 0.75rem;
+}
+
+/* :not(.hidden) — unlayered display rule vs the layered .hidden utility
+   (standing cascade-layers rule). */
+.social-home-empty:not(.hidden) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  text-align: center;
+  color: var(--t3);
+}
+
+.social-home-empty .material-symbols-rounded {
+  font-size: 3rem;
+  opacity: 0.6;
+}
+
+.social-home-empty p {
+  max-width: 22rem;
+  font-size: 0.875rem;
+}
+
+.social-home .messages-thread {
+  margin-bottom: 0;
+  padding: 0.5rem 0;
+}
+
+.social-dm-composer-wrap {
+  flex: none;
+  padding: 0.25rem 1rem 1rem;
+}
+
+.social-dm-composer {
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 767px) {
+  /* Phone: sidebar list OR the main pane, toggled by .show-main. */
+  .social-home-sidebar {
+    width: 100%;
+    border-right: none;
+  }
+
+  .social-home-main {
+    display: none;
+  }
+
+  .social-home.show-main .social-home-sidebar {
+    display: none;
+  }
+
+  .social-home.show-main .social-home-main {
+    display: flex;
+  }
+
+  .social-home .social-home-back,
+  .social-home .social-home-close-mobile {
+    display: flex;
+  }
+
+  .social-home-friends-body {
+    padding: 1rem;
+  }
+
+  .social-dm-composer-wrap {
+    padding: 0.25rem 0.5rem 0.5rem;
   }
 }
 

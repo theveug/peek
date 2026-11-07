@@ -33,15 +33,12 @@
 // `marked`/`DOMPurify` (both `typeof`-checked, since neither is a module
 // import — they're classic-script vendor globals, same as everywhere else
 // in this app that uses them) and falls back to the original `textContent`
-// path when they're absent. **They're absent on the lobby page** —
-// `lobby.html` never loads `marked`/`DOMPurify`/`highlight.js`, unlike
-// `index.html` (ChatUI.js already needs them there) — so a DM sent/viewed
-// from the lobby's Friends & Messages drawer still renders plain text,
-// deliberately, rather than growing the lobby's initial page weight for a
-// feature only reachable after logging in and adding a friend.
-// `_wireComposerExtras()` below hides the "Code block" +-menu option
-// entirely on a page without `hljs` for the same reason — offering it
-// would just insert literal backticks with nothing to highlight them.
+// path when they're absent. `lobby.html` doesn't load them up front;
+// since 2026-11-08 SocialPanel.js's `loadChatRenderingLibs()` pulls them in
+// on demand (accounts-enabled deployments only) before building this class,
+// so lobby DMs render markdown too. `_wireComposerExtras()` below still hides
+// the "Code block" +-menu option on a page without `hljs`, as the fallback
+// if that load fails.
 // Markdown rendering reuses the exact same `marked.parse()` →
 // `DOMPurify.sanitize()` → innerHTML pipeline ChatUI.js already runs for
 // room chat (not a new attack surface — the same already-audited pattern,
@@ -85,7 +82,14 @@ export class MessagesPanel {
      *   markup has no `.social-tab-panel`/`#social-modal` to key visibility
      *   off of and its badge lives on the tab button, not `#social-unread-badge`.
      */
-    constructor({ badgeId = 'social-unread-badge', isVisible } = {}) {
+    /*   `split` (2026-11-08, owner-reported: the lobby DM view was "crammed to
+     *   one side" with stray scroll bars): the lobby's SocialPanel.js Home view
+     *   keeps the conversation list always visible in a sidebar and shows the
+     *   open thread beside it, like a room chat. `isInboxVisible` tells this
+     *   class when that sidebar list is on screen. The room's chat-panel tab
+     *   keeps the original stacked inbox-or-thread shape (split: false).
+     */
+    constructor({ badgeId = 'social-unread-badge', isVisible, isInboxVisible, split = false } = {}) {
         // Defensive guard, shouldn't fire in practice — whichever host built
         // this markup (SocialPanel.js's modal, or App.js's chat-panel tab)
         // always does so before constructing this class.
@@ -99,6 +103,11 @@ export class MessagesPanel {
         this.input = document.getElementById('messages-input');
         this.sendBtn = document.getElementById('messages-send-btn');
         this.unreadBadge = document.getElementById(badgeId);
+        this._split = split;
+        this.emptyView = document.getElementById('messages-empty-view'); // split mode only
+        this.partnerAvatarEl = document.getElementById('messages-partner-avatar'); // split mode only
+        this.partnerStatusEl = document.getElementById('messages-partner-status'); // split mode only
+        this._presence = new Map(); // username -> online, from SocialPanel.js's presence poll
         // The composer bar sitting below the thread (outside it, as a flex
         // sibling) — same "near enough to bottom" threshold reference
         // ChatUI.js's #chat-input plays for #chat-log, see chatAutoScroll.js.
@@ -109,6 +118,7 @@ export class MessagesPanel {
         this._sectionEl = this.thread.closest('.social-tab-panel');
         this._modalEl = document.getElementById('social-modal');
         this._isVisible = isVisible || (() => !!(this._sectionEl?.classList.contains('active') && !this._modalEl?.classList.contains('hidden')));
+        this._isInboxVisible = isInboxVisible || (() => this._isVisible() && !this._activeUsername);
 
         this._conversations = []; // last fetched inbox, for cheap re-render on a poll tick
         this._activeUsername = null; // which conversation thread is open, if any
@@ -156,6 +166,46 @@ export class MessagesPanel {
         else this._showInbox();
     }
 
+    /** @returns {boolean} */
+    hasActiveConversation() {
+        return !!this._activeUsername;
+    }
+
+    /** Re-fetches the conversation list (SocialPanel.js calls this whenever
+     * its Home view opens, since the sidebar list is always visible there). */
+    refreshInbox() {
+        return this._refreshInbox();
+    }
+
+    /**
+     * Friend online/offline from SocialPanel.js's presencePoll.js tick — drives
+     * the dots on the split-mode DM list and the open thread's header.
+     * @param {Array<{username:string, online:boolean}>} presence
+     */
+    setPresence(presence) {
+        this._presence = new Map(presence.map(p => [p.username, !!p.online]));
+        if (!this._split) return;
+        if (this._isInboxVisible()) this._renderInbox();
+        this._renderPartnerHeader();
+    }
+
+    /** Split mode: avatar + name + presence for the open conversation. */
+    _renderPartnerHeader() {
+        if (!this._split || !this.partnerAvatarEl) return;
+        const u = this._activeUsername;
+        if (!u) {
+            this.partnerAvatarEl.innerHTML = '';
+            this.partnerStatusEl.textContent = '';
+            this.partnerStatusEl.className = 'social-home-partner-status';
+            return;
+        }
+        this.partnerAvatarEl.innerHTML = avatarHtml({ avatarUrl: this._partnerAvatar || null, initial: avatarInitial(u), color: colorForName(u) });
+        const online = this._presence.get(u);
+        // Not in the presence list = no longer a friend; show nothing rather than guess.
+        this.partnerStatusEl.textContent = online === undefined ? '' : (online ? 'Online' : 'Offline');
+        this.partnerStatusEl.className = 'social-home-partner-status' + (online ? ' is-online' : '');
+    }
+
     /** Entry point for FriendsPanel.js's "Message" row action (via the
      * `peek:open-dm` event) and for re-opening an already-active thread. */
     openConversation(username) {
@@ -200,18 +250,37 @@ export class MessagesPanel {
 
     _showInbox() {
         this._activeUsername = null;
-        this.backBtn.classList.add('hidden');
         this.titleEl.textContent = 'Messages';
         this.conversationView.classList.add('hidden');
-        this.inboxView.classList.remove('hidden');
+        if (this._split) {
+            // List lives in the sidebar and never hides — the main pane just
+            // goes back to its "pick a conversation" placeholder.
+            this.emptyView?.classList.remove('hidden');
+            this._partnerAvatar = null;
+            this._renderPartnerHeader();
+        } else {
+            this.backBtn.classList.add('hidden');
+            this.inboxView.classList.remove('hidden');
+        }
         this._refreshInbox();
     }
 
     async _showConversation(username) {
+        const switching = this._activeUsername !== username;
         this._activeUsername = username;
-        this.backBtn.classList.remove('hidden');
         this.titleEl.textContent = username; // account usernames are already regex-constrained (authRoutes.js's USERNAME_RE) — safe as textContent regardless
-        this.inboxView.classList.add('hidden');
+        if (this._split) {
+            this.emptyView?.classList.add('hidden');
+            if (switching) {
+                this._partnerAvatar = null;
+                this.thread.innerHTML = ''; // don't flash the previous friend's messages while loading
+            }
+            this._renderPartnerHeader();
+            this._renderInbox(); // move the selected-row highlight
+        } else {
+            this.backBtn.classList.remove('hidden');
+            this.inboxView.classList.add('hidden');
+        }
         this.conversationView.classList.remove('hidden');
         this.input.value = '';
         this.input.placeholder = `Message ${username}`; // same convention as the room composer's "Message the room"
@@ -230,7 +299,9 @@ export class MessagesPanel {
             return;
         }
         const { messages, partnerAvatar } = await res.json();
+        if (username !== this._activeUsername) return; // user already clicked a different conversation
         this._partnerAvatar = partnerAvatar || null;
+        this._renderPartnerHeader();
         // Opening/refreshing a conversation always lands at the newest
         // message — same as ChatUI's own bulk-history-load behavior (one
         // instant jump after the whole batch, never conditional on scroll
@@ -278,10 +349,29 @@ export class MessagesPanel {
         // page always has them; the lobby never does), plain text otherwise.
         const canRenderMarkdown = typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined';
         const myUsername = (localStorage.getItem('nickname') || 'You').trim();
+        // "Start of your history" header, like a fresh room/DM in Discord.
+        // Skipped when the server capped the thread (200, DirectMessagesManager's
+        // CONVERSATION_LIMIT) — the real start isn't loaded then.
+        if (messages.length < 200) this.thread.appendChild(this._threadIntro());
         let lastFromMe = null;
+        let lastTime = 0;
+        let lastDay = '';
         for (const { body, fromMe, createdAt } of messages) {
-            const grouped = lastFromMe === fromMe;
+            const when = new Date(createdAt);
+            const day = when.toDateString();
+            if (day !== lastDay) {
+                const divider = document.createElement('div');
+                divider.className = 'chat-history-divider';
+                divider.textContent = this._dayLabel(when);
+                this.thread.appendChild(divider);
+                lastFromMe = null; // a new day always starts with a full header
+            }
+            // Same author AND within 7 minutes (Discord's rule), so a reply
+            // hours later doesn't read as part of the earlier burst.
+            const grouped = lastFromMe === fromMe && when - lastTime < 7 * 60 * 1000;
             lastFromMe = fromMe;
+            lastTime = when.getTime();
+            lastDay = day;
             const sender = fromMe ? myUsername : this._activeUsername;
             const timestamp = new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const initial = avatarInitial(sender);
@@ -316,6 +406,32 @@ export class MessagesPanel {
         } else if (shouldScroll) {
             scrollToBottom(this.thread);
         }
+    }
+
+    /** Top-of-thread intro: big avatar + "This is the start of..." */
+    _threadIntro() {
+        const u = this._activeUsername;
+        const el = document.createElement('div');
+        el.className = 'messages-thread-intro';
+        el.innerHTML = avatarHtml({ avatarUrl: this._partnerAvatar || null, initial: avatarInitial(u), color: colorForName(u) });
+        const name = document.createElement('div');
+        name.className = 'messages-thread-intro-name';
+        name.textContent = u;
+        const sub = document.createElement('div');
+        sub.className = 'messages-thread-intro-sub';
+        sub.textContent = `This is the start of your messages with ${u}.`;
+        el.append(name, sub);
+        return el;
+    }
+
+    /** "Today" / "Yesterday" / "Mon, 3 Nov 2026" for day dividers. */
+    _dayLabel(date) {
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        if (date.toDateString() === today.toDateString()) return 'Today';
+        if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+        return date.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
     }
 
     /**
@@ -363,8 +479,7 @@ export class MessagesPanel {
         this._conversationsLoaded = true;
 
         this._conversations = conversations;
-        const visible = this._isVisible();
-        if (visible && !this._activeUsername) this._renderInbox();
+        if (this._isInboxVisible()) this._renderInbox();
         this._updateBadge();
     }
 
@@ -455,18 +570,31 @@ export class MessagesPanel {
         const list = document.getElementById('messages-inbox-list');
         list.innerHTML = '';
         if (!this._conversations.length) {
-            list.innerHTML = '<div class="quick-banned-empty">No conversations yet — message a friend from the Friends list.</div>';
+            list.innerHTML = this._split
+                ? '<div class="social-dm-empty">No conversations yet.</div>'
+                : '<div class="quick-banned-empty">No conversations yet — message a friend from the Friends list.</div>';
             return;
         }
         for (const { user, lastMessage, unreadCount } of this._conversations) {
             const row = document.createElement('div');
-            row.className = 'quick-banned-row';
+            row.className = this._split ? 'social-dm-row' : 'quick-banned-row';
+            if (this._split) {
+                row.classList.toggle('active', user.username === this._activeUsername);
+                row.classList.toggle('has-unread', unreadCount > 0);
+                row.setAttribute('role', 'button');
+            }
             row.style.cursor = 'pointer';
             row.tabIndex = 0;
 
             const avatarWrap = document.createElement('div');
+            avatarWrap.className = this._split ? 'social-dm-avatar' : '';
             avatarWrap.innerHTML = avatarHtml({ avatarUrl: user.avatar || null, initial: avatarInitial(user.username), color: colorForName(user.username) });
-            row.appendChild(avatarWrap.firstElementChild);
+            if (this._split && this._presence.has(user.username)) {
+                const dot = document.createElement('span');
+                dot.className = 'social-dm-presence' + (this._presence.get(user.username) ? ' is-online' : '');
+                avatarWrap.appendChild(dot);
+            }
+            row.appendChild(this._split ? avatarWrap : avatarWrap.firstElementChild);
 
             const nameGroup = document.createElement('div');
             nameGroup.className = 'messages-inbox-name-group';
@@ -490,7 +618,11 @@ export class MessagesPanel {
                 row.appendChild(badge);
             }
 
-            const open = () => this._showConversation(user.username);
+            // Split mode goes through the shared event so SocialPanel.js also
+            // switches its main pane (and, on a phone, slides it in).
+            const open = this._split
+                ? () => document.dispatchEvent(new CustomEvent('peek:open-dm', { detail: { username: user.username } }))
+                : () => this._showConversation(user.username);
             row.addEventListener('click', open);
             row.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
 

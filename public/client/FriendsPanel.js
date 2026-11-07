@@ -117,6 +117,12 @@ export class FriendsPanel {
         const { friends, incoming, outgoing, blocked } = await res.json();
         this._lastFriends = friends;
         this._renderFriendsList();
+        // Lobby Home view's sidebar "Friends" item shows pending requests.
+        const reqBadge = document.getElementById('social-requests-badge');
+        if (reqBadge) {
+            reqBadge.textContent = incoming.length > 99 ? '99+' : String(incoming.length);
+            reqBadge.classList.toggle('hidden', incoming.length === 0);
+        }
         this._renderList('friends-incoming-list', incoming.map(({ requestId, user }) => ({ label: user.username, actions: [
             { text: 'Accept', tip: `Accept ${user.username}`, onClick: () => this._accept(requestId) },
             { text: 'Decline', tip: `Decline ${user.username}`, onClick: () => this._remove(requestId) },
