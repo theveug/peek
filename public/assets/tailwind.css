@@ -1111,7 +1111,9 @@ textarea,
    used both for message reactions and the composer's "Add emoji" button. */
 .emoji-picker-popover {
   position: fixed;
-  z-index: 90;
+  /* Above #social-modal (z-100): the lobby DM composer opens these pickers
+     from inside that overlay. */
+  z-index: 110;
   width: 18.75rem;
   display: flex;
   flex-direction: column;
@@ -1207,7 +1209,7 @@ textarea,
    fixed-position-singleton shape as .emoji-picker-popover otherwise. */
 .mention-autocomplete-popover {
   position: fixed;
-  z-index: 90;
+  z-index: 110;
   min-width: 10rem;
   max-width: 16rem;
   background: var(--bg2);
@@ -3236,12 +3238,16 @@ button.participant-menu-row:hover {
    Discord-style Home instead: full page beside the room rail, a sidebar with
    Friends + the DM list, and the open conversation filling the rest like a
    room chat. The room page keeps its Friends-only .social-drawer above. */
+/* The overlay itself starts after the room rail (not just its content), so
+   clicks on the rail reach it instead of the overlay's empty left strip.
+   --room-rail-width is 0 on mobile, where the view goes full-screen. */
+#social-modal.social-modal-home {
+  left: var(--room-rail-width);
+}
+
 #social-modal .social-home {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  left: var(--room-rail-width);
+  inset: 0;
   display: flex;
   background: var(--bg2);
 }
@@ -6105,7 +6111,9 @@ body,
   /* Above .room-rail's own mobile z-index:80 (drawer) — a room-click popover
      (password prompt, "joining…") is anchored to a button inside the rail
      and must stay visible above it, not get tucked underneath. */
-  z-index: 81;
+  /* Also above #social-modal (z-100), so a password prompt from the rail
+     shows while the lobby's Friends & Messages view is open. */
+  z-index: 110;
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);

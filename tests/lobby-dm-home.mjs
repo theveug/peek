@@ -106,6 +106,31 @@ async function main() {
 
         if (process.env.SHOT_DIR) await page.screenshot({ path: path.join(process.env.SHOT_DIR, 'dm-desktop.png') });
 
+        // "+" menu options must work from inside the overlay (pickers used to
+        // render underneath #social-modal and swallow nothing visible).
+        await page.click('#messages-composer-plus-btn');
+        await page.click('#messages-code-block-btn');
+        const codeItem = page.locator('.codeblock-picker-popover .mention-autocomplete-item').first();
+        await codeItem.waitFor({ state: 'visible' });
+        await codeItem.click();
+        assert((await page.inputValue('#messages-input')).includes('```'), 'Code block option inserts a fence on the lobby');
+        await page.fill('#messages-input', '');
+
+        await page.click('#messages-composer-plus-btn');
+        await page.click('#messages-emoji-btn');
+        const emojiItem = page.locator('.emoji-picker-popover .emoji-picker-item').first();
+        await emojiItem.waitFor({ state: 'visible' });
+        await emojiItem.click();
+        assert((await page.inputValue('#messages-input')).length > 0, 'Add emoji option inserts an emoji on the lobby');
+        await page.fill('#messages-input', '');
+
+        // The room rail must stay clickable while the view is open.
+        const railOnTop = await page.$eval('#room-rail-home', el => {
+            const r = el.getBoundingClientRect();
+            return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+        });
+        assert(railOnTop, 'room rail is not covered by the Friends & Messages view');
+
         await page.fill('#messages-input', 'sent from the new view');
         await page.press('#messages-input', 'Enter');
         await page.locator('#messages-thread .chat-message', { hasText: 'sent from the new view' }).waitFor();

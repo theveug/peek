@@ -154,7 +154,9 @@ export class SocialPanel {
     _buildModal() {
         const modal = document.createElement('div');
         modal.id = 'social-modal';
-        modal.className = 'fixed inset-0 z-100 hidden';
+        // Home view (lobby) leaves the room rail uncovered so a rail click
+        // still works while it's open; see .social-modal-home in tailwind.css.
+        modal.className = 'fixed inset-0 z-100 hidden' + (this._hideMessagesTab ? '' : ' social-modal-home');
         const friendsPanelHtml = `
             <div id="friends-action-error" class="lobby-error hidden"></div>
 
