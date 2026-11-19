@@ -497,6 +497,25 @@ function sendMessage() {
     sendTypingStatus(false);
 }
 
+// peek-desktop's "chat-announce" automation action (e.g. "On a phone call,
+// brb" when the user's softphone rings). Drives the hidden
+// #automation-chat-input the same way the status overlay drives its own
+// hidden input (see TopbarIdentity._wireAutomationOverlay()). Never touches
+// the real composer, so a half-typed message isn't lost. Rate limiting lives
+// on the peek-desktop side; the 500-char cap here is a backstop.
+function sendAutomatedChat(rawText) {
+    const text = String(rawText || '').trim().slice(0, 500);
+    if (!text) return;
+    const nickname = (localStorage.getItem('nickname') || 'Anonymous').trim();
+    const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+    peerManager.broadcastChat(text, nickname, messageId, null, true);
+    ui.addChatMessage(nickname, text, messageId, null, true, peerManager.peerId, false, true);
+}
+document.getElementById('automation-chat-input')?.addEventListener('input', (e) => {
+    sendAutomatedChat(e.target.value);
+    e.target.value = '';
+});
+
 function updateShareButton() {
     // Inline style, not the `.hidden` utility class: `.dock-btn` (tailwind.css, unlayered
     // custom rule) sets `display:flex` and beats Tailwind's layered `.hidden` utility in

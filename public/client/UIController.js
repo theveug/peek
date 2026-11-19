@@ -2165,7 +2165,7 @@ export class UIController {
         if (this.roomCode !== code) return;
 
         for (const entry of entries) {
-            this.chat.addChatMessage(entry.sender, entry.text, entry.messageId, null, entry.isSelf, null, true);
+            this.chat.addChatMessage(entry.sender, entry.text, entry.messageId, null, entry.isSelf, null, true, entry.automated === true);
         }
         const chatLog = document.getElementById('chat-log');
         if (chatLog) {

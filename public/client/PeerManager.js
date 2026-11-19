@@ -2069,7 +2069,7 @@ export class PeerManager {
                 // Record which connection authored this messageId so chat-edit/
                 // chat-delete below can be restricted to the original author.
                 this._recordMessageOwner(msg.messageId, peerId);
-                this.ui.addChatMessage(this.ui._peerNickname(peerId), msg.text, msg.messageId, msg.replyTo || null, false, peerId);
+                this.ui.addChatMessage(this.ui._peerNickname(peerId), msg.text, msg.messageId, msg.replyTo || null, false, peerId, false, msg.automated === true);
                 this.ui.updateTypingIndicator(peerId, false);
             } else if (msg.type === 'chat-edit') {
                 if (this.ui.isBlocked(peerId)) return;
@@ -2433,10 +2433,12 @@ export class PeerManager {
      * @param {string} nickname
      * @param {string} messageId
      * @param {object|null} replyTo
+     * @param {boolean} [automated=false] - sent by peek-desktop's automation
+     *   pipe, not typed; receivers render a "via automation" label.
      * @returns {void}
      */
-    broadcastChat(text, nickname, messageId, replyTo) {
-        const msg = JSON.stringify({ type: 'chat', text, nickname, messageId, replyTo: replyTo || null });
+    broadcastChat(text, nickname, messageId, replyTo, automated = false) {
+        const msg = JSON.stringify({ type: 'chat', text, nickname, messageId, replyTo: replyTo || null, ...(automated ? { automated: true } : {}) });
         for (const dc of Object.values(this.dataChannels)) {
             if (dc.readyState === 'open') dc.send(msg);
         }

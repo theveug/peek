@@ -281,6 +281,12 @@
                      table uses everywhere else — never manipulated by any in-page
                      control. See CLAUDE.md's "Local automation hooks" section. -->
                 <input type="hidden" id="automation-status-overlay-input" value="" />
+                <!-- Automation-only, same convention as the overlay input above:
+                     peek-desktop's "chat-announce" pipe action sets this value +
+                     dispatches a synthetic 'input' event, and App.js's
+                     sendAutomatedChat() posts it to the room labelled "via
+                     automation". See CLAUDE.md's "Automation chat announce". -->
+                <input type="hidden" id="automation-chat-input" value="" />
             </div>
         </div>
 

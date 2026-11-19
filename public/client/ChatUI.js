@@ -129,13 +129,14 @@ export class ChatUI {
      * @param {string} sender
      * @param {string} text
      * @param {boolean} isSelf
+     * @param {boolean} [automated=false]
      * @returns {void}
      */
-    _persistHistoryMessage(messageId, sender, text, isSelf) {
+    _persistHistoryMessage(messageId, sender, text, isSelf, automated = false) {
         if (localStorage.getItem('chatHistoryEnabled') !== '1') return;
         const roomCode = this._getRoomCode();
         if (!roomCode) return;
-        chatHistoryStore.appendMessage(roomCode, { messageId, sender, text, ts: Date.now(), isSelf });
+        chatHistoryStore.appendMessage(roomCode, { messageId, sender, text, ts: Date.now(), isSelf, ...(automated ? { automated: true } : {}) });
     }
 
     /**
@@ -1459,7 +1460,7 @@ export class ChatUI {
      *   peers are gone) and is never itself persisted back to history.
      * @returns {void}
      */
-    addChatMessage(sender, text, messageId, replyData, isSelf = false, senderPeerId = null, isHistorical = false) {
+    addChatMessage(sender, text, messageId, replyData, isSelf = false, senderPeerId = null, isHistorical = false, automated = false) {
         const chatLog = document.getElementById('chat-log');
         // Captured *before* the new message is appended below — isAtBottom()'s
         // threshold-based fudge factor only accounts for a small height delta,
@@ -1489,7 +1490,11 @@ export class ChatUI {
         this._lastGroupKey = authorKey;
         const headerHtml = grouped ? '' : messageHeaderHtml({ avatarUrl: senderPeerId ? this._getAvatar(senderPeerId) : null, initial, color, sender, timestamp });
 
-        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm${isHistorical ? ' chat-message-history' : ''}${isSelf ? ' chat-message-self' : ''}${grouped ? ' chat-message-grouped' : ''}">${headerHtml}${replyHtml}<div class="chat-markdown chat-body prose ml-7${emojiOnlyClass}">${raw}</div><div class="reaction-bar ml-7"></div></div>`;
+        // Posted by peek-desktop's automation pipe ("chat-announce"), not typed —
+        // labelled so nobody mistakes it for the person speaking. Static
+        // string, no user content, so no escaping concern.
+        const automatedHtml = automated ? '<div class="chat-automated-tag ml-7 text-[10px] text-muted">via automation</div>' : '';
+        msgContainer.innerHTML = `<div class="chat-message px-4 py-2 text-sm${isHistorical ? ' chat-message-history' : ''}${isSelf ? ' chat-message-self' : ''}${grouped ? ' chat-message-grouped' : ''}">${headerHtml}${replyHtml}<div class="chat-markdown chat-body prose ml-7${emojiOnlyClass}">${raw}</div>${automatedHtml}<div class="reaction-bar ml-7"></div></div>`;
 
         this._wireReplyQuote(msgContainer);
 
@@ -1508,7 +1513,7 @@ export class ChatUI {
         }
         if (!isHistorical) {
             this._setupEmojiPicker(msg, messageId, text, isSelf);
-            this._persistHistoryMessage(messageId, sender, text, isSelf);
+            this._persistHistoryMessage(messageId, sender, text, isSelf, automated);
         }
         chatLog.appendChild(msgContainer);
 
